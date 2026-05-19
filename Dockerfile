@@ -22,8 +22,8 @@ RUN pip install --no-cache-dir "tensorflow==2.12.0" \
 # Install web packages last so they override spleeter's click downgrade
 RUN pip install --no-cache-dir "click>=8.0" flask redis rq yt-dlp
 
-# Pre-download the 2stems model at build time — avoids first-run delays
-RUN python -c "from spleeter.separator import Separator; Separator('spleeter:2stems')"
+# NOTE: spleeter models (~100MB) are downloaded on first job run.
+# They are stored in the output_data volume so they persist across restarts.
 
 COPY . .
 

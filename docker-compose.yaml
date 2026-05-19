@@ -5,6 +5,11 @@ services:
   redis:
     image: redis:7-alpine
     restart: always
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
   web:
     build:
@@ -15,24 +20,30 @@ services:
       - "5000:5000"
     environment:
       - REDIS_URL=redis://redis:6379
+      - SPLEETER_PATH=/app/pretrained_models   # cache models on the volume
     volumes:
       - output_data:/app/output
+      - model_cache:/app/pretrained_models
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
 
   worker:
     build:
       context: .
       dockerfile: Dockerfile
     restart: always
-    # Override the default CMD to run the RQ worker instead of Flask
     command: rq worker --url redis://redis:6379 karaoke
     environment:
       - REDIS_URL=redis://redis:6379
+      - SPLEETER_PATH=/app/pretrained_models   # same cache, shared volume
     volumes:
       - output_data:/app/output
+      - model_cache:/app/pretrained_models
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
 
 volumes:
   output_data:
+  model_cache:
