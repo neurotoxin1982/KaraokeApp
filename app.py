@@ -373,10 +373,10 @@ def search():
             '--dump-json',
             '--no-download',
             '--no-playlist',
-            '--flat-playlist',
         ],
         capture_output=True,
         text=True,
+        timeout=30,
     )
 
     videos = []
