@@ -23,6 +23,8 @@ def process_karaoke(job_id: str, youtube_url: str) -> dict:
         '--audio-format', 'wav',
         '--audio-quality', '0',
         '-o', audio_template,
+        '--js-runtimes', 'nodejs',
+        '--extractor-args', 'youtube:player_client=ios,mweb',
     ]
 
     # Use cookies if available — required to bypass YouTube bot detection on servers

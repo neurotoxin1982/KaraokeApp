@@ -372,6 +372,8 @@ def search():
             '--dump-json',
             '--no-download',
             '--no-playlist',
+            '--js-runtimes', 'nodejs',
+            '--extractor-args', 'youtube:player_client=ios,mweb',
         ],
         capture_output=True,
         text=True,
@@ -401,7 +403,8 @@ def search_debug():
     """Temporary debug endpoint — remove after fixing search."""
     query = request.args.get('q', 'linkin park').strip()
     result = subprocess.run(
-        ['yt-dlp', f'ytsearch3:{query}', '--dump-json', '--no-download', '--no-playlist'],
+        ['yt-dlp', f'ytsearch3:{query}', '--dump-json', '--no-download', '--no-playlist',
+         '--js-runtimes', 'nodejs', '--extractor-args', 'youtube:player_client=ios,mweb'],
         capture_output=True, text=True, timeout=60,
     )
     return jsonify({
