@@ -401,6 +401,7 @@ def load():
                 '--extract-audio', '--audio-format', 'mp3', '--audio-quality', '5',
                 '-o', out_tmpl,
                 '--js-runtimes', 'nodejs',
+                '--extractor-args', 'youtube:player_client=ios,mweb',
                 url,
             ], capture_output=True, text=True, timeout=300)
 
