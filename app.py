@@ -2,7 +2,7 @@ import os
 import json
 import uuid
 import subprocess
-from flask import Flask, request, jsonify, send_file, render_template_string
+from flask import Flask, request, jsonify, send_file, Response
 from redis import Redis
 from rq import Queue
 from rq.job import Job, NoSuchJobError
@@ -356,7 +356,7 @@ HTML = """
 
 @app.route('/')
 def index():
-    return render_template_string(HTML)
+    return Response(HTML, mimetype='text/html')
 
 
 @app.route('/search')
