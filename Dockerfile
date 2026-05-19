@@ -1,28 +1,22 @@
-# Wir nutzen Python 3.9 (schlank aber kompatibel mit Spleeter/TensorFlow)
-FROM python:3.9-slim
+# Wir nutzen das offizielle, fertige Spleeter-Image von Deezer
+FROM deezer/spleeter:3.8-5stems
 
-# Installiere System-Abhängigkeiten (ffmpeg für Audio, libgomp für KI-Berechnungen)
-RUN apt-get update && apt-get install -y \
-    ffmpeg \
-    libsndfile1 \
-    libgomp1 \
-    git \
-    && rm -rf /var/lib/apt/lists/*
+# Wechseln zum Root-User, um Flask und Co. installieren zu dürfen
+USER root
 
-WORKDIR /app
-
-# Upgrade pip und installiere die Pakete mit festen Versionen für maximale Stabilität
-RUN pip install --no-cache-dir --upgrade pip setuptools wheel
-
+# Installiere die zusätzlichen Web- und Queue-Pakete
 RUN pip install --no-cache-dir \
     flask \
     redis \
     rq \
-    yt-dlp \
-    spleeter==2.3.2
+    yt-dlp
 
+WORKDIR /app
+
+# Kopiere deine Skripte in den Container
 COPY . .
 
 EXPOSE 5000
 
+# Standardbefehl (wird für den Web-Service genutzt)
 CMD ["python", "app.py"]
