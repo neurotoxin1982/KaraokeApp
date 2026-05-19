@@ -1,5 +1,7 @@
 import os
+import json
 import uuid
+import subprocess
 from flask import Flask, request, jsonify, send_file, render_template_string
 from redis import Redis
 from rq import Queue
@@ -11,14 +13,12 @@ REDIS_URL = os.environ.get('REDIS_URL', 'redis://localhost:6379')
 redis_conn = Redis.from_url(REDIS_URL)
 q = Queue('karaoke', connection=redis_conn)
 
-# ── Frontend ─────────────────────────────────────────────────────────────────
-
 HTML = """
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>🎤 Karaoke Maker</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -29,9 +29,9 @@ HTML = """
       color: #e0e0f0;
       min-height: 100vh;
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       justify-content: center;
-      padding: 2rem;
+      padding: 2rem 1rem;
     }
 
     .card {
@@ -40,7 +40,7 @@ HTML = """
       border-radius: 1.25rem;
       padding: 2.5rem;
       width: 100%;
-      max-width: 540px;
+      max-width: 600px;
       box-shadow: 0 8px 40px rgba(0,0,0,0.5);
     }
 
@@ -53,15 +53,11 @@ HTML = """
       -webkit-text-fill-color: transparent;
     }
 
-    .subtitle {
-      color: #888;
-      font-size: 0.9rem;
-      margin-bottom: 2rem;
-    }
+    .subtitle { color: #888; font-size: 0.9rem; margin-bottom: 2rem; }
 
     label {
       display: block;
-      font-size: 0.85rem;
+      font-size: 0.8rem;
       font-weight: 600;
       color: #aaa;
       margin-bottom: 0.5rem;
@@ -69,8 +65,14 @@ HTML = """
       letter-spacing: 0.05em;
     }
 
-    input[type="url"] {
-      width: 100%;
+    .search-row {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+
+    input[type="text"] {
+      flex: 1;
       padding: 0.75rem 1rem;
       border-radius: 0.6rem;
       border: 1px solid #2a2a4a;
@@ -80,26 +82,75 @@ HTML = """
       outline: none;
       transition: border-color 0.2s;
     }
-    input[type="url"]:focus { border-color: #a78bfa; }
+    input[type="text"]:focus { border-color: #a78bfa; }
 
-    button {
-      margin-top: 1rem;
-      width: 100%;
-      padding: 0.8rem;
+    .btn {
+      padding: 0.75rem 1.25rem;
       border-radius: 0.6rem;
       border: none;
       background: linear-gradient(135deg, #7c3aed, #2563eb);
       color: #fff;
-      font-size: 1rem;
+      font-size: 0.95rem;
       font-weight: 600;
       cursor: pointer;
       transition: opacity 0.2s;
+      white-space: nowrap;
     }
-    button:disabled { opacity: 0.5; cursor: not-allowed; }
-    button:not(:disabled):hover { opacity: 0.88; }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn:not(:disabled):hover { opacity: 0.85; }
 
+    /* Search results */
+    #results { display: none; margin-top: 0.5rem; }
+
+    .result-item {
+      display: flex;
+      align-items: center;
+      gap: 0.85rem;
+      padding: 0.75rem;
+      border-radius: 0.75rem;
+      border: 1px solid #2a2a4a;
+      margin-bottom: 0.5rem;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .result-item:hover { background: #252545; border-color: #a78bfa; }
+
+    .result-item img {
+      width: 80px;
+      height: 52px;
+      object-fit: cover;
+      border-radius: 0.4rem;
+      flex-shrink: 0;
+      background: #111;
+    }
+
+    .result-info { flex: 1; min-width: 0; }
+    .result-title {
+      font-size: 0.9rem;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-bottom: 0.2rem;
+    }
+    .result-meta { font-size: 0.78rem; color: #888; }
+
+    .result-btn {
+      flex-shrink: 0;
+      padding: 0.4rem 0.9rem;
+      border-radius: 0.5rem;
+      border: none;
+      background: #7c3aed;
+      color: #fff;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .result-btn:hover { background: #6d28d9; }
+
+    /* Status */
     #status-box {
-      margin-top: 1.5rem;
+      margin-top: 1.25rem;
       padding: 1rem 1.25rem;
       border-radius: 0.75rem;
       font-size: 0.9rem;
@@ -109,6 +160,20 @@ HTML = """
     .status-started  { background: #1a2a1a; border: 1px solid #2a6a2a; color: #6fdb6f; }
     .status-finished { background: #1a2a3a; border: 1px solid #2a5a9a; color: #60a5fa; }
     .status-failed   { background: #2a1a1a; border: 1px solid #6a2a2a; color: #f87171; }
+
+    .now-playing {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.75rem;
+      background: #111128;
+      border-radius: 0.6rem;
+      margin-bottom: 1rem;
+      border: 1px solid #2a2a4a;
+    }
+    .now-playing img { width: 60px; height: 40px; object-fit: cover; border-radius: 0.3rem; }
+    .now-playing-title { font-size: 0.88rem; font-weight: 600; }
+    .now-playing-channel { font-size: 0.78rem; color: #888; }
 
     .download-btn {
       display: inline-block;
@@ -126,7 +191,7 @@ HTML = """
     .spinner {
       display: inline-block;
       width: 14px; height: 14px;
-      border: 2px solid #888;
+      border: 2px solid #555;
       border-top-color: #a78bfa;
       border-radius: 50%;
       animation: spin 0.8s linear infinite;
@@ -134,32 +199,91 @@ HTML = """
       margin-right: 6px;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
+
+    .no-results { color: #666; font-size: 0.88rem; text-align: center; padding: 1rem 0; }
   </style>
 </head>
 <body>
   <div class="card">
     <h1>🎤 Karaoke Maker</h1>
-    <p class="subtitle">Paste a YouTube link — we'll strip out the vocals.</p>
+    <p class="subtitle">Search for a song — we'll strip out the vocals.</p>
 
-    <label for="url-input">YouTube URL</label>
-    <input type="url" id="url-input" placeholder="https://www.youtube.com/watch?v=..." />
+    <label for="search-input">Search YouTube</label>
+    <div class="search-row">
+      <input type="text" id="search-input" placeholder="e.g. Bohemian Rhapsody Queen"
+             onkeydown="if(event.key==='Enter') doSearch()"/>
+      <button class="btn" id="search-btn" onclick="doSearch()">Search</button>
+    </div>
 
-    <button id="submit-btn" onclick="submitJob()">Generate Karaoke Track</button>
-
+    <div id="results"></div>
     <div id="status-box"></div>
   </div>
 
   <script>
     let pollInterval = null;
+    let currentJob = null;
 
-    async function submitJob() {
-      const url = document.getElementById('url-input').value.trim();
-      if (!url) return alert('Please enter a YouTube URL.');
+    async function doSearch() {
+      const q = document.getElementById('search-input').value.trim();
+      if (!q) return;
 
-      const btn = document.getElementById('submit-btn');
+      const btn = document.getElementById('search-btn');
       btn.disabled = true;
-      showStatus('waiting', '<span class="spinner"></span> Submitting job…');
+      btn.textContent = 'Searching…';
 
+      const resultsEl = document.getElementById('results');
+      resultsEl.style.display = 'block';
+      resultsEl.innerHTML = '<div class="no-results"><span class="spinner"></span> Searching YouTube…</div>';
+
+      try {
+        const res = await fetch('/search?q=' + encodeURIComponent(q));
+        const videos = await res.json();
+
+        if (!videos.length) {
+          resultsEl.innerHTML = '<div class="no-results">No results found.</div>';
+        } else {
+          resultsEl.innerHTML = videos.map(v => `
+            <div class="result-item" onclick="pickVideo('${v.id}', '${esc(v.url)}', '${esc(v.title)}', '${esc(v.channel)}', '${esc(v.thumbnail)}', '${esc(v.duration)}')">
+              <img src="${v.thumbnail}" alt="" loading="lazy"/>
+              <div class="result-info">
+                <div class="result-title" title="${esc(v.title)}">${v.title}</div>
+                <div class="result-meta">${v.channel} · ${v.duration}</div>
+              </div>
+              <button class="result-btn">Make Karaoke</button>
+            </div>
+          `).join('');
+        }
+      } catch(e) {
+        resultsEl.innerHTML = '<div class="no-results">Search failed. Try again.</div>';
+      }
+
+      btn.disabled = false;
+      btn.textContent = 'Search';
+    }
+
+    function esc(s) {
+      return String(s || '').replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;');
+    }
+
+    function pickVideo(id, url, title, channel, thumbnail, duration) {
+      // Hide results, show now-playing + status
+      document.getElementById('results').style.display = 'none';
+
+      showStatus('waiting',
+        `<div class="now-playing">
+          <img src="${thumbnail}" alt=""/>
+          <div>
+            <div class="now-playing-title">${title}</div>
+            <div class="now-playing-channel">${channel} · ${duration}</div>
+          </div>
+        </div>
+        <span class="spinner"></span> Submitting job…`
+      );
+
+      submitJob(url);
+    }
+
+    async function submitJob(url) {
       try {
         const res = await fetch('/submit', {
           method: 'POST',
@@ -168,10 +292,10 @@ HTML = """
         });
         const data = await res.json();
         if (data.error) throw new Error(data.error);
+        currentJob = data.job_id;
         pollStatus(data.job_id);
-      } catch (err) {
+      } catch(err) {
         showStatus('failed', '❌ ' + err.message);
-        btn.disabled = false;
       }
     }
 
@@ -182,25 +306,30 @@ HTML = """
           const res = await fetch('/status/' + jobId);
           const data = await res.json();
 
+          const box = document.getElementById('status-box');
+          const nowPlaying = box.querySelector('.now-playing')?.outerHTML || '';
+
           if (data.status === 'queued' || data.status === 'deferred') {
-            showStatus('waiting', '<span class="spinner"></span> Queued — waiting for worker…');
+            showStatus('waiting', nowPlaying + '<span class="spinner"></span> Queued — waiting for worker…');
           } else if (data.status === 'started') {
-            showStatus('started', '<span class="spinner"></span> Processing… this can take a few minutes.');
+            showStatus('started', nowPlaying + '<span class="spinner"></span> Processing… this can take a few minutes.');
           } else if (data.status === 'finished') {
             clearInterval(pollInterval);
             showStatus('finished',
+              nowPlaying +
               '✅ Done! Your karaoke track is ready.<br><br>' +
-              '<a class="download-btn" href="/download/' + jobId + '">⬇ Download Karaoke (WAV)</a>'
+              '<a class="download-btn" href="/download/' + jobId + '">⬇ Download Karaoke (WAV)</a>' +
+              '&nbsp;&nbsp;<button class="btn" style="width:auto;margin-top:0" onclick="reset()">Search again</button>'
             );
-            document.getElementById('submit-btn').disabled = false;
           } else if (data.status === 'failed') {
             clearInterval(pollInterval);
-            showStatus('failed', '❌ Job failed. Please try another URL or check server logs.');
-            document.getElementById('submit-btn').disabled = false;
+            showStatus('failed',
+              nowPlaying +
+              '❌ Job failed. Please try a different song.<br><br>' +
+              '<button class="btn" style="width:auto;margin-top:0.5rem" onclick="reset()">Try again</button>'
+            );
           }
-        } catch (e) {
-          // Network blip — keep polling
-        }
+        } catch(e) { /* network blip — keep polling */ }
       }, 3000);
     }
 
@@ -209,6 +338,14 @@ HTML = """
       box.className = 'status-box status-' + type;
       box.style.display = 'block';
       box.innerHTML = html;
+    }
+
+    function reset() {
+      clearInterval(pollInterval);
+      document.getElementById('status-box').style.display = 'none';
+      document.getElementById('results').style.display = 'none';
+      document.getElementById('search-input').value = '';
+      document.getElementById('search-input').focus();
     }
   </script>
 </body>
@@ -220,6 +357,44 @@ HTML = """
 @app.route('/')
 def index():
     return render_template_string(HTML)
+
+
+@app.route('/search')
+def search():
+    query = request.args.get('q', '').strip()
+    if not query:
+        return jsonify([])
+
+    result = subprocess.run(
+        [
+            'yt-dlp',
+            '--extractor-args', 'youtube:player_client=android_vr,ios',
+            f'ytsearch8:{query}',
+            '--dump-json',
+            '--no-download',
+            '--no-playlist',
+            '--flat-playlist',
+        ],
+        capture_output=True,
+        text=True,
+    )
+
+    videos = []
+    for line in result.stdout.strip().splitlines():
+        try:
+            d = json.loads(line)
+            videos.append({
+                'id':        d.get('id', ''),
+                'url':       d.get('webpage_url') or f"https://www.youtube.com/watch?v={d.get('id','')}",
+                'title':     d.get('title', 'Unknown'),
+                'channel':   d.get('uploader') or d.get('channel', ''),
+                'thumbnail': d.get('thumbnail', ''),
+                'duration':  d.get('duration_string') or '',
+            })
+        except Exception:
+            continue
+
+    return jsonify(videos)
 
 
 @app.route('/submit', methods=['POST'])
@@ -235,7 +410,7 @@ def submit():
         job_id,
         url,
         job_id=job_id,
-        job_timeout=900,   # 15 min max — spleeter on long songs can be slow
+        job_timeout=900,
     )
     return jsonify({'job_id': job_id})
 
