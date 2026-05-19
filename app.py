@@ -1,6 +1,7 @@
 import eventlet
 eventlet.monkey_patch()
 
+import subprocess, json
 import requests
 from flask import Flask, request, jsonify
 from flask_socketio import SocketIO, emit
@@ -348,21 +349,41 @@ def search():
     if not q:
         return jsonify([])
 
-    data = _invidious('search', {'q': f'{q} karaoke', 'type': 'video', 'sort_by': 'relevance'})
-    if not data:
-        return jsonify([])
+    # yt-dlp flat-playlist search — no bot detection, only fetches metadata
+    result = subprocess.run([
+        'yt-dlp', f'ytsearch8:{q} karaoke',
+        '--dump-json', '--flat-playlist', '--no-download',
+    ], capture_output=True, text=True, timeout=60)
 
     videos = []
-    for item in data[:8]:
-        vid_id = item.get('videoId', '')
-        if not vid_id:
+    for line in result.stdout.strip().splitlines():
+        try:
+            d = json.loads(line)
+            vid_id = d.get('id', '')
+            if not vid_id:
+                continue
+            videos.append({
+                'id':       vid_id,
+                'title':    d.get('title', 'Unknown'),
+                'channel':  d.get('uploader') or d.get('channel', ''),
+                'duration': d.get('duration_string') or '',
+            })
+        except Exception:
             continue
-        videos.append({
-            'id':       vid_id,
-            'title':    item.get('title', 'Unknown'),
-            'channel':  item.get('author', ''),
-            'duration': _duration_str(item.get('lengthSeconds', 0)),
-        })
+
+    # fallback to Invidious if yt-dlp returned nothing
+    if not videos:
+        data = _invidious('search', {'q': f'{q} karaoke', 'type': 'video'})
+        for item in (data or [])[:8]:
+            vid_id = item.get('videoId', '')
+            if vid_id:
+                videos.append({
+                    'id':       vid_id,
+                    'title':    item.get('title', 'Unknown'),
+                    'channel':  item.get('author', ''),
+                    'duration': _duration_str(item.get('lengthSeconds', 0)),
+                })
+
     return jsonify(videos)
 
 @app.route('/prepare', methods=['POST'])

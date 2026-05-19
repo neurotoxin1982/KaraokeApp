@@ -6,7 +6,8 @@ RUN pip install --no-cache-dir \
     flask \
     flask-socketio \
     eventlet \
-    requests
+    requests \
+    yt-dlp
 
 COPY . .
 
