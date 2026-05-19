@@ -243,10 +243,17 @@ HTML = """
           resultsEl.innerHTML = '<div class="no-results">No results found.</div>';
         } else {
           resultsEl.innerHTML = videos.map(v => `
-            <div class="result-item" onclick="pickVideo('${v.id}', '${esc(v.url)}', '${esc(v.title)}', '${esc(v.channel)}', '${esc(v.thumbnail)}', '${esc(v.duration)}')">
-              <img src="${v.thumbnail}" alt="" loading="lazy"/>
+            <div class="result-item"
+                 data-vid="${ae(v.id)}"
+                 data-url="${ae(v.url)}"
+                 data-title="${ae(v.title)}"
+                 data-channel="${ae(v.channel)}"
+                 data-thumbnail="${ae(v.thumbnail)}"
+                 data-duration="${ae(v.duration)}"
+                 onclick="pickVideo(this)">
+              <img src="${ae(v.thumbnail)}" alt="" loading="lazy"/>
               <div class="result-info">
-                <div class="result-title" title="${esc(v.title)}">${v.title}</div>
+                <div class="result-title" title="${ae(v.title)}">${v.title}</div>
                 <div class="result-meta">${v.channel} · ${v.duration}</div>
               </div>
               <button class="result-btn">Make Karaoke</button>
@@ -261,12 +268,17 @@ HTML = """
       btn.textContent = 'Search';
     }
 
-    function esc(s) {
-      return String(s || '').replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;');
+    function ae(s) {
+      return String(s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;');
     }
 
-    function pickVideo(id, url, title, channel, thumbnail, duration) {
-      // Hide results, show now-playing + status
+    function pickVideo(el) {
+      const url       = el.dataset.url;
+      const title     = el.dataset.title;
+      const channel   = el.dataset.channel;
+      const thumbnail = el.dataset.thumbnail;
+      const duration  = el.dataset.duration;
+
       document.getElementById('results').style.display = 'none';
 
       showStatus('waiting',
