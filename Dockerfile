@@ -1,7 +1,7 @@
-# Python 3.7 ist die stabilste Basis für Spleeter und TensorFlow 2.3
+# Wir bleiben bei Python 3.7
 FROM python:3.7-slim
 
-# System-Werkzeuge installieren (ffmpeg für Audio, git für Pakete)
+# System-Bibliotheken
 RUN apt-get update && apt-get install -y \
     ffmpeg \
     libsndfile1 \
@@ -10,16 +10,16 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Wichtig: Pip und Setup-Tools aktualisieren, damit die Installation klappt
-RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+# Upgrade pip
+RUN pip install --upgrade pip
 
-# Spleeter und alle Web-Pakete installieren
-RUN pip install --no-cache-dir \
-    flask \
-    redis \
-    rq \
-    yt-dlp \
-    spleeter==2.3.0
+# Erst die Web-Pakete
+RUN pip install --no-cache-dir flask redis rq yt-dlp
+
+# Danach Spleeter mit der "no-deps" Option, um die automatische
+# Installation von inkompatiblen TensorFlow-Versionen zu verhindern
+RUN pip install --no-cache-dir --no-deps spleeter==2.3.0 \
+    && pip install --no-cache-dir tensorflow==2.3.0 pandas numpy
 
 COPY . .
 
