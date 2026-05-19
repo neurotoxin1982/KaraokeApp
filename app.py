@@ -370,10 +370,9 @@ def search():
             'yt-dlp',
             f'ytsearch8:{query}',
             '--dump-json',
+            '--flat-playlist',
             '--no-download',
-            '--no-playlist',
             '--js-runtimes', 'nodejs',
-            '--extractor-args', 'youtube:player_client=ios,mweb',
         ],
         capture_output=True,
         text=True,
@@ -384,12 +383,18 @@ def search():
     for line in result.stdout.strip().splitlines():
         try:
             d = json.loads(line)
+            vid_id = d.get('id', '')
+            thumbnail = (
+                d.get('thumbnail')
+                or (d.get('thumbnails') or [{}])[-1].get('url', '')
+                or (f'https://i.ytimg.com/vi/{vid_id}/mqdefault.jpg' if vid_id else '')
+            )
             videos.append({
-                'id':        d.get('id', ''),
-                'url':       d.get('webpage_url') or f"https://www.youtube.com/watch?v={d.get('id','')}",
+                'id':        vid_id,
+                'url':       d.get('webpage_url') or d.get('url') or f"https://www.youtube.com/watch?v={vid_id}",
                 'title':     d.get('title', 'Unknown'),
-                'channel':   d.get('uploader') or d.get('channel', ''),
-                'thumbnail': d.get('thumbnail', ''),
+                'channel':   d.get('uploader') or d.get('channel') or d.get('channel_id', ''),
+                'thumbnail': thumbnail,
                 'duration':  d.get('duration_string') or '',
             })
         except Exception:
@@ -403,8 +408,8 @@ def search_debug():
     """Temporary debug endpoint — remove after fixing search."""
     query = request.args.get('q', 'linkin park').strip()
     result = subprocess.run(
-        ['yt-dlp', f'ytsearch3:{query}', '--dump-json', '--no-download', '--no-playlist',
-         '--js-runtimes', 'nodejs', '--extractor-args', 'youtube:player_client=ios,mweb'],
+        ['yt-dlp', f'ytsearch3:{query}', '--dump-json', '--flat-playlist',
+         '--no-download', '--js-runtimes', 'nodejs'],
         capture_output=True, text=True, timeout=60,
     )
     return jsonify({
