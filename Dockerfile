@@ -13,13 +13,14 @@ WORKDIR /app
 # Upgrade pip
 RUN pip install --upgrade pip
 
-# Web & queue packages
-RUN pip install --no-cache-dir flask redis rq yt-dlp
-
-# Pin tensorflow first so pip doesn't grab an incompatible version,
-# then install spleeter 2.3.2 (the actual latest release on PyPI)
+# Install tensorflow first, then spleeter.
+# spleeter pulls in typer which downgrades click — so we install Flask AFTER
+# spleeter and force click>=8.0 so Flask's CLI doesn't break.
 RUN pip install --no-cache-dir "tensorflow==2.12.0" \
     && pip install --no-cache-dir "spleeter==2.3.2"
+
+# Install web packages last so they override spleeter's click downgrade
+RUN pip install --no-cache-dir "click>=8.0" flask redis rq yt-dlp
 
 # Pre-download the 2stems model at build time — avoids first-run delays
 RUN python -c "from spleeter.separator import Separator; Separator('spleeter:2stems')"
