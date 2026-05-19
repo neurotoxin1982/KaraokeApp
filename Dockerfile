@@ -1,4 +1,4 @@
-# Python 3.10 — compatible with spleeter 2.4.0
+# Python 3.10 — compatible with spleeter 2.3.2 + tensorflow 2.12
 FROM python:3.10-slim
 
 # System dependencies
@@ -16,11 +16,12 @@ RUN pip install --upgrade pip
 # Web & queue packages
 RUN pip install --no-cache-dir flask redis rq yt-dlp
 
-# Spleeter — pip resolves a compatible tensorflow automatically
-RUN pip install --no-cache-dir spleeter==2.4.0
+# Pin tensorflow first so pip doesn't grab an incompatible version,
+# then install spleeter 2.3.2 (the actual latest release on PyPI)
+RUN pip install --no-cache-dir "tensorflow==2.12.0" \
+    && pip install --no-cache-dir "spleeter==2.3.2"
 
-# Pre-download the spleeter 2stems model at build time so there's no
-# network delay or failure on first job execution in production
+# Pre-download the 2stems model at build time — avoids first-run delays
 RUN python -c "from spleeter.separator import Separator; Separator('spleeter:2stems')"
 
 COPY . .
