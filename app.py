@@ -368,7 +368,6 @@ def search():
     result = subprocess.run(
         [
             'yt-dlp',
-            '--extractor-args', 'youtube:player_client=android_vr,ios',
             f'ytsearch8:{query}',
             '--dump-json',
             '--no-download',
@@ -376,7 +375,7 @@ def search():
         ],
         capture_output=True,
         text=True,
-        timeout=30,
+        timeout=60,
     )
 
     videos = []
@@ -395,6 +394,21 @@ def search():
             continue
 
     return jsonify(videos)
+
+
+@app.route('/search/debug')
+def search_debug():
+    """Temporary debug endpoint — remove after fixing search."""
+    query = request.args.get('q', 'linkin park').strip()
+    result = subprocess.run(
+        ['yt-dlp', f'ytsearch3:{query}', '--dump-json', '--no-download', '--no-playlist'],
+        capture_output=True, text=True, timeout=60,
+    )
+    return jsonify({
+        'returncode': result.returncode,
+        'stdout_lines': result.stdout.strip().splitlines()[:3],
+        'stderr': result.stderr[-2000:] if result.stderr else '',
+    })
 
 
 @app.route('/submit', methods=['POST'])
