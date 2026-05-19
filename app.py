@@ -2,6 +2,7 @@ import eventlet
 eventlet.monkey_patch()
 
 import subprocess, json
+import re
 import requests
 from flask import Flask, request, jsonify
 from flask_socketio import SocketIO, emit
@@ -34,10 +35,20 @@ def _duration_str(secs):
     h, m = divmod(m, 60)
     return f'{h}:{m:02d}:{s:02d}' if h else f'{m}:{s:02d}'
 
-def _fetch_lyrics(title, artist):
+def _fetch_lyrics(title, channel):
+    # Strip "(Karaoke)", "(Instrumental)", etc. from title
+    clean = re.sub(r'\s*[\(\[].*?(karaoke|instrumental|no vocal|backing).*?[\)\]]', '', title, flags=re.IGNORECASE).strip()
+
+    # "Artist - Song" format → split it
+    if ' - ' in clean:
+        artist, song = clean.split(' - ', 1)
+    else:
+        artist = re.sub(r'(?i)\s*(karaoke|sings?|covers?)\s*', ' ', channel).strip()
+        song = clean
+
     try:
         r = requests.get('https://lrclib.net/api/search',
-                         params={'q': f'{artist} {title}'.strip()}, timeout=10)
+                         params={'q': f'{artist} {song}'.strip()}, timeout=10)
         if r.ok:
             for item in r.json():
                 lrc = item.get('syncedLyrics', '')
@@ -109,6 +120,7 @@ HOST_HTML = r"""<!DOCTYPE html>
     <div class="channel" id="np-channel"></div>
     <div class="lyrics-badge" id="np-badge"></div>
     <div id="yt-player"></div>
+    <p style="font-size:0.8rem;color:#666;margin:0.5rem 0 0.75rem;">&#9654; Play im Player anklicken um Sound zu starten</p>
     <div class="np-actions">
       <button class="btn btn-red" onclick="stopSong()">&#9632; Stop</button>
     </div>
@@ -190,18 +202,18 @@ HOST_HTML = r"""<!DOCTYPE html>
 
     ytPlayer = new YT.Player('yt-player', {
       videoId,
-      playerVars: {autoplay: 1, rel: 0, modestbranding: 1},
+      playerVars: {autoplay: 0, rel: 0, modestbranding: 1},
       events: {
         onStateChange(e) {
           if (e.data === YT.PlayerState.PLAYING) {
             emitPlay();
+            clearInterval(syncInterval);
             syncInterval = setInterval(emitPlay, 5000);
           } else if (e.data === YT.PlayerState.PAUSED || e.data === YT.PlayerState.ENDED) {
             clearInterval(syncInterval);
             socket.emit('pause', {position: Math.round(ytPlayer.getCurrentTime() * 1000)});
           }
         },
-        onReady() { ytPlayer.playVideo(); }
       }
     });
   }
@@ -271,10 +283,16 @@ DISPLAY_HTML = r"""<!DOCTYPE html>
   </div>
   <div id="waiting">&#9835; &nbsp; &#9835; &nbsp; &#9835;</div>
 
+  <div id="conn-status" style="position:fixed;bottom:1rem;right:1rem;font-size:0.75rem;padding:0.3rem 0.7rem;border-radius:1rem;background:#111;color:#666;">Verbinde...</div>
+
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
   <script>
-    const socket = io();
+    const socket = io({transports: ['polling', 'websocket']});
     let lrcLines = [], ticker = null, startTs = null;
+
+    const statusEl = document.getElementById('conn-status');
+    socket.on('connect',    () => { statusEl.textContent = 'Verbunden'; statusEl.style.color = '#4ade80'; });
+    socket.on('disconnect', () => { statusEl.textContent = 'Getrennt';  statusEl.style.color = '#f87171'; });
 
     function parseLRC(lrc) {
       const lines = [];
@@ -400,7 +418,7 @@ def prepare():
     _state['start_ts']   = None
     _state['paused_pos'] = None
 
-    socketio.emit('song_ready', song)
+    socketio.emit('song_ready', song, namespace='/')
     return jsonify(song)
 
 # ── WebSocket ─────────────────────────────────────────────────────────────────
