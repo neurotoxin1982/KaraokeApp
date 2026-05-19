@@ -1,14 +1,22 @@
 version: '3.8'
 
 services:
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+
   web:
-    build: 
+    build:
       context: .
       dockerfile: Dockerfile
-    command: python app.py
+    restart: always
+    ports:
+      - "5000:5000"
     environment:
-      - REDIS_URL=redis://redis:6379/0
-      - SERVICE_FQDN_WEB=${SERVICE_FQDN_WEB}
+      - REDIS_URL=redis://redis:6379
+    volumes:
+      - output_data:/app/output
     depends_on:
       - redis
 
@@ -16,17 +24,15 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    command: python app.py worker
+    restart: always
+    # Override the default CMD to run the RQ worker instead of Flask
+    command: rq worker --url redis://redis:6379 karaoke
     environment:
-      - REDIS_URL=redis://redis:6379/0
+      - REDIS_URL=redis://redis:6379
+    volumes:
+      - output_data:/app/output
     depends_on:
       - redis
-    volumes:
-      - media_data:/app/downloads
-
-  redis:
-    image: redis:7-alpine
-    restart: always
 
 volumes:
-  media_data:
+  output_data:
