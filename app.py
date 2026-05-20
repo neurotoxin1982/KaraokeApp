@@ -339,8 +339,8 @@ def search():
         return jsonify([])
     result = subprocess.run(
         ['yt-dlp', f'scsearch8:{q} karaoke',
-         '--dump-json', '--flat-playlist', '--no-download'],
-        capture_output=True, text=True, timeout=60,
+         '--dump-json', '--no-download', '--no-playlist'],
+        capture_output=True, text=True, timeout=90,
     )
     videos = []
     for line in result.stdout.strip().splitlines():
