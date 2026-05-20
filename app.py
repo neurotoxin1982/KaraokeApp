@@ -9,44 +9,44 @@ from flask_socketio import SocketIO, emit
 app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins='*', async_mode='eventlet')
 
-AUDIO_DIR = os.environ.get('AUDIO_DIR', '/app/audio')
-os.makedirs(AUDIO_DIR, exist_ok=True)
+VIDEO_DIR = os.environ.get('VIDEO_DIR', '/app/video')
+os.makedirs(VIDEO_DIR, exist_ok=True)
 
+_state = {'song': None, 'playing': False}
 
-_state = {'song': None, 'start_ts': None, 'paused_pos': None}
+# ── Download via cobalt.tools ─────────────────────────────────────────────────
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
+def _download_via_cobalt(youtube_url, out_path):
+    r = requests.post(
+        'https://api.cobalt.tools/',
+        json={'url': youtube_url, 'videoQuality': '720', 'downloadMode': 'auto'},
+        headers={
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+            'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36',
+        },
+        timeout=30,
+    )
+    if not r.ok:
+        raise RuntimeError(f'Cobalt API: HTTP {r.status_code} — {r.text[:200]}')
 
-def _fetch_lyrics(title, channel):
-    clean = re.sub(r'\s*[\(\[].*?(karaoke|instrumental|no vocal|backing).*?[\)\]]',
-                   '', title, flags=re.IGNORECASE).strip()
-    if ' - ' in clean:
-        artist, song = clean.split(' - ', 1)
+    data = r.json()
+    status = data.get('status', '')
+
+    if status in ('redirect', 'tunnel', 'stream'):
+        dl_url = data['url']
+    elif status == 'picker':
+        dl_url = data['picker'][0]['url']
     else:
-        artist = re.sub(r'(?i)\s*(karaoke|sings?|covers?)\s*', ' ', channel).strip()
-        song   = clean
-    try:
-        r = requests.get('https://lrclib.net/api/search',
-                         params={'q': f'{artist} {song}'.strip()}, timeout=10)
-        if r.ok:
-            for item in r.json():
-                lrc = item.get('syncedLyrics', '')
-                if lrc:
-                    return lrc
-    except Exception:
-        pass
-    return ''
+        raise RuntimeError(f'Cobalt Fehler: {data}')
 
-def _download_audio(url, out_path):
-    """Download audio from SoundCloud (or any yt-dlp supported URL)."""
-    result = subprocess.run([
-        'yt-dlp',
-        '--extract-audio', '--audio-format', 'mp3', '--audio-quality', '4',
-        '-o', out_path, '--no-playlist',
-        url,
-    ], capture_output=True, text=True, timeout=300)
-    if result.returncode != 0 or not os.path.exists(out_path):
-        raise RuntimeError(result.stderr[-300:] if result.stderr else 'Download fehlgeschlagen')
+    with requests.get(dl_url, stream=True, timeout=300,
+                      headers={'User-Agent': 'Mozilla/5.0'}) as resp:
+        resp.raise_for_status()
+        with open(out_path, 'wb') as f:
+            for chunk in resp.iter_content(65536):
+                if chunk:
+                    f.write(chunk)
 
 # ── HTML ──────────────────────────────────────────────────────────────────────
 
@@ -69,8 +69,9 @@ HOST_HTML = r"""<!DOCTYPE html>
     .btn { padding: 0.75rem 1.25rem; border-radius: 0.6rem; border: none; background: linear-gradient(135deg, #7c3aed, #2563eb); color: #fff; font-size: 0.95rem; font-weight: 600; cursor: pointer; }
     .btn:disabled { opacity: 0.4; cursor: not-allowed; }
     .btn:not(:disabled):hover { opacity: 0.85; }
-    .btn-red { background: linear-gradient(135deg, #dc2626, #991b1b); }
-    .btn-sm  { padding: 0.5rem 1rem; font-size: 0.85rem; }
+    .btn-green { background: linear-gradient(135deg, #16a34a, #15803d); }
+    .btn-red   { background: linear-gradient(135deg, #dc2626, #991b1b); }
+    .btn-sm    { padding: 0.5rem 1rem; font-size: 0.85rem; }
     #results { display: none; margin-top: 0.5rem; }
     .result-item { display: flex; align-items: center; gap: 0.85rem; padding: 0.75rem; border-radius: 0.75rem; border: 1px solid #2a2a4a; margin-bottom: 0.5rem; cursor: pointer; transition: background 0.15s; }
     .result-item:hover { background: #252545; border-color: #a78bfa; }
@@ -82,15 +83,8 @@ HOST_HTML = r"""<!DOCTYPE html>
     #loading-box { display: none; margin-top: 1.25rem; padding: 1.25rem; border-radius: 0.75rem; background: #1e1e3a; border: 1px solid #3a3a6a; color: #aaa; }
     #player-box  { display: none; margin-top: 1.25rem; padding: 1.25rem; border-radius: 0.75rem; border: 1px solid #2a5a9a; background: #1a2a3a; }
     .np-title   { font-size: 1rem; font-weight: 700; color: #60a5fa; margin-bottom: 0.2rem; }
-    .np-channel { font-size: 0.82rem; color: #888; margin-bottom: 0.5rem; }
-    .np-badge   { font-size: 0.78rem; margin-bottom: 0.75rem; }
-    .has-lyrics { color: #4ade80; }
-    .no-lyrics  { color: #f87171; }
-    audio { width: 100%; margin-bottom: 0.75rem; }
-    .offset-row { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.5rem; font-size: 0.82rem; color: #aaa; }
-    .btn-off { padding: 0.3rem 0.7rem; border-radius: 0.4rem; border: 1px solid #2a2a4a; background: #1a1a2e; color: #e0e0f0; cursor: pointer; font-size: 0.8rem; }
-    .btn-off:hover { background: #252545; }
-    .off-val { min-width: 2rem; text-align: center; color: #60a5fa; font-weight: 600; }
+    .np-channel { font-size: 0.82rem; color: #888; margin-bottom: 1rem; }
+    .controls   { display: flex; gap: 0.5rem; flex-wrap: wrap; }
     .no-results { color: #666; font-size: 0.88rem; text-align: center; padding: 1rem 0; }
     .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #555; border-top-color: #a78bfa; border-radius: 50%; animation: spin 0.8s linear infinite; vertical-align: middle; margin-right: 6px; }
     @keyframes spin { to { transform: rotate(360deg); } }
@@ -110,20 +104,16 @@ HOST_HTML = r"""<!DOCTYPE html>
   <div id="results"></div>
 
   <div id="loading-box">
-    <span class="spinner"></span> Song wird heruntergeladen&hellip; (30&ndash;60 Sek.)
+    <span class="spinner"></span> Video wird heruntergeladen&hellip; (1&ndash;2 Min.)
   </div>
 
   <div id="player-box">
     <div class="np-title"   id="np-title"></div>
     <div class="np-channel" id="np-channel"></div>
-    <div class="np-badge"   id="np-badge"></div>
-    <audio id="audio" controls preload="auto"></audio>
-    <div class="offset-row">
-      Lyrics-Offset:
-      <button class="btn-off" onclick="shift(-3)">&#8722;3s</button>
-      <span class="off-val" id="off-val">0s</span>
-      <button class="btn-off" onclick="shift(3)">+3s</button>
-      <button class="btn btn-red btn-sm" style="margin-left:auto" onclick="stopSong()">&#9632; Stop</button>
+    <div class="controls">
+      <button class="btn btn-green btn-sm" onclick="doPlay()">&#9654; Play</button>
+      <button class="btn btn-sm"           onclick="doPause()">&#9646;&#9646; Pause</button>
+      <button class="btn btn-red   btn-sm" onclick="doStop()">&#9632; Stop</button>
     </div>
   </div>
 </div>
@@ -131,12 +121,9 @@ HOST_HTML = r"""<!DOCTYPE html>
 <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 <script>
   const socket = io();
-  const audio  = document.getElementById('audio');
-  let offsetMs = 0;
 
   function ae(s) { return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;'); }
 
-  // ── Search ──────────────────────────────────────────────────────────────────
   function doSearch() {
     const q = document.getElementById('q').value.trim();
     if (!q) return;
@@ -151,8 +138,8 @@ HOST_HTML = r"""<!DOCTYPE html>
         btn.disabled = false; btn.textContent = 'Suchen';
         if (!vs.length) { el.innerHTML = '<div class="no-results">Keine Ergebnisse.</div>'; return; }
         el.innerHTML = vs.map(v => `
-          <div class="result-item" data-url="${ae(v.url)}" data-title="${ae(v.title)}" data-channel="${ae(v.channel)}" onclick="pick(this)">
-            <img src="${ae(v.thumbnail)}" loading="lazy" onerror="this.style.display='none'"/>
+          <div class="result-item" data-id="${ae(v.id)}" data-title="${ae(v.title)}" data-channel="${ae(v.channel)}" onclick="pick(this)">
+            <img src="https://i.ytimg.com/vi/${ae(v.id)}/mqdefault.jpg" loading="lazy"/>
             <div class="result-info">
               <div class="result-title">${v.title}</div>
               <div class="result-meta">${v.channel} &middot; ${v.duration}</div>
@@ -160,33 +147,23 @@ HOST_HTML = r"""<!DOCTYPE html>
             <button class="result-btn">Laden</button>
           </div>`).join('');
       })
-      .catch(() => { btn.disabled=false; btn.textContent='Suchen'; el.innerHTML='<div class="no-results">Fehler.</div>'; });
+      .catch(() => { btn.disabled=false; btn.textContent='Suchen'; });
   }
 
-  // ── Pick & load ─────────────────────────────────────────────────────────────
   function pick(el) {
     document.getElementById('results').style.display = 'none';
     document.getElementById('player-box').style.display = 'none';
     document.getElementById('loading-box').style.display = 'block';
-    offsetMs = 0; document.getElementById('off-val').textContent = '0s';
     fetch('/load', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({url: el.dataset.url, title: el.dataset.title, channel: el.dataset.channel}),
-    }).catch(() => {
-      document.getElementById('loading-box').style.display = 'none';
-      alert('Fehler beim Laden');
-    });
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({id: el.dataset.id, title: el.dataset.title, channel: el.dataset.channel}),
+    }).catch(e => { document.getElementById('loading-box').style.display='none'; alert('Fehler: '+e); });
   }
 
   socket.on('song_ready', song => {
     document.getElementById('loading-box').style.display = 'none';
     document.getElementById('np-title').textContent   = song.title;
     document.getElementById('np-channel').textContent = song.channel;
-    const badge = document.getElementById('np-badge');
-    badge.textContent = song.lrc ? '✓ Songtext gefunden' : '✗ Kein Songtext gefunden';
-    badge.className   = 'np-badge ' + (song.lrc ? 'has-lyrics' : 'no-lyrics');
-    audio.src = song.audio_url;
-    audio.load();
     document.getElementById('player-box').style.display = 'block';
   });
 
@@ -195,31 +172,9 @@ HOST_HTML = r"""<!DOCTYPE html>
     alert('Fehler: ' + d.error);
   });
 
-  // ── Audio events → sync displays ────────────────────────────────────────────
-  audio.addEventListener('play', emitPlay);
-  audio.addEventListener('seeked', () => { if (!audio.paused) emitPlay(); });
-  audio.addEventListener('pause', () => {
-    socket.emit('pause', {position: Math.round(audio.currentTime * 1000)});
-  });
-
-  function emitPlay() {
-    socket.emit('play', {start_ts: Date.now() - Math.round(audio.currentTime * 1000) + offsetMs});
-  }
-
-  // ── Offset ──────────────────────────────────────────────────────────────────
-  function shift(sec) {
-    offsetMs += sec * 1000;
-    document.getElementById('off-val').textContent = (offsetMs / 1000) + 's';
-    if (!audio.paused) emitPlay();
-    else socket.emit('pause', {position: Math.round(audio.currentTime * 1000) - offsetMs});
-  }
-
-  // ── Stop ────────────────────────────────────────────────────────────────────
-  function stopSong() {
-    audio.pause(); audio.src = '';
-    socket.emit('stop');
-    document.getElementById('player-box').style.display = 'none';
-  }
+  function doPlay()  { socket.emit('play');  }
+  function doPause() { socket.emit('pause'); }
+  function doStop()  { socket.emit('stop');  }
 </script>
 </body>
 </html>
@@ -233,89 +188,94 @@ DISPLAY_HTML = r"""<!DOCTYPE html>
   <title>Karaoke</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body { width: 100%; height: 100%; overflow: hidden; background: #000; color: #fff; font-family: 'Segoe UI', system-ui, sans-serif; }
-    body { display: flex; flex-direction: column; align-items: center; justify-content: center; }
-    #standby h1 { font-size: 6rem; font-weight: 900; letter-spacing: 0.2em; background: linear-gradient(135deg, #a78bfa, #60a5fa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-align: center; }
-    #standby p  { color: #444; font-size: 1.3rem; margin-top: 1rem; text-align: center; }
-    #song-info  { position: fixed; top: 1.5rem; left: 0; right: 0; text-align: center; display: none; }
-    .s-title  { font-size: 1.2rem; font-weight: 700; color: #a78bfa; }
-    .s-artist { font-size: 0.95rem; color: #555; margin-top: 0.2rem; }
-    #lyrics { display: none; width: 100%; text-align: center; padding: 5rem 4rem 2rem; }
-    #line-current { font-size: clamp(2rem,5vw,4rem); font-weight: 700; color: #fff; line-height: 1.3; margin-bottom: 1.5rem; text-shadow: 0 0 60px rgba(167,139,250,0.5); min-height: 1.3em; }
-    #line-next    { font-size: clamp(1.2rem,3vw,2.2rem); color: #444; line-height: 1.4; min-height: 1.4em; }
-    #waiting { display: none; color: #333; font-size: 2rem; text-align: center; }
-    #conn { position: fixed; bottom: 0.75rem; right: 0.75rem; font-size: 0.7rem; padding: 0.2rem 0.6rem; border-radius: 1rem; background: #111; color: #555; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
+
+    #activate {
+      position: fixed; inset: 0; background: #000;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      cursor: pointer; z-index: 100;
+    }
+    #activate h1 { font-size: 5rem; font-weight: 900; letter-spacing: 0.2em; background: linear-gradient(135deg, #a78bfa, #60a5fa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-family: 'Segoe UI', sans-serif; }
+    #activate p  { color: #555; font-size: 1.2rem; margin-top: 1rem; font-family: 'Segoe UI', sans-serif; }
+
+    #standby {
+      display: none; position: fixed; inset: 0; background: #000;
+      flex-direction: column; align-items: center; justify-content: center;
+    }
+    #standby h1 { font-size: 5rem; font-weight: 900; letter-spacing: 0.2em; background: linear-gradient(135deg, #a78bfa, #60a5fa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-family: 'Segoe UI', sans-serif; }
+    #standby p  { color: #444; font-size: 1.3rem; margin-top: 1rem; font-family: 'Segoe UI', sans-serif; }
+
+    #video-wrap { display: none; width: 100%; height: 100%; }
+    video { width: 100%; height: 100%; object-fit: contain; background: #000; }
+
+    #conn { position: fixed; bottom: 0.5rem; right: 0.75rem; font-size: 0.7rem; padding: 0.2rem 0.6rem; border-radius: 1rem; background: rgba(0,0,0,0.6); color: #555; font-family: sans-serif; }
   </style>
 </head>
 <body>
-  <div id="standby"><h1>KARAOKE</h1><p>Warte auf den DJ &hellip;</p></div>
-  <div id="song-info">
-    <div class="s-title"  id="info-title"></div>
-    <div class="s-artist" id="info-artist"></div>
+  <!-- Step 1: click to activate audio/video autoplay -->
+  <div id="activate" onclick="activate()">
+    <h1>KARAOKE</h1>
+    <p>Hier klicken zum Aktivieren</p>
   </div>
-  <div id="lyrics">
-    <div id="line-current"></div>
-    <div id="line-next"></div>
+
+  <!-- Standby screen after activation -->
+  <div id="standby">
+    <h1>KARAOKE</h1>
+    <p>Warte auf den DJ &hellip;</p>
   </div>
-  <div id="waiting">&#9835; &nbsp; &#9835; &nbsp; &#9835;</div>
+
+  <!-- Video player -->
+  <div id="video-wrap">
+    <video id="vid" preload="auto" playsinline></video>
+  </div>
+
   <div id="conn">Verbinde...</div>
 
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
   <script>
-    const socket = io({transports:['polling','websocket']});
-    let lrcLines=[], ticker=null, startTs=null;
+    const socket = io({transports: ['polling', 'websocket']});
+    const vid    = document.getElementById('vid');
+    let activated = false;
+
     const connEl = document.getElementById('conn');
-    socket.on('connect',    ()=>{ connEl.textContent='Verbunden'; connEl.style.color='#4ade80'; });
-    socket.on('disconnect', ()=>{ connEl.textContent='Getrennt';  connEl.style.color='#f87171'; });
+    socket.on('connect',    () => { connEl.textContent = 'Verbunden'; connEl.style.color = '#4ade80'; });
+    socket.on('disconnect', () => { connEl.textContent = 'Getrennt';  connEl.style.color = '#f87171'; });
 
-    function parseLRC(lrc) {
-      const lines=[];
-      for (const line of lrc.split('\n')) {
-        const m = line.match(/\[(\d+):(\d+)\.(\d+)\](.*)/);
-        if (!m) continue;
-        const ms = (parseInt(m[1])*60+parseInt(m[2]))*1000 + parseInt(m[3].padEnd(3,'0').slice(0,3));
-        const text = m[4].trim();
-        if (text) lines.push({ms,text});
-      }
-      return lines.sort((a,b)=>a.ms-b.ms);
-    }
-
-    function updateLyrics(posMs) {
-      let idx=-1;
-      for (let i=0;i<lrcLines.length;i++) { if(lrcLines[i].ms<=posMs) idx=i; else break; }
-      document.getElementById('line-current').textContent = idx>=0 ? lrcLines[idx].text : '';
-      document.getElementById('line-next').textContent    = idx+1<lrcLines.length ? lrcLines[idx+1].text : '';
+    function activate() {
+      activated = true;
+      document.getElementById('activate').style.display = 'none';
+      document.getElementById('standby').style.display  = 'flex';
+      // Trigger silent play to unlock autoplay policy
+      vid.muted = true;
+      vid.play().catch(() => {});
+      vid.pause();
+      vid.muted = false;
     }
 
     socket.on('song_ready', song => {
-      clearInterval(ticker); startTs=null;
-      lrcLines = song.lrc ? parseLRC(song.lrc) : [];
+      vid.src = song.video_url;
+      vid.load();
+      document.getElementById('standby').style.display   = 'flex';
+      document.getElementById('video-wrap').style.display = 'none';
+    });
+
+    socket.on('play', () => {
       document.getElementById('standby').style.display   = 'none';
-      document.getElementById('info-title').textContent  = song.title;
-      document.getElementById('info-artist').textContent = song.channel;
-      document.getElementById('song-info').style.display = 'block';
-      document.getElementById('line-current').textContent = '';
-      document.getElementById('line-next').textContent    = lrcLines.length ? lrcLines[0].text : '';
-      document.getElementById('lyrics').style.display    = lrcLines.length ? 'block' : 'none';
-      document.getElementById('waiting').style.display   = lrcLines.length ? 'none'  : 'block';
+      document.getElementById('video-wrap').style.display = 'block';
+      vid.play().catch(e => console.warn('play blocked:', e));
     });
 
-    socket.on('play', data => {
-      startTs = data.start_ts;
-      clearInterval(ticker);
-      ticker = setInterval(()=>updateLyrics(Date.now()-startTs), 200);
+    socket.on('pause', () => { vid.pause(); });
+
+    socket.on('stop', () => {
+      vid.pause(); vid.src = '';
+      document.getElementById('video-wrap').style.display = 'none';
+      document.getElementById('standby').style.display   = 'flex';
     });
 
-    socket.on('pause', data => {
-      clearInterval(ticker); startTs=null; updateLyrics(data.position);
-    });
-
-    socket.on('stop', ()=>{
-      clearInterval(ticker); startTs=null; lrcLines=[];
-      document.getElementById('standby').style.display   = 'block';
-      document.getElementById('song-info').style.display = 'none';
-      document.getElementById('lyrics').style.display    = 'none';
-      document.getElementById('waiting').style.display   = 'none';
+    // Reconnect sync: request current state
+    socket.on('connect', () => {
+      socket.emit('request_state');
     });
   </script>
 </body>
@@ -338,23 +298,22 @@ def search():
     if not q:
         return jsonify([])
     result = subprocess.run(
-        ['yt-dlp', f'scsearch8:{q} karaoke',
-         '--dump-json', '--no-download', '--no-playlist'],
-        capture_output=True, text=True, timeout=90,
+        ['yt-dlp', f'ytsearch8:{q} karaoke',
+         '--dump-json', '--flat-playlist', '--no-download'],
+        capture_output=True, text=True, timeout=60,
     )
     videos = []
     for line in result.stdout.strip().splitlines():
         try:
             d = json.loads(line)
-            url = d.get('webpage_url') or d.get('url', '')
-            if not url:
+            vid_id = d.get('id', '')
+            if not vid_id:
                 continue
             videos.append({
-                'url':       url,
-                'title':     d.get('title', 'Unknown'),
-                'channel':   d.get('uploader') or d.get('channel', ''),
-                'duration':  d.get('duration_string') or '',
-                'thumbnail': d.get('thumbnail', ''),
+                'id':       vid_id,
+                'title':    d.get('title', 'Unknown'),
+                'channel':  d.get('uploader') or d.get('channel', ''),
+                'duration': d.get('duration_string') or '',
             })
         except Exception:
             continue
@@ -363,29 +322,28 @@ def search():
 @app.route('/load', methods=['POST'])
 def load():
     data    = request.get_json(force=True) or {}
-    url     = data.get('url', '').strip()
+    vid_id  = data.get('id', '').strip()
     title   = data.get('title', '')
     channel = data.get('channel', '')
-    if not url:
-        return jsonify({'error': 'Keine URL'}), 400
+    if not vid_id:
+        return jsonify({'error': 'Keine ID'}), 400
 
     job_id = str(uuid.uuid4())
 
     def work():
         try:
-            out_mp3 = os.path.join(AUDIO_DIR, f'{job_id}.mp3')
-            _download_audio(url, out_mp3)
-            lrc  = _fetch_lyrics(title, channel)
+            out_path = os.path.join(VIDEO_DIR, f'{job_id}.mp4')
+            yt_url   = f'https://www.youtube.com/watch?v={vid_id}'
+            _download_via_cobalt(yt_url, out_path)
+
             song = {
                 'job_id':    job_id,
                 'title':     title,
                 'channel':   channel,
-                'audio_url': f'/audio/{job_id}',
-                'lrc':       lrc,
+                'video_url': f'/video/{job_id}',
             }
-            _state['song']       = song
-            _state['start_ts']   = None
-            _state['paused_pos'] = None
+            _state['song']    = song
+            _state['playing'] = False
             socketio.emit('song_ready', song, namespace='/')
         except Exception as e:
             socketio.emit('load_error', {'error': str(e)}, namespace='/')
@@ -393,11 +351,11 @@ def load():
     threading.Thread(target=work, daemon=True).start()
     return jsonify({'job_id': job_id})
 
-@app.route('/audio/<job_id>')
-def serve_audio(job_id):
+@app.route('/video/<job_id>')
+def serve_video(job_id):
     if not re.match(r'^[0-9a-f-]+$', job_id):
         return '', 404
-    files = glob.glob(os.path.join(AUDIO_DIR, f'{job_id}.*'))
+    files = glob.glob(os.path.join(VIDEO_DIR, f'{job_id}.*'))
     if not files:
         return '', 404
     return send_file(files[0])
@@ -406,31 +364,33 @@ def serve_audio(job_id):
 
 @socketio.on('connect')
 def on_connect():
-    song = _state.get('song')
-    if not song:
-        return
-    emit('song_ready', song)
-    if _state['start_ts'] is not None:
-        emit('play', {'start_ts': _state['start_ts']})
-    elif _state['paused_pos'] is not None:
-        emit('pause', {'position': _state['paused_pos']})
+    if _state.get('song'):
+        emit('song_ready', _state['song'])
+        if _state['playing']:
+            emit('play')
+
+@socketio.on('request_state')
+def on_request_state():
+    if _state.get('song'):
+        emit('song_ready', _state['song'])
+        if _state['playing']:
+            emit('play')
 
 @socketio.on('play')
-def on_play(data):
-    _state['start_ts']   = data.get('start_ts')
-    _state['paused_pos'] = None
-    emit('play', data, broadcast=True)
+def on_play():
+    _state['playing'] = True
+    emit('play', broadcast=True)
 
 @socketio.on('pause')
-def on_pause(data):
-    _state['paused_pos'] = data.get('position')
-    _state['start_ts']   = None
-    emit('pause', data, broadcast=True)
+def on_pause():
+    _state['playing'] = False
+    emit('pause', broadcast=True)
 
 @socketio.on('stop')
 def on_stop():
-    _state['song'] = _state['start_ts'] = _state['paused_pos'] = None
-    emit('stop', {}, broadcast=True)
+    _state['song']    = None
+    _state['playing'] = False
+    emit('stop', broadcast=True)
 
 if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=5000)
