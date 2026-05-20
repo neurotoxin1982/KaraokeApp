@@ -91,12 +91,21 @@ HOST_HTML = r"""<!DOCTYPE html>
     .result-btn:hover { background: #6d28d9; }
     #player-box { display: none; margin-top: 1.5rem; }
     #player-box h2 { font-size: 1rem; font-weight: 700; color: #60a5fa; margin-bottom: 0.25rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    #player-box .channel { font-size: 0.82rem; color: #888; margin-bottom: 0.75rem; }
+    #player-box .channel { font-size: 0.82rem; color: #888; margin-bottom: 0.5rem; }
     #player-box .lyrics-badge { font-size: 0.78rem; margin-bottom: 0.75rem; }
     .has-lyrics { color: #4ade80; }
     .no-lyrics { color: #f87171; }
-    #yt-player { width: 100%; border-radius: 0.75rem; aspect-ratio: 16/9; border: none; background: #000; }
-    .np-actions { display: flex; gap: 0.5rem; margin-top: 0.75rem; }
+    #yt-wrapper { position: relative; width: 100%; aspect-ratio: 16/9; border-radius: 0.75rem; overflow: hidden; background: #000; margin-bottom: 0.75rem; }
+    #yt-player { width: 100%; height: 100%; border: none; }
+    #play-overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.6); cursor: pointer; font-size: 4rem; transition: background 0.2s; border-radius: 0.75rem; }
+    #play-overlay:hover { background: rgba(0,0,0,0.3); }
+    #play-overlay.hidden { display: none; }
+    .controls-row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; flex-wrap: wrap; }
+    .offset-box { display: flex; align-items: center; gap: 0.4rem; margin-left: auto; background: #0f0f1a; border: 1px solid #2a2a4a; border-radius: 0.5rem; padding: 0.3rem 0.6rem; font-size: 0.82rem; }
+    .offset-box span { color: #aaa; min-width: 3rem; text-align: center; }
+    .offset-btn { background: #2a2a4a; border: none; color: #e0e0f0; border-radius: 0.3rem; padding: 0.2rem 0.5rem; cursor: pointer; font-size: 0.8rem; }
+    .offset-btn:hover { background: #3a3a6a; }
+    .np-actions { display: flex; gap: 0.5rem; }
     .no-results { color: #666; font-size: 0.88rem; text-align: center; padding: 1rem 0; }
     .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #555; border-top-color: #a78bfa; border-radius: 50%; animation: spin 0.8s linear infinite; vertical-align: middle; margin-right: 6px; }
     @keyframes spin { to { transform: rotate(360deg); } }
@@ -119,26 +128,99 @@ HOST_HTML = r"""<!DOCTYPE html>
     <h2 id="np-title"></h2>
     <div class="channel" id="np-channel"></div>
     <div class="lyrics-badge" id="np-badge"></div>
-    <div id="yt-player"></div>
-    <p style="font-size:0.8rem;color:#666;margin:0.5rem 0 0.75rem;">&#9654; Play im Player anklicken um Sound zu starten</p>
-    <div class="np-actions">
+    <div id="yt-wrapper">
+      <iframe id="yt-player" allowfullscreen allow="autoplay"></iframe>
+      <div id="play-overlay" onclick="startPlay()">&#9654;</div>
+    </div>
+    <div class="controls-row">
       <button class="btn btn-red" onclick="stopSong()">&#9632; Stop</button>
+      <div class="offset-box">
+        <span style="color:#888;font-size:0.75rem;">Lyrics</span>
+        <button class="offset-btn" onclick="adjustOffset(-2000)">&#8722;2s</button>
+        <span id="offset-display">0s</span>
+        <button class="offset-btn" onclick="adjustOffset(2000)">+2s</button>
+      </div>
     </div>
   </div>
 </div>
 
-<script src="https://www.youtube.com/iframe_api"></script>
 <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 <script>
   const socket = io();
-  let ytPlayer = null;
-  let syncInterval = null;
-  let currentSong = null;
+  let player   = null;
+  let syncInt  = null;
+  let offsetMs = 0;
+  let videoId  = null;
 
   function ae(s) {
     return String(s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;');
   }
 
+  // ── YouTube IFrame API ────────────────────────────────────────────────────
+  const tag = document.createElement('script');
+  tag.src = 'https://www.youtube.com/iframe_api';
+  document.head.appendChild(tag);
+
+  function onYouTubeIframeAPIReady() {
+    if (videoId) _createPlayer(videoId);
+  }
+
+  function _createPlayer(vid) {
+    if (player) { try { player.destroy(); } catch(e) {} player = null; }
+    clearInterval(syncInt);
+    document.getElementById('play-overlay').classList.remove('hidden');
+
+    player = new YT.Player('yt-player', {
+      videoId: vid,
+      playerVars: {rel: 0, modestbranding: 1, controls: 1},
+      events: {
+        onStateChange(e) {
+          if (e.data === YT.PlayerState.PLAYING) {
+            document.getElementById('play-overlay').classList.add('hidden');
+            emitPlay();
+            clearInterval(syncInt);
+            syncInt = setInterval(emitPlay, 3000);
+          } else if (e.data === YT.PlayerState.PAUSED || e.data === YT.PlayerState.ENDED) {
+            clearInterval(syncInt);
+            document.getElementById('play-overlay').classList.remove('hidden');
+            socket.emit('pause', {position: Math.round(player.getCurrentTime() * 1000)});
+          }
+        }
+      }
+    });
+  }
+
+  // Called when user clicks the big play overlay — this IS a user gesture
+  function startPlay() {
+    if (player && player.playVideo) {
+      player.playVideo();
+    }
+  }
+
+  function emitPlay() {
+    if (!player) return;
+    const startTs = Date.now() - Math.round(player.getCurrentTime() * 1000) + offsetMs;
+    socket.emit('play', {start_ts: startTs});
+  }
+
+  function adjustOffset(deltaMs) {
+    offsetMs += deltaMs;
+    document.getElementById('offset-display').textContent = (offsetMs / 1000).toFixed(0) + 's';
+    if (player && player.getPlayerState && player.getPlayerState() === 1) emitPlay();
+  }
+
+  function stopSong() {
+    clearInterval(syncInt);
+    if (player) { try { player.stopVideo(); player.destroy(); } catch(e) {} player = null; }
+    socket.emit('stop');
+    document.getElementById('player-box').style.display = 'none';
+    document.getElementById('yt-player').src = '';
+    offsetMs = 0;
+    document.getElementById('offset-display').textContent = '0s';
+    videoId = null;
+  }
+
+  // ── Search ────────────────────────────────────────────────────────────────
   function doSearch() {
     const q = document.getElementById('search-input').value.trim();
     if (!q) return;
@@ -155,8 +237,7 @@ HOST_HTML = r"""<!DOCTYPE html>
         if (!videos.length) { el.innerHTML = '<div class="no-results">Keine Ergebnisse.</div>'; return; }
         el.innerHTML = videos.map(v => `
           <div class="result-item"
-               data-id="${ae(v.id)}" data-title="${ae(v.title)}"
-               data-channel="${ae(v.channel)}"
+               data-id="${ae(v.id)}" data-title="${ae(v.title)}" data-channel="${ae(v.channel)}"
                onclick="pickSong(this)">
             <img src="https://i.ytimg.com/vi/${ae(v.id)}/mqdefault.jpg" alt="" loading="lazy"/>
             <div class="result-info">
@@ -173,67 +254,29 @@ HOST_HTML = r"""<!DOCTYPE html>
   }
 
   function pickSong(el) {
-    const id      = el.dataset.id;
+    videoId = el.dataset.id;
     const title   = el.dataset.title;
     const channel = el.dataset.channel;
+    offsetMs = 0;
+    document.getElementById('offset-display').textContent = '0s';
     document.getElementById('results').style.display = 'none';
 
     fetch('/prepare', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({id, title, channel}),
+      body: JSON.stringify({id: videoId, title, channel}),
     })
     .then(r => r.json())
     .then(data => {
-      currentSong = data;
       document.getElementById('np-title').textContent   = title;
       document.getElementById('np-channel').textContent = channel;
       const badge = document.getElementById('np-badge');
-      badge.textContent  = data.lrc ? 'Songtext gefunden' : 'Kein Songtext gefunden';
-      badge.className    = 'lyrics-badge ' + (data.lrc ? 'has-lyrics' : 'no-lyrics');
+      badge.textContent = data.lrc ? 'Songtext gefunden' : 'Kein Songtext gefunden';
+      badge.className   = 'lyrics-badge ' + (data.lrc ? 'has-lyrics' : 'no-lyrics');
       document.getElementById('player-box').style.display = 'block';
-      loadYT(id);
+      if (window.YT && YT.Player) _createPlayer(videoId);
     });
   }
-
-  function loadYT(videoId) {
-    if (ytPlayer) { ytPlayer.destroy(); ytPlayer = null; }
-    clearInterval(syncInterval);
-
-    ytPlayer = new YT.Player('yt-player', {
-      videoId,
-      playerVars: {autoplay: 0, rel: 0, modestbranding: 1},
-      events: {
-        onStateChange(e) {
-          if (e.data === YT.PlayerState.PLAYING) {
-            emitPlay();
-            clearInterval(syncInterval);
-            syncInterval = setInterval(emitPlay, 5000);
-          } else if (e.data === YT.PlayerState.PAUSED || e.data === YT.PlayerState.ENDED) {
-            clearInterval(syncInterval);
-            socket.emit('pause', {position: Math.round(ytPlayer.getCurrentTime() * 1000)});
-          }
-        },
-      }
-    });
-  }
-
-  function emitPlay() {
-    if (!ytPlayer) return;
-    const startTs = Date.now() - Math.round(ytPlayer.getCurrentTime() * 1000);
-    socket.emit('play', {start_ts: startTs});
-  }
-
-  function stopSong() {
-    clearInterval(syncInterval);
-    if (ytPlayer) { ytPlayer.stopVideo(); ytPlayer.destroy(); ytPlayer = null; }
-    socket.emit('stop');
-    document.getElementById('player-box').style.display = 'none';
-    document.getElementById('yt-player').innerHTML = '';
-    currentSong = null;
-  }
-
-  function onYouTubeIframeAPIReady() {}
 </script>
 </body>
 </html>
