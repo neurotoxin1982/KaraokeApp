@@ -25,6 +25,9 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    labels:
+      - traefik.enable=true
+      - traefik.http.services.app.loadbalancer.server.port=8000
 
 volumes:
   pgdata:
