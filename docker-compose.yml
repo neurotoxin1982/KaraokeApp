@@ -23,10 +23,11 @@ services:
       DATABASE_URL: postgresql://karaoke:karaoke@db:5432/karaoke
       MUSIC_DIR: /music
     volumes:
-      - /mnt:/mnt:ro
+      - music:/music
     depends_on:
       db:
         condition: service_healthy
 
 volumes:
   pgdata:
+  music:
