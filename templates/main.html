@@ -213,15 +213,16 @@
         <input id="modal-search" type="text" placeholder="Search title or artist…"
           class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2.5 text-sm text-gray-100 focus:outline-none focus:border-brand-light"
           oninput="modalSearch(this.value)">
-        <div id="modal-results" class="mt-2 max-h-48 overflow-y-auto space-y-1"></div>
-        <div id="modal-selected" class="hidden mt-2 text-sm text-brand-light font-medium"></div>
+        <div id="modal-results" class="mt-2 max-h-52 overflow-y-auto space-y-1"></div>
+        <div id="modal-selected" class="hidden mt-1 text-xs text-brand-light px-1">✓ Selected</div>
         <input type="hidden" id="modal-song-id">
       </div>
       <div>
         <label class="text-xs text-gray-400 block mb-1">Singer name</label>
         <input id="modal-singer" type="text" placeholder="Enter name…"
           class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2.5 text-sm text-gray-100 focus:outline-none focus:border-brand-light"
-          onkeydown="if(event.key==='Enter') confirmAdd()">
+          onkeydown="if(event.key==='Enter') confirmAdd()"
+          autocomplete="off">
       </div>
     </div>
     <div class="px-5 pb-5 flex gap-2 justify-end">
@@ -549,33 +550,55 @@ function openAddModal() {
 }
 function closeAddModal() { document.getElementById('add-modal').classList.add('hidden'); }
 
-let _mTimer;
+let _mTimer, _lastSongs = [];
 function modalSearch(q) {
   clearTimeout(_mTimer);
   _mTimer = setTimeout(async () => {
-    if (!q) { document.getElementById('modal-results').innerHTML = ''; return; }
-    const songs = await apiFetch(`/api/songs/search?q=${encodeURIComponent(q)}`);
-    document.getElementById('modal-results').innerHTML = songs.map(s => `
+    if (!q.trim()) { document.getElementById('modal-results').innerHTML = ''; _lastSongs = []; return; }
+    _lastSongs = await apiFetch(`/api/songs/search?q=${encodeURIComponent(q)}`);
+    // Auto-select first result immediately
+    if (_lastSongs.length > 0) {
+      _setSong(_lastSongs[0].id, _lastSongs[0].artist + ' — ' + _lastSongs[0].title);
+    }
+    document.getElementById('modal-results').innerHTML = _lastSongs.map((s, i) => `
       <div onclick="selectSong(${s.id}, ${JSON.stringify(s.artist+' — '+s.title)})"
-        class="px-3 py-2 rounded-lg cursor-pointer hover:bg-gray-700 flex items-center justify-between">
-        <span class="text-sm text-gray-200">${s.artist} <span class="text-gray-500">—</span> ${s.title}</span>
-        <span class="text-xs text-gray-600 ml-2">${s.file_format.toUpperCase()}</span>
+        data-song-id="${s.id}"
+        class="result-item px-3 py-2 rounded-lg cursor-pointer flex items-center justify-between
+               ${i === 0 ? 'bg-brand/30 border border-brand/50' : 'hover:bg-gray-700'}">
+        <span class="text-sm text-gray-100">${s.artist} <span class="text-gray-400">—</span> ${s.title}</span>
+        <span class="text-xs text-gray-500 ml-2 flex-shrink-0">${s.file_format.toUpperCase()}</span>
       </div>`).join('') || '<p class="text-sm text-gray-500 px-3 py-2">No results</p>';
-  }, 250);
+  }, 200);
 }
-function selectSong(id, label) {
+
+function _setSong(id, label) {
   document.getElementById('modal-song-id').value = id;
   document.getElementById('modal-selected').textContent = '✓ ' + label;
   document.getElementById('modal-selected').classList.remove('hidden');
-  document.getElementById('modal-results').innerHTML = '';
-  document.getElementById('modal-search').value = label;
+  // Highlight selected in list
+  document.querySelectorAll('.result-item').forEach(el => {
+    const active = el.dataset.songId == id;
+    el.className = el.className.replace(/bg-brand\/30 border border-brand\/50|hover:bg-gray-700/g, '');
+    el.className += active ? ' bg-brand/30 border border-brand/50' : ' hover:bg-gray-700';
+  });
+}
+
+function selectSong(id, label) {
+  _setSong(id, label);
+  // Don't clear results — let user change selection
   document.getElementById('modal-singer').focus();
 }
+
 async function confirmAdd() {
-  const songId = document.getElementById('modal-song-id').value;
-  if (!songId) { showToast('Select a song first', 'error'); return; }
+  let songId = document.getElementById('modal-song-id').value;
+  // If still empty but results exist, use first result
+  if (!songId && _lastSongs.length > 0) {
+    songId = _lastSongs[0].id;
+    _setSong(songId, _lastSongs[0].artist + ' — ' + _lastSongs[0].title);
+  }
+  if (!songId) { showToast('Type a song name to search', 'error'); return; }
   const name = document.getElementById('modal-singer').value.trim();
-  if (!name) { document.getElementById('modal-singer').focus(); return; }
+  if (!name) { document.getElementById('modal-singer').focus(); showToast('Enter singer name', 'error'); return; }
   await apiFetch(`/api/queue?song_id=${songId}&singer_name=${encodeURIComponent(name)}`, { method: 'POST' });
   showToast(`${name} added to queue!`);
   closeAddModal();
