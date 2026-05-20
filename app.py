@@ -1,7 +1,7 @@
 import eventlet
 eventlet.monkey_patch()
 
-import os, glob, uuid
+import os, glob, uuid, json, sqlite3
 from flask import Flask, request, jsonify, send_file
 from flask_socketio import SocketIO, emit
 from werkzeug.utils import secure_filename
@@ -13,21 +13,48 @@ app.secret_key = os.environ.get('SECRET_KEY', 'karaoke-secret-42')
 socketio = SocketIO(app, cors_allowed_origins='*', async_mode='eventlet')
 
 LIBRARY_DIR = os.environ.get('LIBRARY_DIR', '/app/library')
+DB_PATH     = os.environ.get('DB_PATH', '/app/karaoke.db')
 os.makedirs(LIBRARY_DIR, exist_ok=True)
 
 AUDIO_EXT = {'.mp3', '.m4a', '.wav', '.ogg'}
 VIDEO_EXT = {'.mp4', '.webm', '.mkv', '.mov', '.avi', '.m4v'}
 ALLOWED   = AUDIO_EXT | VIDEO_EXT | {'.cdg'}
 
-# ── State ─────────────────────────────────────────────────────────────────────
-queue       = []     # [{id, song, singer, guest_id}]
-now_playing = None   # same shape or None
-settings    = {'song_limit': 2, 'queue_locked': False}
+# ── Database ───────────────────────────────────────────────────────────────────
 
-def clean_name(base):
-    return base.replace('_', ' ').strip()
+def get_db():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
 
-def get_library():
+def init_db():
+    with get_db() as conn:
+        conn.executescript('''
+            CREATE TABLE IF NOT EXISTS songs (
+                base    TEXT PRIMARY KEY,
+                display TEXT NOT NULL,
+                type    TEXT NOT NULL,
+                mp3     TEXT,
+                cdg     TEXT,
+                video   TEXT,
+                audio   TEXT
+            );
+            CREATE TABLE IF NOT EXISTS queue (
+                id        TEXT PRIMARY KEY,
+                position  INTEGER NOT NULL,
+                song_json TEXT NOT NULL,
+                singer    TEXT NOT NULL,
+                guest_id  TEXT NOT NULL DEFAULT ""
+            );
+            CREATE TABLE IF NOT EXISTS settings (
+                key   TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            );
+        ''')
+        conn.execute("INSERT OR IGNORE INTO settings VALUES ('song_limit', '2')")
+        conn.execute("INSERT OR IGNORE INTO settings VALUES ('queue_locked', '0')")
+
+def sync_library():
     by_base = {}
     for path in glob.glob(os.path.join(LIBRARY_DIR, '*')):
         fn  = os.path.basename(path)
@@ -36,19 +63,77 @@ def get_library():
             continue
         base = os.path.splitext(fn)[0]
         by_base.setdefault(base, {})[ext] = fn
-    songs = []
-    for base in sorted(by_base.keys(), key=str.lower):
+
+    rows = []
+    for base in by_base:
         files = by_base[base]
         cdg = files.get('.cdg')
         mp3 = files.get('.mp3') or next((files[e] for e in AUDIO_EXT if e in files), None)
         mp4 = next((files[e] for e in VIDEO_EXT if e in files), None)
         if cdg and mp3:
-            songs.append({'display': clean_name(base), 'type': 'cdg',   'mp3': mp3, 'cdg': cdg})
+            rows.append((base, clean_name(base), 'cdg',   mp3, cdg,  None, None))
         elif mp4:
-            songs.append({'display': clean_name(base), 'type': 'video', 'video': mp4})
+            rows.append((base, clean_name(base), 'video', None, None, mp4, None))
         elif mp3:
-            songs.append({'display': clean_name(base), 'type': 'audio', 'audio': mp3})
+            rows.append((base, clean_name(base), 'audio', mp3, None, None, mp3))
+
+    with get_db() as conn:
+        conn.execute('DELETE FROM songs')
+        conn.executemany(
+            'INSERT INTO songs (base,display,type,mp3,cdg,video,audio) VALUES (?,?,?,?,?,?,?)',
+            rows
+        )
+
+def get_library():
+    with get_db() as conn:
+        rows = conn.execute('SELECT * FROM songs ORDER BY lower(display)').fetchall()
+    songs = []
+    for r in rows:
+        if r['type'] == 'cdg':
+            songs.append({'display': r['display'], 'type': 'cdg',   'mp3': r['mp3'], 'cdg': r['cdg']})
+        elif r['type'] == 'video':
+            songs.append({'display': r['display'], 'type': 'video', 'video': r['video']})
+        else:
+            songs.append({'display': r['display'], 'type': 'audio', 'audio': r['audio']})
     return songs
+
+# ── State ─────────────────────────────────────────────────────────────────────
+queue       = []
+now_playing = None
+settings    = {'song_limit': 2, 'queue_locked': False}
+
+def load_state():
+    global queue, settings
+    with get_db() as conn:
+        for row in conn.execute('SELECT key, value FROM settings'):
+            if row['key'] == 'song_limit':
+                settings['song_limit'] = int(row['value'])
+            elif row['key'] == 'queue_locked':
+                settings['queue_locked'] = row['value'] == '1'
+        queue = [
+            {'id': r['id'], 'song': json.loads(r['song_json']),
+             'singer': r['singer'], 'guest_id': r['guest_id']}
+            for r in conn.execute('SELECT * FROM queue ORDER BY position')
+        ]
+
+def save_queue():
+    with get_db() as conn:
+        conn.execute('DELETE FROM queue')
+        conn.executemany(
+            'INSERT INTO queue (id,position,song_json,singer,guest_id) VALUES (?,?,?,?,?)',
+            [(item['id'], i, json.dumps(item['song']), item['singer'], item['guest_id'])
+             for i, item in enumerate(queue)]
+        )
+
+def save_settings():
+    with get_db() as conn:
+        conn.execute("INSERT OR REPLACE INTO settings VALUES ('song_limit', ?)",
+                     (str(settings['song_limit']),))
+        conn.execute("INSERT OR REPLACE INTO settings VALUES ('queue_locked', ?)",
+                     ('1' if settings['queue_locked'] else '0',))
+
+def clean_name(base):
+    return base.replace('_', ' ').strip()
 
 def get_state():
     return {'now_playing': now_playing, 'queue': queue, 'settings': settings}
@@ -57,6 +142,7 @@ def advance_queue():
     global now_playing
     if queue:
         now_playing = queue.pop(0)
+        save_queue()
         socketio.emit('load_song', now_playing['song'])
     else:
         now_playing = None
@@ -686,6 +772,7 @@ def upload():
     if ext not in ALLOWED:
         return jsonify({'error': f'Format nicht unterstützt: {ext}'}), 400
     f.save(os.path.join(LIBRARY_DIR, fn))
+    sync_library()
     return jsonify({'ok': True, 'filename': fn})
 
 @app.route('/files/<filename>')
@@ -726,6 +813,7 @@ def on_queue_add(data):
         'guest_id': guest_id,
     }
     queue.append(item)
+    save_queue()
     emit('add_result', {'ok': True})
     if now_playing is None:
         advance_queue()
@@ -736,6 +824,7 @@ def on_queue_add(data):
 def on_queue_remove(data):
     global queue
     queue[:] = [item for item in queue if item['id'] != data.get('id')]
+    save_queue()
     socketio.emit('queue_update', get_state())
 
 @socketio.on('queue_reorder')
@@ -744,6 +833,7 @@ def on_queue_reorder(data):
     order  = data.get('order', [])
     id_map = {item['id']: item for item in queue}
     queue[:] = [id_map[oid] for oid in order if oid in id_map]
+    save_queue()
     socketio.emit('queue_update', get_state())
 
 @socketio.on('queue_move_top')
@@ -753,6 +843,7 @@ def on_queue_move_top(data):
     idx = next((i for i, item in enumerate(queue) if item['id'] == target_id), None)
     if idx is not None and idx > 0:
         queue.insert(0, queue.pop(idx))
+    save_queue()
     socketio.emit('queue_update', get_state())
 
 @socketio.on('queue_edit_singer')
@@ -763,12 +854,14 @@ def on_queue_edit_singer(data):
         if item['id'] == target_id:
             item['singer'] = new_name or item['singer']
             break
+    save_queue()
     socketio.emit('queue_update', get_state())
 
 @socketio.on('settings_update')
 def on_settings_update(data):
     settings['song_limit']   = max(1, int(data.get('song_limit', 2)))
     settings['queue_locked'] = bool(data.get('queue_locked', False))
+    save_settings()
     socketio.emit('queue_update', get_state())
 
 @socketio.on('skip')
@@ -790,6 +883,10 @@ def on_pause():
 @socketio.on('key_change')
 def on_key_change(data):
     socketio.emit('key_change', data, broadcast=True)
+
+init_db()
+sync_library()
+load_state()
 
 if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=5000)
