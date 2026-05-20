@@ -1,6 +1,10 @@
 version: '3.8'
 
 services:
+  bgutil:
+    image: brainicism/bgutil-yt-dlp-plugin:latest
+    restart: always
+
   web:
     build: .
     restart: always
@@ -9,6 +13,8 @@ services:
     volumes:
       - video_data:/app/video
       - yt_home:/app/yt_home
+    depends_on:
+      - bgutil
 
 volumes:
   video_data:

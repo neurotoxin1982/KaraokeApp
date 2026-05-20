@@ -18,20 +18,15 @@ _state = {'song': None, 'playing': False}
 YT_HOME = os.environ.get('YT_HOME', '/app/yt_home')
 os.makedirs(YT_HOME, exist_ok=True)
 
-def _ytdlp(extra_args, timeout=300):
-    env = {**os.environ, 'HOME': YT_HOME}
-    return subprocess.run(
-        ['yt-dlp', '--username', 'oauth2', '--password', ''] + extra_args,
-        capture_output=True, text=True, timeout=timeout, env=env,
-    )
-
 def _download_video(video_id, out_path):
-    r = _ytdlp([
+    r = subprocess.run([
+        'yt-dlp',
+        '--extractor-args', 'youtube:getpot_bgutil_baseurl=http://bgutil:4416',
         '-f', 'bestvideo[height<=720]+bestaudio/best[height<=720]',
         '--merge-output-format', 'mp4',
         '-o', out_path, '--no-playlist',
         f'https://www.youtube.com/watch?v={video_id}',
-    ])
+    ], capture_output=True, text=True, timeout=300)
     if r.returncode != 0 or not os.path.exists(out_path):
         raise RuntimeError(r.stderr[-400:] if r.stderr else 'Download fehlgeschlagen')
 

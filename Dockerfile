@@ -9,7 +9,9 @@ RUN pip install --no-cache-dir \
     flask-socketio \
     eventlet \
     requests \
-    yt-dlp
+    yt-dlp \
+    yt-dlp-get-pot \
+    bgutil-yt-dlp-plugin
 
 COPY . .
 
