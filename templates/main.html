@@ -127,13 +127,11 @@
         </div>
       </div>
 
-      <!-- Audio unlock overlay -->
-      <div id="audio-unlock" class="absolute inset-0 flex items-center justify-center bg-black/90 cursor-pointer z-30"
-           onclick="unlockAudio()">
-        <div class="text-center select-none">
-          <i class="fa-solid fa-play-circle text-brand-light mb-3 block" style="font-size:4rem"></i>
-          <p class="text-white font-bold text-lg">Tap to enable audio</p>
-          <p class="text-gray-500 text-xs mt-1">Required once by browser</p>
+      <!-- Small audio hint (only shows if browser blocked autoplay) -->
+      <div id="audio-hint" class="hidden absolute bottom-2 left-2 right-2 z-20 pointer-events-none">
+        <div class="bg-gray-900/80 border border-gray-700 rounded px-3 py-1.5 text-xs text-gray-400 flex items-center gap-2">
+          <i class="fa-solid fa-volume-xmark text-yellow-500"></i>
+          Click anywhere to enable audio
         </div>
       </div>
     </div>
@@ -238,15 +236,29 @@
 <script src="/static/js/local-fs.js"></script>
 <script src="/static/js/cdg-player.js"></script>
 <script>
-// ── AudioContext ──────────────────────────────────────────────────────────────
+// ── AudioContext — created immediately, unlocked on first click ───────────────
 let _audioCtx = null;
 
-async function unlockAudio() {
-  _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  if (_audioCtx.state === 'suspended') await _audioCtx.resume();
-  document.getElementById('audio-unlock').classList.add('hidden');
-  await initPlayer();
-}
+(function createAudioCtx() {
+  try {
+    _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (_audioCtx.state === 'suspended') {
+      document.getElementById('audio-hint').classList.remove('hidden');
+    }
+  } catch(e) { console.warn('AudioContext failed:', e); }
+})();
+
+// Any click unlocks the AudioContext and hides the hint
+document.addEventListener('click', async () => {
+  if (_audioCtx && _audioCtx.state === 'suspended') {
+    await _audioCtx.resume();
+    document.getElementById('audio-hint').classList.add('hidden');
+    // If a song is loaded but not playing yet, start it now
+    if (currentSong && !isPlaying && (_audioBuf || _videoEl)) {
+      const s = currentSong; currentSong = null; await loadCurrentSong();
+    }
+  }
+}, { capture: true });
 
 // ── BroadcastChannel — sync popout ───────────────────────────────────────────
 let _bc = null;
@@ -621,8 +633,8 @@ setInterval(() => {
   if (currentSong && isPlaying) _broadcast({ type: 'position', pos: _getCurrentPos() });
 }, 250);
 
-// ── Boot ──────────────────────────────────────────────────────────────────────
-setInterval(() => { if (_audioCtx && !currentSong) loadCurrentSong(); }, 5000);
-// initPlayer() called after unlockAudio() tap
+// ── Boot — start immediately, no tap required ─────────────────────────────────
+setInterval(() => { if (!currentSong) loadCurrentSong(); }, 5000);
+initPlayer();
 </script>
 {% endblock %}
