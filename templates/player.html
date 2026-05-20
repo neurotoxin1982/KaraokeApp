@@ -1,0 +1,281 @@
+{% extends "base.html" %}
+{% block title %}Player — Karaoke Manager{% endblock %}
+
+{% block content %}
+<div class="flex flex-col h-full bg-black">
+
+  <!-- Player area -->
+  <div class="flex-1 flex items-center justify-center relative overflow-hidden" id="player-area">
+    <!-- CDG Canvas -->
+    <canvas id="cdg-canvas" class="hidden" style="image-rendering: pixelated;"></canvas>
+
+    <!-- Video player -->
+    <video id="video-player" class="hidden max-w-full max-h-full" controls controlsList="nodownload">
+      Your browser does not support the video tag.
+    </video>
+
+    <!-- Idle screen -->
+    <div id="idle-screen" class="text-center">
+      <i class="fa-solid fa-microphone text-gray-700 text-8xl mb-4"></i>
+      <p class="text-gray-600 text-xl">No song playing</p>
+      <p class="text-gray-700 text-sm mt-2">Add songs to the <a href="/queue" class="text-brand-light hover:underline">queue</a> to get started</p>
+    </div>
+
+    <!-- Song info overlay (CDG mode) -->
+    <div id="song-overlay" class="hidden absolute bottom-4 left-4 right-4">
+      <div class="bg-black/70 backdrop-blur rounded-lg px-4 py-2 flex items-center gap-4">
+        <div class="flex-1 min-w-0">
+          <div id="overlay-title" class="font-bold text-white truncate text-lg"></div>
+          <div id="overlay-artist" class="text-gray-300 text-sm truncate"></div>
+        </div>
+        <div id="overlay-singer" class="text-brand-light text-sm whitespace-nowrap"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Controls bar -->
+  <div class="bg-gray-900 border-t border-gray-800 px-6 py-4 flex-shrink-0">
+    <div class="max-w-4xl mx-auto flex items-center gap-4">
+
+      <!-- Now playing info -->
+      <div class="flex-1 min-w-0">
+        <div id="ctrl-title" class="font-semibold text-white truncate">—</div>
+        <div id="ctrl-meta" class="text-xs text-gray-400 truncate"></div>
+      </div>
+
+      <!-- Controls -->
+      <div class="flex items-center gap-3">
+        <button id="btn-play-pause" onclick="togglePlayPause()"
+          class="w-10 h-10 rounded-full bg-brand hover:bg-brand-dark flex items-center justify-center text-white text-lg">
+          <i class="fa-solid fa-play" id="play-icon"></i>
+        </button>
+        <button onclick="nextSong()"
+          class="w-8 h-8 rounded-full bg-gray-700 hover:bg-gray-600 flex items-center justify-center text-white">
+          <i class="fa-solid fa-forward-step"></i>
+        </button>
+      </div>
+
+      <!-- Volume -->
+      <div class="flex items-center gap-2">
+        <i class="fa-solid fa-volume-high text-gray-400 text-sm"></i>
+        <input type="range" id="volume-slider" min="0" max="1" step="0.02" value="1"
+          oninput="setVolume(this.value)"
+          class="w-20 accent-brand-light">
+      </div>
+
+      <!-- Progress -->
+      <div class="flex items-center gap-2 min-w-0" style="width:180px">
+        <span id="time-cur" class="text-xs text-gray-400 w-10 text-right">0:00</span>
+        <input type="range" id="progress-slider" min="0" max="100" step="0.1" value="0"
+          oninput="seek(this.value)"
+          class="flex-1 accent-brand-light">
+        <span id="time-dur" class="text-xs text-gray-400 w-10">0:00</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Upcoming -->
+  <div id="upcoming-bar" class="bg-gray-900 border-t border-gray-800 px-6 py-2 flex-shrink-0 hidden">
+    <div class="max-w-4xl mx-auto flex items-center gap-4 overflow-x-auto">
+      <span class="text-xs text-gray-500 whitespace-nowrap">Up next:</span>
+      <div id="upcoming-list" class="flex gap-4"></div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/cdg-player.js"></script>
+<script>
+  let currentSong = null;
+  let audioEl = null;
+  let cdgPlayer = null;
+  let isPlaying = false;
+  let progressInterval = null;
+
+  async function loadCurrentSong() {
+    const data = await apiFetch('/api/queue/current');
+    if (!data.id) {
+      showIdleScreen();
+      return;
+    }
+    if (currentSong && currentSong.id === data.id) return;
+    currentSong = data;
+    playSong(data);
+    loadUpcoming();
+  }
+
+  function showIdleScreen() {
+    currentSong = null;
+    document.getElementById('idle-screen').classList.remove('hidden');
+    document.getElementById('cdg-canvas').classList.add('hidden');
+    document.getElementById('video-player').classList.add('hidden');
+    document.getElementById('song-overlay').classList.add('hidden');
+    document.getElementById('ctrl-title').textContent = '—';
+    document.getElementById('ctrl-meta').textContent = '';
+    document.getElementById('upcoming-bar').classList.add('hidden');
+    stopProgress();
+    if (audioEl) { audioEl.pause(); audioEl = null; }
+  }
+
+  function playSong(song) {
+    document.getElementById('idle-screen').classList.add('hidden');
+
+    const fmt = song.file_format;
+    const isVideo = ['mp4', 'avi', 'webm', 'mkv', 'm4v', 'mpeg', 'mpg'].includes(fmt);
+    const isCdg = fmt === 'cdg' || fmt === 'zip-cdg';
+
+    document.getElementById('ctrl-title').textContent = `${song.artist} — ${song.title}`;
+    document.getElementById('ctrl-meta').textContent = song.singer_name ? `Singer: ${song.singer_name}` : '';
+    document.getElementById('overlay-title').textContent = song.title;
+    document.getElementById('overlay-artist').textContent = song.artist;
+    document.getElementById('overlay-singer').textContent = song.singer_name ? `♪ ${song.singer_name}` : '';
+
+    if (isVideo) {
+      playVideo(song);
+    } else if (isCdg) {
+      playCdg(song);
+    }
+    startProgress();
+  }
+
+  function playVideo(song) {
+    const video = document.getElementById('video-player');
+    document.getElementById('cdg-canvas').classList.add('hidden');
+    document.getElementById('song-overlay').classList.add('hidden');
+    video.classList.remove('hidden');
+    video.src = `/media/${song.song_id}/video`;
+    video.volume = parseFloat(document.getElementById('volume-slider').value);
+    video.play();
+    video.ontimeupdate = updateProgress;
+    video.onended = () => nextSong();
+    audioEl = video;
+    isPlaying = true;
+    updatePlayIcon();
+  }
+
+  function playCdg(song) {
+    document.getElementById('video-player').classList.add('hidden');
+    const canvas = document.getElementById('cdg-canvas');
+    canvas.classList.remove('hidden');
+    document.getElementById('song-overlay').classList.remove('hidden');
+
+    if (audioEl) { audioEl.pause(); }
+    audioEl = new Audio(`/media/${song.song_id}/audio`);
+    audioEl.volume = parseFloat(document.getElementById('volume-slider').value);
+
+    if (cdgPlayer) cdgPlayer.stop();
+    cdgPlayer = new CdgPlayer(canvas, `/media/${song.song_id}/cdg`, audioEl);
+    cdgPlayer.load().then(() => {
+      audioEl.play();
+      isPlaying = true;
+      updatePlayIcon();
+    });
+    audioEl.onended = () => nextSong();
+    audioEl.ontimeupdate = updateProgress;
+
+    // Scale canvas to fill container
+    scaleCanvas(canvas);
+  }
+
+  function scaleCanvas(canvas) {
+    const area = document.getElementById('player-area');
+    const aW = area.clientWidth, aH = area.clientHeight;
+    const scale = Math.min(aW / 300, aH / 216);
+    canvas.style.width = `${300 * scale}px`;
+    canvas.style.height = `${216 * scale}px`;
+  }
+
+  window.addEventListener('resize', () => {
+    const canvas = document.getElementById('cdg-canvas');
+    if (!canvas.classList.contains('hidden')) scaleCanvas(canvas);
+  });
+
+  function togglePlayPause() {
+    if (!audioEl) return;
+    if (isPlaying) {
+      audioEl.pause();
+      if (cdgPlayer) cdgPlayer.pause();
+      isPlaying = false;
+    } else {
+      audioEl.play();
+      if (cdgPlayer) cdgPlayer.resume();
+      isPlaying = true;
+    }
+    updatePlayIcon();
+  }
+
+  function updatePlayIcon() {
+    const icon = document.getElementById('play-icon');
+    icon.className = isPlaying ? 'fa-solid fa-pause' : 'fa-solid fa-play';
+  }
+
+  function setVolume(v) {
+    if (audioEl) audioEl.volume = parseFloat(v);
+  }
+
+  function seek(pct) {
+    if (!audioEl || !audioEl.duration) return;
+    audioEl.currentTime = (pct / 100) * audioEl.duration;
+  }
+
+  function startProgress() {
+    stopProgress();
+    progressInterval = setInterval(updateProgress, 500);
+  }
+
+  function stopProgress() {
+    if (progressInterval) { clearInterval(progressInterval); progressInterval = null; }
+  }
+
+  function updateProgress() {
+    if (!audioEl) return;
+    const cur = audioEl.currentTime || 0;
+    const dur = audioEl.duration || 0;
+    document.getElementById('time-cur').textContent = fmtTime(cur);
+    document.getElementById('time-dur').textContent = fmtTime(dur);
+    if (dur > 0) {
+      document.getElementById('progress-slider').value = (cur / dur) * 100;
+    }
+  }
+
+  function fmtTime(s) {
+    if (!s || isNaN(s)) return '0:00';
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60).toString().padStart(2, '0');
+    return `${m}:${sec}`;
+  }
+
+  async function nextSong() {
+    const data = await apiFetch('/api/queue/next', { method: 'POST' });
+    if (audioEl) { audioEl.pause(); audioEl = null; }
+    if (cdgPlayer) { cdgPlayer.stop(); cdgPlayer = null; }
+    isPlaying = false;
+    currentSong = null;
+    await loadCurrentSong();
+  }
+
+  async function loadUpcoming() {
+    const queue = await apiFetch('/api/queue');
+    const pending = queue.filter(e => e.status === 'pending').slice(0, 5);
+    const bar = document.getElementById('upcoming-bar');
+    const list = document.getElementById('upcoming-list');
+    if (!pending.length) { bar.classList.add('hidden'); return; }
+    bar.classList.remove('hidden');
+    list.innerHTML = pending.map(e => `
+      <div class="flex items-center gap-2 bg-gray-800 rounded px-3 py-1 whitespace-nowrap text-sm">
+        <span class="text-gray-300">${e.artist} — ${e.title}</span>
+        ${e.singer_name ? `<span class="text-brand-light text-xs">${e.singer_name}</span>` : ''}
+      </div>
+    `).join('');
+  }
+
+  // Auto-refresh check for new song in queue
+  setInterval(async () => {
+    if (!currentSong) await loadCurrentSong();
+  }, 5000);
+
+  // Initial load
+  loadCurrentSong();
+</script>
+{% endblock %}

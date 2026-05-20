@@ -1,0 +1,237 @@
+{% extends "base.html" %}
+{% block title %}Queue — Karaoke Manager{% endblock %}
+
+{% block content %}
+<div class="p-6 max-w-5xl mx-auto">
+  <div class="flex items-center justify-between mb-6">
+    <h1 class="text-2xl font-bold">Queue</h1>
+    <div class="flex gap-2">
+      <button onclick="nextSong()"
+        class="bg-green-700 hover:bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2">
+        <i class="fa-solid fa-forward-step"></i> Next Song
+      </button>
+      <button onclick="document.getElementById('add-modal').classList.remove('hidden')"
+        class="bg-brand hover:bg-brand-dark text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2">
+        <i class="fa-solid fa-plus"></i> Add Song
+      </button>
+    </div>
+  </div>
+
+  <!-- Current queue -->
+  <div class="bg-gray-800 rounded-xl overflow-hidden mb-6">
+    <div class="px-4 py-3 border-b border-gray-700 flex items-center gap-2">
+      <i class="fa-solid fa-list-ol text-brand-light"></i>
+      <h2 class="font-semibold">Upcoming</h2>
+      <span class="text-xs text-gray-400 ml-auto">{{ queue | length }} in queue</span>
+    </div>
+    <div id="queue-list">
+      {% if queue %}
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="text-left text-gray-400 text-xs uppercase tracking-wider border-b border-gray-700">
+            <th class="px-4 py-2">#</th>
+            <th class="px-4 py-2">Status</th>
+            <th class="px-4 py-2">Song</th>
+            <th class="px-4 py-2 hidden sm:table-cell">Singer</th>
+            <th class="px-4 py-2 hidden sm:table-cell">Format</th>
+            <th class="px-4 py-2 w-28">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-700">
+          {% for entry in queue %}
+          <tr class="{% if entry.status == 'playing' %}bg-brand/10 border-l-2 border-brand{% endif %} hover:bg-gray-700/30 group"
+            id="queue-row-{{ entry.id }}">
+            <td class="px-4 py-3 text-gray-400">{{ loop.index }}</td>
+            <td class="px-4 py-3">
+              {% if entry.status == 'playing' %}
+              <span class="inline-flex items-center gap-1 text-xs bg-green-900 text-green-300 px-2 py-0.5 rounded-full">
+                <i class="fa-solid fa-circle-play animate-pulse"></i> Now Playing
+              </span>
+              {% else %}
+              <span class="text-xs text-gray-500">Waiting</span>
+              {% endif %}
+            </td>
+            <td class="px-4 py-3">
+              <div class="font-medium text-gray-200">{{ entry.song.title }}</div>
+              <div class="text-xs text-gray-400">{{ entry.song.artist }}</div>
+            </td>
+            <td class="px-4 py-3 hidden sm:table-cell text-gray-300">
+              {{ entry.singer.name if entry.singer else '—' }}
+            </td>
+            <td class="px-4 py-3 hidden sm:table-cell">
+              <span class="px-1.5 py-0.5 rounded text-xs bg-gray-700 text-gray-300">
+                {{ entry.song.file_format | upper }}
+              </span>
+            </td>
+            <td class="px-4 py-3">
+              <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                {% if entry.status == 'pending' %}
+                <button onclick="moveEntry({{ entry.id }}, 'up')" title="Move up"
+                  class="p-1.5 rounded bg-gray-600 hover:bg-gray-500 text-white text-xs">
+                  <i class="fa-solid fa-arrow-up"></i>
+                </button>
+                <button onclick="moveEntry({{ entry.id }}, 'down')" title="Move down"
+                  class="p-1.5 rounded bg-gray-600 hover:bg-gray-500 text-white text-xs">
+                  <i class="fa-solid fa-arrow-down"></i>
+                </button>
+                {% endif %}
+                <button onclick="skipEntry({{ entry.id }})" title="Skip"
+                  class="p-1.5 rounded bg-yellow-800 hover:bg-yellow-700 text-white text-xs">
+                  <i class="fa-solid fa-forward"></i>
+                </button>
+                <button onclick="removeEntry({{ entry.id }})" title="Remove"
+                  class="p-1.5 rounded bg-red-800 hover:bg-red-700 text-white text-xs">
+                  <i class="fa-solid fa-xmark"></i>
+                </button>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="px-4 py-10 text-center text-gray-500">
+        <i class="fa-solid fa-inbox text-4xl mb-3 block text-gray-700"></i>
+        Queue is empty. Add songs from the <a href="/library" class="text-brand-light hover:underline">library</a>.
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- History -->
+  {% if history %}
+  <div class="bg-gray-800 rounded-xl overflow-hidden">
+    <div class="px-4 py-3 border-b border-gray-700 flex items-center gap-2">
+      <i class="fa-solid fa-clock-rotate-left text-gray-400"></i>
+      <h2 class="font-semibold text-gray-400">Recently Played</h2>
+    </div>
+    <table class="w-full text-sm">
+      <tbody class="divide-y divide-gray-700">
+        {% for entry in history %}
+        <tr class="{% if entry.status == 'skipped' %}opacity-50{% endif %}">
+          <td class="px-4 py-2 text-gray-400 text-xs w-20">
+            {{ entry.finished_at.strftime('%H:%M') if entry.finished_at else '' }}
+          </td>
+          <td class="px-4 py-2">
+            <span class="font-medium text-gray-300">{{ entry.song.title }}</span>
+            <span class="text-gray-500 ml-1">{{ entry.song.artist }}</span>
+          </td>
+          <td class="px-4 py-2 text-gray-400">{{ entry.singer.name if entry.singer else '' }}</td>
+          <td class="px-4 py-2">
+            {% if entry.status == 'skipped' %}
+            <span class="text-xs text-yellow-600">Skipped</span>
+            {% else %}
+            <span class="text-xs text-green-600">Done</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Add Song Modal -->
+<div id="add-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+  <div class="bg-gray-800 rounded-xl shadow-2xl w-full max-w-lg p-6">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="text-lg font-semibold">Add Song to Queue</h3>
+      <button onclick="document.getElementById('add-modal').classList.add('hidden')"
+        class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <input id="song-search" type="text" placeholder="Search song or artist…"
+      class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-gray-100 mb-2"
+      oninput="searchSongs(this.value)">
+    <div id="search-results" class="max-h-60 overflow-y-auto space-y-1 mb-4"></div>
+    <div id="selected-song-info" class="hidden text-sm text-brand-light mb-2"></div>
+    <input type="hidden" id="selected-song-id">
+    <label class="text-sm text-gray-400 block mb-1">Singer (optional)</label>
+    <select id="add-singer" class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm mb-4">
+      <option value="">— No singer —</option>
+      {% for singer in singers %}
+      <option value="{{ singer.id }}">{{ singer.name }}</option>
+      {% endfor %}
+    </select>
+    <div class="flex gap-2 justify-end">
+      <button onclick="document.getElementById('add-modal').classList.add('hidden')"
+        class="px-4 py-2 rounded bg-gray-700 hover:bg-gray-600 text-sm">Cancel</button>
+      <button onclick="addToQueue()"
+        class="px-4 py-2 rounded bg-brand hover:bg-brand-dark text-white text-sm font-medium">Add</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  let searchTimeout;
+  let selectedSong = null;
+
+  async function searchSongs(q) {
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(async () => {
+      if (!q) { document.getElementById('search-results').innerHTML = ''; return; }
+      const songs = await apiFetch(`/api/songs/search?q=${encodeURIComponent(q)}`);
+      const container = document.getElementById('search-results');
+      container.innerHTML = songs.map(s => `
+        <div onclick="selectSong(${s.id}, '${s.title.replace(/'/g,"\\'")}', '${s.artist.replace(/'/g,"\\'")}', '${s.file_format}')"
+          class="px-3 py-2 rounded cursor-pointer hover:bg-gray-700 flex items-center justify-between">
+          <div>
+            <span class="font-medium text-gray-200">${s.artist}</span>
+            <span class="text-gray-400"> — ${s.title}</span>
+          </div>
+          <span class="text-xs text-gray-500 ml-2">${s.file_format.toUpperCase()}</span>
+        </div>
+      `).join('') || '<p class="text-gray-500 text-sm px-3 py-2">No results</p>';
+    }, 300);
+  }
+
+  function selectSong(id, title, artist, fmt) {
+    selectedSong = { id, title, artist };
+    document.getElementById('selected-song-id').value = id;
+    document.getElementById('selected-song-info').textContent = `Selected: ${artist} — ${title}`;
+    document.getElementById('selected-song-info').classList.remove('hidden');
+    document.getElementById('search-results').innerHTML = '';
+    document.getElementById('song-search').value = `${artist} — ${title}`;
+  }
+
+  async function addToQueue() {
+    const songId = document.getElementById('selected-song-id').value;
+    if (!songId) { showToast('Please select a song', 'error'); return; }
+    const singerId = document.getElementById('add-singer').value;
+    const url = `/api/queue?song_id=${songId}${singerId ? '&singer_id=' + singerId : ''}`;
+    await apiFetch(url, { method: 'POST' });
+    showToast('Added to queue!');
+    document.getElementById('add-modal').classList.add('hidden');
+    setTimeout(() => location.reload(), 500);
+  }
+
+  async function nextSong() {
+    const data = await apiFetch('/api/queue/next', { method: 'POST' });
+    if (data.id) {
+      showToast(`Now playing: ${data.artist} — ${data.title}`);
+    } else {
+      showToast('Queue is empty', 'info');
+    }
+    setTimeout(() => location.reload(), 500);
+  }
+
+  async function moveEntry(id, dir) {
+    await apiFetch(`/api/queue/${id}/move?direction=${dir}`, { method: 'POST' });
+    location.reload();
+  }
+
+  async function skipEntry(id) {
+    await apiFetch(`/api/queue/${id}/skip`, { method: 'POST' });
+    document.getElementById(`queue-row-${id}`)?.remove();
+    showToast('Song skipped');
+  }
+
+  async function removeEntry(id) {
+    await apiFetch(`/api/queue/${id}`, { method: 'DELETE' });
+    document.getElementById(`queue-row-${id}`)?.remove();
+    showToast('Removed from queue');
+  }
+</script>
+{% endblock %}

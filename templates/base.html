@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Karaoke Manager{% endblock %}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+  <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <link rel="stylesheet" href="/static/css/style.css">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: { DEFAULT: '#7c3aed', light: '#a78bfa', dark: '#5b21b6' }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    [x-cloak] { display: none !important; }
+    .star-btn { cursor: pointer; }
+    .star-filled { color: #f59e0b; }
+    .star-empty { color: #4b5563; }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: #1f2937; }
+    ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 3px; }
+  </style>
+</head>
+<body class="bg-gray-900 text-gray-100 h-full flex flex-col">
+
+  <!-- Nav -->
+  <nav class="bg-gray-800 border-b border-gray-700 px-4 py-3 flex items-center gap-6 flex-shrink-0">
+    <a href="/" class="text-brand-light font-bold text-xl flex items-center gap-2">
+      <i class="fa-solid fa-microphone"></i> Karaoke
+    </a>
+    <div class="flex gap-1">
+      <a href="/library" class="nav-link px-3 py-1.5 rounded-md text-sm font-medium transition-colors
+        {% if request.url.path == '/library' %}bg-brand text-white{% else %}text-gray-300 hover:bg-gray-700{% endif %}">
+        <i class="fa-solid fa-music mr-1"></i> Library
+      </a>
+      <a href="/queue" class="nav-link px-3 py-1.5 rounded-md text-sm font-medium transition-colors
+        {% if request.url.path == '/queue' %}bg-brand text-white{% else %}text-gray-300 hover:bg-gray-700{% endif %}">
+        <i class="fa-solid fa-list-ol mr-1"></i> Queue
+      </a>
+      <a href="/singers" class="nav-link px-3 py-1.5 rounded-md text-sm font-medium transition-colors
+        {% if request.url.path == '/singers' %}bg-brand text-white{% else %}text-gray-300 hover:bg-gray-700{% endif %}">
+        <i class="fa-solid fa-users mr-1"></i> Singers
+      </a>
+      <a href="/player" class="nav-link px-3 py-1.5 rounded-md text-sm font-medium transition-colors
+        {% if request.url.path == '/player' %}bg-brand text-white{% else %}text-gray-300 hover:bg-gray-700{% endif %}">
+        <i class="fa-solid fa-play-circle mr-1"></i> Player
+      </a>
+      <a href="/settings" class="nav-link px-3 py-1.5 rounded-md text-sm font-medium transition-colors
+        {% if request.url.path == '/settings' %}bg-brand text-white{% else %}text-gray-300 hover:bg-gray-700{% endif %}">
+        <i class="fa-solid fa-gear mr-1"></i> Settings
+      </a>
+    </div>
+  </nav>
+
+  <!-- Content -->
+  <main class="flex-1 overflow-auto">
+    {% block content %}{% endblock %}
+  </main>
+
+  <!-- Toast notifications -->
+  <div id="toast-container" class="fixed bottom-4 right-4 flex flex-col gap-2 z-50 pointer-events-none"></div>
+
+  <script>
+    function showToast(msg, type = 'success') {
+      const colors = { success: 'bg-green-700', error: 'bg-red-700', info: 'bg-blue-700' };
+      const t = document.createElement('div');
+      t.className = `${colors[type]} text-white px-4 py-2 rounded shadow-lg text-sm transition-opacity pointer-events-auto`;
+      t.textContent = msg;
+      document.getElementById('toast-container').appendChild(t);
+      setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 300); }, 3000);
+    }
+
+    async function apiFetch(url, opts = {}) {
+      try {
+        const r = await fetch(url, opts);
+        if (!r.ok) throw new Error(await r.text());
+        return await r.json();
+      } catch (e) {
+        showToast(e.message, 'error');
+        throw e;
+      }
+    }
+  </script>
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>
