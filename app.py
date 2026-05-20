@@ -617,6 +617,8 @@ document.addEventListener('keydown', e => {
 aud.addEventListener('ended', () => socket.emit('song_ended'));
 vid.addEventListener('ended', () => socket.emit('song_ended'));
 
+socket.on('connect', () => socket.emit('player_connect'));
+
 socket.on('load_song', async song => {
   cancelAnimationFrame(rafId); aud.pause(); vid.pause(); showStandby();
   syncOff = 0; updateOffsetDisplay();
@@ -699,6 +701,12 @@ def serve_file(filename):
 @socketio.on('get_state')
 def on_get_state():
     emit('state', get_state())
+
+@socketio.on('player_connect')
+def on_player_connect():
+    if now_playing:
+        emit('load_song', now_playing['song'])
+    emit('queue_update', get_state())
 
 @socketio.on('queue_add')
 def on_queue_add(data):
