@@ -34,32 +34,18 @@
 <body class="bg-gray-900 text-gray-100 h-full flex flex-col">
 
   <!-- Nav -->
-  <nav class="bg-gray-800 border-b border-gray-700 px-4 py-3 flex items-center gap-6 flex-shrink-0">
+  <nav class="bg-gray-800 border-b border-gray-700 px-4 py-3 flex items-center justify-between flex-shrink-0">
     <a href="/" class="text-brand-light font-bold text-xl flex items-center gap-2">
       <i class="fa-solid fa-microphone"></i> Karaoke
     </a>
-    <div class="flex gap-1">
-      <a href="/library" class="nav-link px-3 py-1.5 rounded-md text-sm font-medium transition-colors
-        {% if request.url.path == '/library' %}bg-brand text-white{% else %}text-gray-300 hover:bg-gray-700{% endif %}">
-        <i class="fa-solid fa-music mr-1"></i> Library
-      </a>
-      <a href="/queue" class="nav-link px-3 py-1.5 rounded-md text-sm font-medium transition-colors
-        {% if request.url.path == '/queue' %}bg-brand text-white{% else %}text-gray-300 hover:bg-gray-700{% endif %}">
-        <i class="fa-solid fa-list-ol mr-1"></i> Queue
-      </a>
-      <a href="/player" class="nav-link px-3 py-1.5 rounded-md text-sm font-medium transition-colors
-        {% if request.url.path == '/player' %}bg-brand text-white{% else %}text-gray-300 hover:bg-gray-700{% endif %}">
-        <i class="fa-solid fa-play-circle mr-1"></i> Player
-      </a>
-      <a href="/settings" class="nav-link px-3 py-1.5 rounded-md text-sm font-medium transition-colors
-        {% if request.url.path == '/settings' %}bg-brand text-white{% else %}text-gray-300 hover:bg-gray-700{% endif %}">
-        <i class="fa-solid fa-gear mr-1"></i> Settings
-      </a>
-    </div>
+    <a href="/settings" class="px-3 py-1.5 rounded-md text-sm font-medium transition-colors
+      {% if request.url.path == '/settings' %}bg-brand text-white{% else %}text-gray-300 hover:bg-gray-700{% endif %}">
+      <i class="fa-solid fa-gear mr-1"></i> Settings
+    </a>
   </nav>
 
   <!-- Content -->
-  <main class="flex-1 overflow-auto">
+  <main class="flex-1 overflow-hidden flex flex-col">
     {% block content %}{% endblock %}
   </main>
 
