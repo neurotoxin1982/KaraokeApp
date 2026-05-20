@@ -341,6 +341,7 @@
     if (cmd.pitch  !== undefined) { _pitch = cmd.pitch;  applyPlaybackRate(); }
     if (cmd.tempo  !== undefined) { _tempo = cmd.tempo;  applyPlaybackRate(); }
     if (cmd.volume !== undefined && audioEl) audioEl.volume = cmd.volume;
+    if (cmd.sync   !== undefined) { cdgSyncOffset = cmd.sync; } // seconds
     if (cmd.play)  { if (audioEl && !isPlaying) { audioEl.play(); if (cdgPlayer) cdgPlayer.resume(); isPlaying = true; updatePlayIcon(); } }
     if (cmd.next)  { nextSong(); }
   }

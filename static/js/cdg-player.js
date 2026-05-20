@@ -29,6 +29,10 @@ const CDG_INSTR = {
   TILE_BLOCK_XOR: 38,
 };
 
+// Global sync offset in seconds (negative = CDG waits, positive = CDG rushes ahead).
+// Exposed so the player page can adjust it via queue page controls.
+let cdgSyncOffset = 0;
+
 class CdgPlayer {
   constructor(canvas, cdgUrl, audioElement) {
     this.canvas = canvas;
@@ -40,8 +44,8 @@ class CdgPlayer {
     this.ctx = canvas.getContext('2d');
 
     this._imageData = this.ctx.createImageData(CDG_WIDTH, CDG_HEIGHT);
-    this._pixels = new Uint8Array(CDG_WIDTH * CDG_HEIGHT); // color index per pixel
-    this._colorTable = new Array(16).fill(0); // RGBA packed
+    this._pixels = new Uint8Array(CDG_WIDTH * CDG_HEIGHT);
+    this._colorTable = new Array(16).fill(0);
     this._bgColor = 0;
     this._borderColor = 0;
     this._transparentColor = -1;
@@ -51,6 +55,14 @@ class CdgPlayer {
     this._rafId = null;
     this._stopped = false;
     this._paused = false;
+
+    // Try to measure audio output latency once
+    this._outputLatency = 0;
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      this._outputLatency = (ctx.outputLatency || ctx.baseLatency || 0);
+      ctx.close();
+    } catch (_) {}
   }
 
   async load() {
@@ -87,7 +99,13 @@ class CdgPlayer {
     this._rafId = requestAnimationFrame(() => this._renderLoop());
     if (this._paused || !this._cdgData) return;
 
-    const targetPacket = Math.floor(this.audio.currentTime * CDG_PACKETS_PER_SEC);
+    // Subtract output latency and add user sync offset.
+    // outputLatency: audio is heard this many seconds AFTER currentTime was set.
+    // cdgSyncOffset: user-adjustable fine-tuning (negative slows CDG down).
+    const adjusted = Math.max(0,
+      this.audio.currentTime - this._outputLatency + cdgSyncOffset
+    );
+    const targetPacket = Math.floor(adjusted * CDG_PACKETS_PER_SEC);
     while (this._packetIndex <= targetPacket) {
       const offset = this._packetIndex * CDG_PACKET_SIZE;
       if (offset + CDG_PACKET_SIZE > this._cdgData.length) break;

@@ -165,8 +165,20 @@
       </div>
     </div>
 
+    <!-- A/V Sync -->
+    <div class="px-4 pb-3 border-t border-gray-800 pt-3 flex-shrink-0">
+      <p class="text-xs text-gray-600 text-center mb-2 uppercase tracking-widest">A/V Sync <span class="text-gray-700 normal-case">(CDG delay ms)</span></p>
+      <div class="flex items-center justify-between bg-gray-800 rounded-xl px-1 py-2">
+        <button onclick="adjustSync(-50)"
+          class="w-8 h-8 flex items-center justify-center text-gray-300 hover:text-white text-xl font-light rounded-lg hover:bg-gray-700">−</button>
+        <span id="sync-val" class="text-sm font-semibold text-white w-12 text-center">0 ms</span>
+        <button onclick="adjustSync(50)"
+          class="w-8 h-8 flex items-center justify-center text-gray-300 hover:text-white text-xl font-light rounded-lg hover:bg-gray-700">+</button>
+      </div>
+    </div>
+
     <!-- Pitch & Tempo -->
-    <div class="px-4 pb-4 border-t border-gray-800 pt-4 grid grid-cols-2 gap-3 flex-shrink-0">
+    <div class="px-4 pb-4 grid grid-cols-2 gap-3 flex-shrink-0">
       <div>
         <p class="text-xs text-gray-600 text-center mb-2 uppercase tracking-widest">Pitch</p>
         <div class="flex items-center justify-between bg-gray-800 rounded-xl px-1 py-2">
@@ -364,6 +376,15 @@
   function broadcastControl(key, val) {
     if (_bc) _bc.postMessage({ [key]: val });
     localStorage.setItem('karaoke-' + key, JSON.stringify({ val, ts: Date.now() }));
+  }
+
+  // ── A/V Sync ─────────────────────────────────────────────────────────
+  let _sync = 0; // milliseconds
+
+  function adjustSync(delta) {
+    _sync = Math.max(-500, Math.min(500, _sync + delta));
+    document.getElementById('sync-val').textContent = (_sync > 0 ? '+' : '') + _sync + ' ms';
+    broadcastControl('sync', _sync / 1000); // send in seconds
   }
 
   // ── Pitch & Tempo ────────────────────────────────────────────────────
