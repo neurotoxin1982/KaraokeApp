@@ -21,6 +21,17 @@
       <p class="text-gray-700 text-sm mt-2">Add songs to the <a href="/queue" class="text-brand-light hover:underline">queue</a> to get started</p>
     </div>
 
+    <!-- Re-grant access banner (Safari / after reload) -->
+    <div id="fs-banner" class="hidden absolute top-4 left-4 right-4">
+      <div class="bg-yellow-900/80 border border-yellow-600 rounded-lg px-4 py-3 flex items-center gap-3 text-sm">
+        <i class="fa-solid fa-folder-open text-yellow-400 text-lg"></i>
+        <span class="flex-1 text-yellow-200">Grant access to your music folder to enable playback.</span>
+        <button onclick="regrantAccess()" class="bg-yellow-600 hover:bg-yellow-500 text-white px-3 py-1.5 rounded font-medium">
+          Select Folder
+        </button>
+      </div>
+    </div>
+
     <!-- Song info overlay (CDG mode) -->
     <div id="song-overlay" class="hidden absolute bottom-4 left-4 right-4">
       <div class="bg-black/70 backdrop-blur rounded-lg px-4 py-2 flex items-center gap-4">
@@ -296,6 +307,19 @@
       </div>
     `).join('');
   }
+
+  async function regrantAccess() {
+    const h = await localFsPick();
+    if (h) {
+      document.getElementById('fs-banner').classList.add('hidden');
+      showToast('Folder access granted: ' + h.name);
+    }
+  }
+
+  // Check if local FS is available; show banner if not (Safari after reload)
+  localFsRestore().then(h => {
+    if (!h) document.getElementById('fs-banner').classList.remove('hidden');
+  });
 
   // Auto-refresh check for new song in queue
   setInterval(async () => {
