@@ -93,7 +93,8 @@ HOST_HTML = r"""<!DOCTYPE html>
     .has-lyrics { color: #4ade80; }
     .no-lyrics  { color: #f87171; }
 
-    #yt-embed { width: 100%; aspect-ratio: 16/9; border-radius: 0.75rem; border: none; margin-bottom: 1rem; background: #000; }
+    .yt-link { display: flex; align-items: center; gap: 0.75rem; padding: 0.85rem 1rem; border-radius: 0.75rem; background: #c00; color: #fff; text-decoration: none; font-weight: 700; font-size: 0.95rem; margin-bottom: 1rem; width: fit-content; }
+    .yt-link:hover { background: #e00; }
 
     .controls { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-bottom: 0.75rem; }
     .timer { font-size: 1.5rem; font-weight: 700; font-variant-numeric: tabular-nums; color: #a78bfa; min-width: 4rem; }
@@ -126,8 +127,10 @@ HOST_HTML = r"""<!DOCTYPE html>
     <div class="np-channel" id="np-channel"></div>
     <div class="lyrics-badge" id="np-badge"></div>
 
-    <!-- Plain YouTube embed — no API, just standard iframe. User clicks play normally. -->
-    <iframe id="yt-embed" allowfullscreen allow="autoplay; encrypted-media"></iframe>
+    <!-- Opens YouTube in a new tab — no embedding issues, sound always works -->
+    <a id="yt-link" href="#" target="_blank" class="yt-link">
+      &#9654;&nbsp; Auf YouTube &ouml;ffnen (Sound l&auml;uft dort)
+    </a>
 
     <div class="controls">
       <button class="btn btn-green btn-sm" id="btn-start"  onclick="startLyrics()">&#9654; START Lyrics</button>
@@ -214,7 +217,7 @@ HOST_HTML = r"""<!DOCTYPE html>
     startTs = null; pausedPos = null; offsetSec = 0;
     socket.emit('stop');
     document.getElementById('player-box').style.display = 'none';
-    document.getElementById('yt-embed').src = '';
+    document.getElementById('yt-link').href = '#';
     document.getElementById('timer').textContent = '0:00';
     document.getElementById('offset-val').textContent = '0s';
     document.getElementById('btn-start').style.display  = '';
@@ -274,8 +277,7 @@ HOST_HTML = r"""<!DOCTYPE html>
     document.getElementById('btn-pause').style.display  = 'none';
     document.getElementById('btn-resume').style.display = 'none';
 
-    // Load plain YouTube embed (no API) — user clicks play directly
-    document.getElementById('yt-embed').src = 'https://www.youtube.com/embed/' + id + '?rel=0&modestbranding=1';
+    document.getElementById('yt-link').href = 'https://www.youtube.com/watch?v=' + id;
 
     fetch('/prepare', {
       method: 'POST',
@@ -287,7 +289,7 @@ HOST_HTML = r"""<!DOCTYPE html>
       document.getElementById('np-title').textContent   = title;
       document.getElementById('np-channel').textContent = channel;
       const badge = document.getElementById('np-badge');
-      badge.textContent = data.lrc ? '&#10003; Songtext gefunden' : '&#10007; Kein Songtext gefunden';
+      badge.textContent = data.lrc ? '✓ Songtext gefunden' : '✗ Kein Songtext gefunden';
       badge.className   = 'lyrics-badge ' + (data.lrc ? 'has-lyrics' : 'no-lyrics');
       document.getElementById('player-box').style.display = 'block';
     });
