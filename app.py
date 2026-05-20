@@ -1,8 +1,7 @@
 import eventlet
 eventlet.monkey_patch()
 
-import subprocess, json
-import re
+import re, subprocess, json
 import requests
 from flask import Flask, request, jsonify
 from flask_socketio import SocketIO, emit
@@ -36,16 +35,12 @@ def _duration_str(secs):
     return f'{h}:{m:02d}:{s:02d}' if h else f'{m}:{s:02d}'
 
 def _fetch_lyrics(title, channel):
-    # Strip "(Karaoke)", "(Instrumental)", etc. from title
     clean = re.sub(r'\s*[\(\[].*?(karaoke|instrumental|no vocal|backing).*?[\)\]]', '', title, flags=re.IGNORECASE).strip()
-
-    # "Artist - Song" format → split it
     if ' - ' in clean:
         artist, song = clean.split(' - ', 1)
     else:
         artist = re.sub(r'(?i)\s*(karaoke|sings?|covers?)\s*', ' ', channel).strip()
         song = clean
-
     try:
         r = requests.get('https://lrclib.net/api/search',
                          params={'q': f'{artist} {song}'.strip()}, timeout=10)
@@ -79,33 +74,35 @@ HOST_HTML = r"""<!DOCTYPE html>
     .btn { padding: 0.75rem 1.25rem; border-radius: 0.6rem; border: none; background: linear-gradient(135deg, #7c3aed, #2563eb); color: #fff; font-size: 0.95rem; font-weight: 600; cursor: pointer; white-space: nowrap; }
     .btn:disabled { opacity: 0.4; cursor: not-allowed; }
     .btn:not(:disabled):hover { opacity: 0.85; }
-    .btn-red { background: linear-gradient(135deg, #dc2626, #991b1b); }
+    .btn-red   { background: linear-gradient(135deg, #dc2626, #991b1b); }
+    .btn-green { background: linear-gradient(135deg, #16a34a, #15803d); }
+    .btn-sm    { padding: 0.5rem 1rem; font-size: 0.85rem; }
     #results { display: none; margin-top: 0.5rem; }
-    .result-item { display: flex; align-items: center; gap: 0.85rem; padding: 0.75rem; border-radius: 0.75rem; border: 1px solid #2a2a4a; margin-bottom: 0.5rem; cursor: pointer; transition: background 0.15s, border-color 0.15s; }
+    .result-item { display: flex; align-items: center; gap: 0.85rem; padding: 0.75rem; border-radius: 0.75rem; border: 1px solid #2a2a4a; margin-bottom: 0.5rem; cursor: pointer; transition: background 0.15s; }
     .result-item:hover { background: #252545; border-color: #a78bfa; }
     .result-item img { width: 80px; height: 52px; object-fit: cover; border-radius: 0.4rem; flex-shrink: 0; }
     .result-info { flex: 1; min-width: 0; }
     .result-title { font-size: 0.9rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 0.2rem; }
     .result-meta { font-size: 0.78rem; color: #888; }
     .result-btn { flex-shrink: 0; padding: 0.4rem 0.9rem; border-radius: 0.5rem; border: none; background: #7c3aed; color: #fff; font-size: 0.82rem; font-weight: 600; cursor: pointer; }
-    .result-btn:hover { background: #6d28d9; }
-    #player-box { display: none; margin-top: 1.5rem; }
-    #player-box h2 { font-size: 1rem; font-weight: 700; color: #60a5fa; margin-bottom: 0.25rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    #player-box .channel { font-size: 0.82rem; color: #888; margin-bottom: 0.5rem; }
-    #player-box .lyrics-badge { font-size: 0.78rem; margin-bottom: 0.75rem; }
+
+    #player-box { display: none; margin-top: 1.5rem; border: 1px solid #2a2a4a; border-radius: 1rem; padding: 1.25rem; }
+    .np-title   { font-size: 1rem; font-weight: 700; color: #60a5fa; margin-bottom: 0.2rem; }
+    .np-channel { font-size: 0.82rem; color: #888; margin-bottom: 0.5rem; }
+    .lyrics-badge { font-size: 0.78rem; margin-bottom: 1rem; }
     .has-lyrics { color: #4ade80; }
-    .no-lyrics { color: #f87171; }
-    #yt-wrapper { position: relative; width: 100%; aspect-ratio: 16/9; border-radius: 0.75rem; overflow: hidden; background: #000; margin-bottom: 0.75rem; }
-    #yt-player { width: 100%; height: 100%; border: none; }
-    #play-overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.6); cursor: pointer; font-size: 4rem; transition: background 0.2s; border-radius: 0.75rem; }
-    #play-overlay:hover { background: rgba(0,0,0,0.3); }
-    #play-overlay.hidden { display: none; }
-    .controls-row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; flex-wrap: wrap; }
-    .offset-box { display: flex; align-items: center; gap: 0.4rem; margin-left: auto; background: #0f0f1a; border: 1px solid #2a2a4a; border-radius: 0.5rem; padding: 0.3rem 0.6rem; font-size: 0.82rem; }
-    .offset-box span { color: #aaa; min-width: 3rem; text-align: center; }
-    .offset-btn { background: #2a2a4a; border: none; color: #e0e0f0; border-radius: 0.3rem; padding: 0.2rem 0.5rem; cursor: pointer; font-size: 0.8rem; }
-    .offset-btn:hover { background: #3a3a6a; }
-    .np-actions { display: flex; gap: 0.5rem; }
+    .no-lyrics  { color: #f87171; }
+
+    #yt-embed { width: 100%; aspect-ratio: 16/9; border-radius: 0.75rem; border: none; margin-bottom: 1rem; background: #000; }
+
+    .controls { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-bottom: 0.75rem; }
+    .timer { font-size: 1.5rem; font-weight: 700; font-variant-numeric: tabular-nums; color: #a78bfa; min-width: 4rem; }
+    .offset-box { display: flex; align-items: center; gap: 0.4rem; margin-left: auto; }
+    .offset-box label { margin: 0; font-size: 0.75rem; }
+    .offset-val { min-width: 2.5rem; text-align: center; font-size: 0.85rem; color: #60a5fa; }
+    .btn-offset { padding: 0.4rem 0.7rem; font-size: 0.8rem; border-radius: 0.4rem; border: 1px solid #2a2a4a; background: #1a1a2e; color: #e0e0f0; cursor: pointer; }
+    .btn-offset:hover { background: #252545; }
+
     .no-results { color: #666; font-size: 0.88rem; text-align: center; padding: 1rem 0; }
     .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #555; border-top-color: #a78bfa; border-radius: 50%; animation: spin 0.8s linear infinite; vertical-align: middle; margin-right: 6px; }
     @keyframes spin { to { transform: rotate(360deg); } }
@@ -114,7 +111,7 @@ HOST_HTML = r"""<!DOCTYPE html>
 <body>
 <div class="card">
   <h1>&#127908; Karaoke DJ</h1>
-  <p class="subtitle">Song suchen &amp; auf allen Screens abspielen</p>
+  <p class="subtitle">Song suchen &amp; Lyrics auf allen Screens anzeigen</p>
 
   <label for="search-input">Song suchen</label>
   <div class="row">
@@ -125,102 +122,112 @@ HOST_HTML = r"""<!DOCTYPE html>
   <div id="results"></div>
 
   <div id="player-box">
-    <h2 id="np-title"></h2>
-    <div class="channel" id="np-channel"></div>
+    <div class="np-title"   id="np-title"></div>
+    <div class="np-channel" id="np-channel"></div>
     <div class="lyrics-badge" id="np-badge"></div>
-    <div id="yt-wrapper">
-      <iframe id="yt-player" allowfullscreen allow="autoplay"></iframe>
-      <div id="play-overlay" onclick="startPlay()">&#9654;</div>
-    </div>
-    <div class="controls-row">
-      <button class="btn btn-red" onclick="stopSong()">&#9632; Stop</button>
+
+    <!-- Plain YouTube embed — no API, just standard iframe. User clicks play normally. -->
+    <iframe id="yt-embed" allowfullscreen allow="autoplay; encrypted-media"></iframe>
+
+    <div class="controls">
+      <button class="btn btn-green btn-sm" id="btn-start"  onclick="startLyrics()">&#9654; START Lyrics</button>
+      <button class="btn btn-red   btn-sm" id="btn-pause"  onclick="pauseLyrics()" style="display:none">&#9646;&#9646; PAUSE</button>
+      <button class="btn           btn-sm" id="btn-resume" onclick="resumeLyrics()" style="display:none">&#9654; WEITER</button>
+      <span class="timer" id="timer">0:00</span>
       <div class="offset-box">
-        <span style="color:#888;font-size:0.75rem;">Lyrics</span>
-        <button class="offset-btn" onclick="adjustOffset(-2000)">&#8722;2s</button>
-        <span id="offset-display">0s</span>
-        <button class="offset-btn" onclick="adjustOffset(2000)">+2s</button>
+        <label>Lyrics</label>
+        <button class="btn-offset" onclick="adjustOffset(-2)">&#8722;2s</button>
+        <span class="offset-val" id="offset-val">0s</span>
+        <button class="btn-offset" onclick="adjustOffset(2)">+2s</button>
       </div>
     </div>
+    <button class="btn btn-red btn-sm" onclick="stopSong()">&#9632; Song beenden</button>
   </div>
 </div>
 
 <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 <script>
   const socket = io();
-  let player   = null;
-  let syncInt  = null;
-  let offsetMs = 0;
-  let videoId  = null;
+  let startTs   = null;   // wall-clock ms when position 0:00 was
+  let pausedPos = null;   // ms into song when paused
+  let timerInt  = null;
+  let offsetSec = 0;
+
+  // ── Lyrics controls ────────────────────────────────────────────────────────
+
+  function startLyrics() {
+    const ts = Date.now() + offsetSec * 1000;
+    startTs = ts;
+    pausedPos = null;
+    socket.emit('play', {start_ts: ts});
+    document.getElementById('btn-start').style.display  = 'none';
+    document.getElementById('btn-pause').style.display  = '';
+    document.getElementById('btn-resume').style.display = 'none';
+    startTimer();
+  }
+
+  function pauseLyrics() {
+    clearInterval(timerInt);
+    pausedPos = startTs !== null ? Date.now() - startTs : 0;
+    startTs = null;
+    socket.emit('pause', {position: pausedPos});
+    document.getElementById('btn-pause').style.display  = 'none';
+    document.getElementById('btn-resume').style.display = '';
+  }
+
+  function resumeLyrics() {
+    const ts = Date.now() - pausedPos;
+    startTs = ts;
+    pausedPos = null;
+    socket.emit('play', {start_ts: ts});
+    document.getElementById('btn-pause').style.display  = '';
+    document.getElementById('btn-resume').style.display = 'none';
+    startTimer();
+  }
+
+  function adjustOffset(deltaSec) {
+    offsetSec += deltaSec;
+    document.getElementById('offset-val').textContent = offsetSec + 's';
+    // shift running timer and displays
+    if (startTs !== null) {
+      startTs -= deltaSec * 1000;
+      socket.emit('play', {start_ts: startTs});
+    } else if (pausedPos !== null) {
+      pausedPos += deltaSec * 1000;
+      socket.emit('pause', {position: pausedPos});
+    }
+  }
+
+  function startTimer() {
+    clearInterval(timerInt);
+    timerInt = setInterval(() => {
+      if (startTs === null) return;
+      const elapsed = Math.max(0, Date.now() - startTs);
+      const s = Math.floor(elapsed / 1000) % 60;
+      const m = Math.floor(elapsed / 60000);
+      document.getElementById('timer').textContent = m + ':' + String(s).padStart(2, '0');
+    }, 500);
+  }
+
+  function stopSong() {
+    clearInterval(timerInt);
+    startTs = null; pausedPos = null; offsetSec = 0;
+    socket.emit('stop');
+    document.getElementById('player-box').style.display = 'none';
+    document.getElementById('yt-embed').src = '';
+    document.getElementById('timer').textContent = '0:00';
+    document.getElementById('offset-val').textContent = '0s';
+    document.getElementById('btn-start').style.display  = '';
+    document.getElementById('btn-pause').style.display  = 'none';
+    document.getElementById('btn-resume').style.display = 'none';
+  }
+
+  // ── Search ─────────────────────────────────────────────────────────────────
 
   function ae(s) {
     return String(s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;');
   }
 
-  // ── YouTube IFrame API ────────────────────────────────────────────────────
-  const tag = document.createElement('script');
-  tag.src = 'https://www.youtube.com/iframe_api';
-  document.head.appendChild(tag);
-
-  function onYouTubeIframeAPIReady() {
-    if (videoId) _createPlayer(videoId);
-  }
-
-  function _createPlayer(vid) {
-    if (player) { try { player.destroy(); } catch(e) {} player = null; }
-    clearInterval(syncInt);
-    document.getElementById('play-overlay').classList.remove('hidden');
-
-    player = new YT.Player('yt-player', {
-      videoId: vid,
-      playerVars: {rel: 0, modestbranding: 1, controls: 1},
-      events: {
-        onStateChange(e) {
-          if (e.data === YT.PlayerState.PLAYING) {
-            document.getElementById('play-overlay').classList.add('hidden');
-            emitPlay();
-            clearInterval(syncInt);
-            syncInt = setInterval(emitPlay, 3000);
-          } else if (e.data === YT.PlayerState.PAUSED || e.data === YT.PlayerState.ENDED) {
-            clearInterval(syncInt);
-            document.getElementById('play-overlay').classList.remove('hidden');
-            socket.emit('pause', {position: Math.round(player.getCurrentTime() * 1000)});
-          }
-        }
-      }
-    });
-  }
-
-  // Called when user clicks the big play overlay — this IS a user gesture
-  function startPlay() {
-    if (player && player.playVideo) {
-      player.playVideo();
-    }
-  }
-
-  function emitPlay() {
-    if (!player) return;
-    const startTs = Date.now() - Math.round(player.getCurrentTime() * 1000) + offsetMs;
-    socket.emit('play', {start_ts: startTs});
-  }
-
-  function adjustOffset(deltaMs) {
-    offsetMs += deltaMs;
-    document.getElementById('offset-display').textContent = (offsetMs / 1000).toFixed(0) + 's';
-    if (player && player.getPlayerState && player.getPlayerState() === 1) emitPlay();
-  }
-
-  function stopSong() {
-    clearInterval(syncInt);
-    if (player) { try { player.stopVideo(); player.destroy(); } catch(e) {} player = null; }
-    socket.emit('stop');
-    document.getElementById('player-box').style.display = 'none';
-    document.getElementById('yt-player').src = '';
-    offsetMs = 0;
-    document.getElementById('offset-display').textContent = '0s';
-    videoId = null;
-  }
-
-  // ── Search ────────────────────────────────────────────────────────────────
   function doSearch() {
     const q = document.getElementById('search-input').value.trim();
     if (!q) return;
@@ -244,7 +251,7 @@ HOST_HTML = r"""<!DOCTYPE html>
               <div class="result-title">${v.title}</div>
               <div class="result-meta">${v.channel} &middot; ${v.duration}</div>
             </div>
-            <button class="result-btn">Abspielen</button>
+            <button class="result-btn">W&auml;hlen</button>
           </div>`).join('');
       })
       .catch(() => {
@@ -254,27 +261,35 @@ HOST_HTML = r"""<!DOCTYPE html>
   }
 
   function pickSong(el) {
-    videoId = el.dataset.id;
+    const id      = el.dataset.id;
     const title   = el.dataset.title;
     const channel = el.dataset.channel;
-    offsetMs = 0;
-    document.getElementById('offset-display').textContent = '0s';
+
+    clearInterval(timerInt);
+    startTs = null; pausedPos = null; offsetSec = 0;
     document.getElementById('results').style.display = 'none';
+    document.getElementById('timer').textContent = '0:00';
+    document.getElementById('offset-val').textContent = '0s';
+    document.getElementById('btn-start').style.display  = '';
+    document.getElementById('btn-pause').style.display  = 'none';
+    document.getElementById('btn-resume').style.display = 'none';
+
+    // Load plain YouTube embed (no API) — user clicks play directly
+    document.getElementById('yt-embed').src = 'https://www.youtube.com/embed/' + id + '?rel=0&modestbranding=1';
 
     fetch('/prepare', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({id: videoId, title, channel}),
+      body: JSON.stringify({id, title, channel}),
     })
     .then(r => r.json())
     .then(data => {
       document.getElementById('np-title').textContent   = title;
       document.getElementById('np-channel').textContent = channel;
       const badge = document.getElementById('np-badge');
-      badge.textContent = data.lrc ? 'Songtext gefunden' : 'Kein Songtext gefunden';
+      badge.textContent = data.lrc ? '&#10003; Songtext gefunden' : '&#10007; Kein Songtext gefunden';
       badge.className   = 'lyrics-badge ' + (data.lrc ? 'has-lyrics' : 'no-lyrics');
       document.getElementById('player-box').style.display = 'block';
-      if (window.YT && YT.Player) _createPlayer(videoId);
     });
   }
 </script>
@@ -298,17 +313,20 @@ DISPLAY_HTML = r"""<!DOCTYPE html>
     #standby p { color: #444; font-size: 1.3rem; margin-top: 1rem; }
 
     #song-info { position: fixed; top: 1.5rem; left: 0; right: 0; text-align: center; display: none; }
-    #song-info .s-title  { font-size: 1.2rem; font-weight: 700; color: #a78bfa; }
-    #song-info .s-artist { font-size: 0.95rem; color: #555; margin-top: 0.2rem; }
+    .s-title  { font-size: 1.2rem; font-weight: 700; color: #a78bfa; }
+    .s-artist { font-size: 0.95rem; color: #555; margin-top: 0.2rem; }
 
-    #lyrics { display: none; width: 100%; text-align: center; padding: 4rem 4rem 2rem; }
+    #lyrics { display: none; width: 100%; text-align: center; padding: 5rem 4rem 2rem; }
     #line-current {
       font-size: clamp(2rem, 5vw, 4rem); font-weight: 700; color: #fff;
       line-height: 1.3; margin-bottom: 1.5rem;
       text-shadow: 0 0 60px rgba(167,139,250,0.5); min-height: 1.3em;
+      transition: opacity 0.15s;
     }
     #line-next { font-size: clamp(1.2rem, 3vw, 2.2rem); color: #444; line-height: 1.4; min-height: 1.4em; }
     #waiting { display: none; color: #333; font-size: 2rem; text-align: center; }
+
+    #conn { position: fixed; bottom: 0.75rem; right: 0.75rem; font-size: 0.7rem; padding: 0.2rem 0.6rem; border-radius: 1rem; background: #111; color: #555; }
   </style>
 </head>
 <body>
@@ -325,17 +343,16 @@ DISPLAY_HTML = r"""<!DOCTYPE html>
     <div id="line-next"></div>
   </div>
   <div id="waiting">&#9835; &nbsp; &#9835; &nbsp; &#9835;</div>
-
-  <div id="conn-status" style="position:fixed;bottom:1rem;right:1rem;font-size:0.75rem;padding:0.3rem 0.7rem;border-radius:1rem;background:#111;color:#666;">Verbinde...</div>
+  <div id="conn">Verbinde...</div>
 
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
   <script>
     const socket = io({transports: ['polling', 'websocket']});
     let lrcLines = [], ticker = null, startTs = null;
 
-    const statusEl = document.getElementById('conn-status');
-    socket.on('connect',    () => { statusEl.textContent = 'Verbunden'; statusEl.style.color = '#4ade80'; });
-    socket.on('disconnect', () => { statusEl.textContent = 'Getrennt';  statusEl.style.color = '#f87171'; });
+    const connEl = document.getElementById('conn');
+    socket.on('connect',    () => { connEl.textContent = 'Verbunden'; connEl.style.color = '#4ade80'; });
+    socket.on('disconnect', () => { connEl.textContent = 'Getrennt';  connEl.style.color = '#f87171'; });
 
     function parseLRC(lrc) {
       const lines = [];
@@ -362,14 +379,14 @@ DISPLAY_HTML = r"""<!DOCTYPE html>
     socket.on('song_ready', (song) => {
       clearInterval(ticker); startTs = null;
       lrcLines = song.lrc ? parseLRC(song.lrc) : [];
-      document.getElementById('standby').style.display    = 'none';
-      document.getElementById('info-title').textContent   = song.title;
-      document.getElementById('info-artist').textContent  = song.channel;
-      document.getElementById('song-info').style.display  = 'block';
+      document.getElementById('standby').style.display   = 'none';
+      document.getElementById('info-title').textContent  = song.title;
+      document.getElementById('info-artist').textContent = song.channel;
+      document.getElementById('song-info').style.display = 'block';
       document.getElementById('line-current').textContent = '';
       document.getElementById('line-next').textContent    = lrcLines.length ? lrcLines[0].text : '';
-      document.getElementById('lyrics').style.display     = lrcLines.length ? 'block' : 'none';
-      document.getElementById('waiting').style.display    = lrcLines.length ? 'none' : 'block';
+      document.getElementById('lyrics').style.display    = lrcLines.length ? 'block' : 'none';
+      document.getElementById('waiting').style.display   = lrcLines.length ? 'none'  : 'block';
     });
 
     socket.on('play', (data) => {
@@ -384,10 +401,10 @@ DISPLAY_HTML = r"""<!DOCTYPE html>
 
     socket.on('stop', () => {
       clearInterval(ticker); startTs = null; lrcLines = [];
-      document.getElementById('standby').style.display = 'block';
+      document.getElementById('standby').style.display  = 'block';
       document.getElementById('song-info').style.display = 'none';
-      document.getElementById('lyrics').style.display = 'none';
-      document.getElementById('waiting').style.display = 'none';
+      document.getElementById('lyrics').style.display   = 'none';
+      document.getElementById('waiting').style.display  = 'none';
     });
   </script>
 </body>
@@ -410,7 +427,6 @@ def search():
     if not q:
         return jsonify([])
 
-    # yt-dlp flat-playlist search — no bot detection, only fetches metadata
     result = subprocess.run([
         'yt-dlp', f'ytsearch8:{q} karaoke',
         '--dump-json', '--flat-playlist', '--no-download',
@@ -432,7 +448,6 @@ def search():
         except Exception:
             continue
 
-    # fallback to Invidious if yt-dlp returned nothing
     if not videos:
         data = _invidious('search', {'q': f'{q} karaoke', 'type': 'video'})
         for item in (data or [])[:8]:
@@ -454,9 +469,9 @@ def prepare():
     title   = data.get('title', '')
     channel = data.get('channel', '')
 
-    lrc = _fetch_lyrics(title, channel)
-
+    lrc  = _fetch_lyrics(title, channel)
     song = {'id': vid_id, 'title': title, 'channel': channel, 'lrc': lrc}
+
     _state['song']       = song
     _state['start_ts']   = None
     _state['paused_pos'] = None
