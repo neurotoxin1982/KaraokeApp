@@ -1,4 +1,4 @@
-﻿services:
+services:
   db:
     image: postgres:16-alpine
     restart: unless-stopped
@@ -23,9 +23,6 @@
       DATABASE_URL: postgresql://karaoke:karaoke@db:5432/karaoke
       MUSIC_DIR: /music
     volumes:
-      # Mount the root of your media drive here.
-      # The folder picker in Settings will let you navigate and choose the exact subfolder.
-      # Example: - /mnt/media:/mnt/media:ro
       - /mnt:/mnt:ro
     depends_on:
       db:
