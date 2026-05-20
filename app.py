@@ -12,41 +12,10 @@ socketio = SocketIO(app, cors_allowed_origins='*', async_mode='eventlet')
 AUDIO_DIR = os.environ.get('AUDIO_DIR', '/app/audio')
 os.makedirs(AUDIO_DIR, exist_ok=True)
 
-# Write YouTube cookies from env var to a temp file on startup
-_COOKIES_FILE = None
-_cookies_content = os.environ.get('YOUTUBE_COOKIES', '').strip()
-if _cookies_content:
-    _COOKIES_FILE = '/tmp/yt-cookies.txt'
-    with open(_COOKIES_FILE, 'w') as _f:
-        _f.write(_cookies_content)
 
 _state = {'song': None, 'start_ts': None, 'paused_pos': None}
 
-INVIDIOUS_INSTANCES = [
-    'https://inv.nadeko.net',
-    'https://invidious.nerdvpn.de',
-    'https://yewtu.be',
-    'https://invidious.privacyredirect.com',
-    'https://invidious.flokinet.to',
-]
-
 # ── Helpers ───────────────────────────────────────────────────────────────────
-
-def _invidious(path, params=None):
-    for base in INVIDIOUS_INSTANCES:
-        try:
-            r = requests.get(f'{base}/api/v1/{path}', params=params, timeout=10)
-            if r.ok:
-                return r.json()
-        except Exception:
-            continue
-    return None
-
-def _duration_str(secs):
-    secs = int(secs or 0)
-    m, s = divmod(secs, 60)
-    h, m = divmod(m, 60)
-    return f'{h}:{m:02d}:{s:02d}' if h else f'{m}:{s:02d}'
 
 def _fetch_lyrics(title, channel):
     clean = re.sub(r'\s*[\(\[].*?(karaoke|instrumental|no vocal|backing).*?[\)\]]',
@@ -68,39 +37,16 @@ def _fetch_lyrics(title, channel):
         pass
     return ''
 
-def _download_audio(video_id, out_path):
-    """Try yt-dlp with cookies (if available) then multiple player clients."""
-    url = f'https://www.youtube.com/watch?v={video_id}'
-
-    base_args = [
+def _download_audio(url, out_path):
+    """Download audio from SoundCloud (or any yt-dlp supported URL)."""
+    result = subprocess.run([
         'yt-dlp',
         '--extract-audio', '--audio-format', 'mp3', '--audio-quality', '4',
         '-o', out_path, '--no-playlist',
-    ]
-    if _COOKIES_FILE:
-        base_args += ['--cookies', _COOKIES_FILE]
-
-    # With cookies: try once directly
-    if _COOKIES_FILE:
-        r = subprocess.run(base_args + [url], capture_output=True, text=True, timeout=300)
-        if r.returncode == 0 and os.path.exists(out_path):
-            return
-
-    # Without cookies (or if cookies failed): try multiple player clients
-    last_err = ''
-    for client in ['tv_embedded', 'web_creator', 'ios', 'android']:
-        args = base_args + ['--extractor-args', f'youtube:player_client={client}', url]
-        r = subprocess.run(args, capture_output=True, text=True, timeout=300)
-        if r.returncode == 0 and os.path.exists(out_path):
-            return
-        last_err = r.stderr[-300:] if r.stderr else ''
-
-    if not _COOKIES_FILE:
-        raise RuntimeError(
-            'YouTube blockiert diesen Server. Lösung: YOUTUBE_COOKIES Umgebungsvariable setzen '
-            '(cookies.txt Inhalt aus eingeloggtem Chrome-Browser via "Get cookies.txt LOCALLY" Extension).'
-        )
-    raise RuntimeError(f'Download fehlgeschlagen: {last_err}')
+        url,
+    ], capture_output=True, text=True, timeout=300)
+    if result.returncode != 0 or not os.path.exists(out_path):
+        raise RuntimeError(result.stderr[-300:] if result.stderr else 'Download fehlgeschlagen')
 
 # ── HTML ──────────────────────────────────────────────────────────────────────
 
@@ -205,8 +151,8 @@ HOST_HTML = r"""<!DOCTYPE html>
         btn.disabled = false; btn.textContent = 'Suchen';
         if (!vs.length) { el.innerHTML = '<div class="no-results">Keine Ergebnisse.</div>'; return; }
         el.innerHTML = vs.map(v => `
-          <div class="result-item" data-id="${ae(v.id)}" data-title="${ae(v.title)}" data-channel="${ae(v.channel)}" onclick="pick(this)">
-            <img src="https://i.ytimg.com/vi/${ae(v.id)}/mqdefault.jpg" loading="lazy"/>
+          <div class="result-item" data-url="${ae(v.url)}" data-title="${ae(v.title)}" data-channel="${ae(v.channel)}" onclick="pick(this)">
+            <img src="${ae(v.thumbnail)}" loading="lazy" onerror="this.style.display='none'"/>
             <div class="result-info">
               <div class="result-title">${v.title}</div>
               <div class="result-meta">${v.channel} &middot; ${v.duration}</div>
@@ -225,7 +171,7 @@ HOST_HTML = r"""<!DOCTYPE html>
     offsetMs = 0; document.getElementById('off-val').textContent = '0s';
     fetch('/load', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({id: el.dataset.id, title: el.dataset.title, channel: el.dataset.channel}),
+      body: JSON.stringify({url: el.dataset.url, title: el.dataset.title, channel: el.dataset.channel}),
     }).catch(() => {
       document.getElementById('loading-box').style.display = 'none';
       alert('Fehler beim Laden');
@@ -392,7 +338,7 @@ def search():
     if not q:
         return jsonify([])
     result = subprocess.run(
-        ['yt-dlp', f'ytsearch8:{q} karaoke',
+        ['yt-dlp', f'scsearch8:{q} karaoke',
          '--dump-json', '--flat-playlist', '--no-download'],
         capture_output=True, text=True, timeout=60,
     )
@@ -400,42 +346,35 @@ def search():
     for line in result.stdout.strip().splitlines():
         try:
             d = json.loads(line)
-            vid_id = d.get('id', '')
-            if not vid_id:
+            url = d.get('webpage_url') or d.get('url', '')
+            if not url:
                 continue
             videos.append({
-                'id':       vid_id,
-                'title':    d.get('title', 'Unknown'),
-                'channel':  d.get('uploader') or d.get('channel', ''),
-                'duration': d.get('duration_string') or '',
+                'url':       url,
+                'title':     d.get('title', 'Unknown'),
+                'channel':   d.get('uploader') or d.get('channel', ''),
+                'duration':  d.get('duration_string') or '',
+                'thumbnail': d.get('thumbnail', ''),
             })
         except Exception:
             continue
-    if not videos:
-        data = _invidious('search', {'q': f'{q} karaoke', 'type': 'video'})
-        for item in (data or [])[:8]:
-            vid_id = item.get('videoId', '')
-            if vid_id:
-                videos.append({'id': vid_id, 'title': item.get('title','Unknown'),
-                               'channel': item.get('author',''),
-                               'duration': _duration_str(item.get('lengthSeconds',0))})
     return jsonify(videos)
 
 @app.route('/load', methods=['POST'])
 def load():
     data    = request.get_json(force=True) or {}
-    vid_id  = data.get('id', '').strip()
+    url     = data.get('url', '').strip()
     title   = data.get('title', '')
     channel = data.get('channel', '')
-    if not vid_id:
-        return jsonify({'error': 'Keine Video-ID'}), 400
+    if not url:
+        return jsonify({'error': 'Keine URL'}), 400
 
     job_id = str(uuid.uuid4())
 
     def work():
         try:
             out_mp3 = os.path.join(AUDIO_DIR, f'{job_id}.mp3')
-            _download_audio(vid_id, out_mp3)
+            _download_audio(url, out_mp3)
             lrc  = _fetch_lyrics(title, channel)
             song = {
                 'job_id':    job_id,
