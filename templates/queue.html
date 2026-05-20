@@ -22,10 +22,8 @@
 
     <!-- Queue entries -->
     <div class="flex-1 overflow-y-auto">
-      {% set ns = namespace(mins=0) %}
-      {% set first_pending = true %}
+      {% set ns = namespace(mins=0, first_pending=true) %}
       {% for entry in queue %}
-
       {% set dur_mins = ((entry.song.duration or 180) / 60) | round | int %}
 
       <div id="qrow-{{ entry.id }}"
@@ -49,7 +47,7 @@
               </span>
               {% if entry.status == 'playing' %}
               <span class="text-xs bg-green-900 text-green-300 px-1.5 py-0.5 rounded-full whitespace-nowrap">Now playing</span>
-              {% elif entry.status == 'pending' and first_pending %}
+              {% elif entry.status == 'pending' and ns.first_pending %}
               <span class="text-xs text-gray-500 whitespace-nowrap">Coming up next</span>
               {% endif %}
             </div>
@@ -59,7 +57,7 @@
           </div>
           <!-- Time estimate -->
           <div class="flex-shrink-0 flex items-center gap-2">
-            {% if entry.status == 'pending' and not first_pending %}
+            {% if entry.status == 'pending' and not ns.first_pending %}
             <span class="text-sm text-gray-500">{{ ns.mins }}min</span>
             {% endif %}
             <i class="fa-solid fa-chevron-right text-gray-700 text-xs"></i>
@@ -86,10 +84,8 @@
       </div>
 
       {% if entry.status == 'pending' %}
-        {% if first_pending %}
-          {% set first_pending = false %}
-        {% endif %}
         {% set ns.mins = ns.mins + dur_mins %}
+        {% set ns.first_pending = false %}
       {% endif %}
 
       {% else %}
@@ -270,8 +266,14 @@
     setTimeout(() => location.reload(), 600);
   }
   async function startSong() {
-    broadcastControl('play', true);
-    showToast('Start signal sent to player', 'info');
+    const data = await apiFetch('/api/queue/next', { method: 'POST' });
+    if (data.id) {
+      broadcastControl('play', true);
+      showToast(`Starting: ${data.artist} — ${data.title}`);
+      setTimeout(() => location.reload(), 500);
+    } else {
+      showToast('Queue is empty', 'info');
+    }
   }
 
   // ── Add modal ────────────────────────────────────────────────────────
