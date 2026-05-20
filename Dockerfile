@@ -10,8 +10,7 @@ RUN pip install --no-cache-dir \
     eventlet \
     requests \
     yt-dlp \
-    yt-dlp-get-pot \
-    bgutil-yt-dlp-plugin
+    yt-dlp-get-pot
 
 COPY . .
 
