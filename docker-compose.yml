@@ -17,8 +17,6 @@ services:
   app:
     build: .
     restart: unless-stopped
-    ports:
-      - "8000:8000"
     environment:
       DATABASE_URL: postgresql://karaoke:karaoke@db:5432/karaoke
       MUSIC_DIR: /music
