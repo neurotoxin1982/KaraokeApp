@@ -7,7 +7,9 @@ services:
     ports:
       - "5000:5000"
     volumes:
-      - audio_data:/app/audio
+      - video_data:/app/video
+      - yt_home:/app/yt_home
 
 volumes:
-  audio_data:
+  video_data:
+  yt_home:

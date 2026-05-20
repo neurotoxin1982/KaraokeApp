@@ -2,8 +2,7 @@ import eventlet
 eventlet.monkey_patch()
 
 import os, re, subprocess, json, uuid, threading, glob
-import requests
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify, send_file, Response, stream_with_context
 from flask_socketio import SocketIO, emit
 
 app = Flask(__name__)
@@ -14,74 +13,27 @@ os.makedirs(VIDEO_DIR, exist_ok=True)
 
 _state = {'song': None, 'playing': False}
 
-# ── Download via Piped API ────────────────────────────────────────────────────
+# ── Download via yt-dlp OAuth2 ────────────────────────────────────────────────
 
-PIPED_INSTANCES = [
-    'https://pipedapi.kavin.rocks',
-    'https://pipedapi.tokhmi.xyz',
-    'https://pipedapi.moomoo.me',
-    'https://piped-api.garudalinux.org',
-    'https://api.piped.yt',
-]
+YT_HOME = os.environ.get('YT_HOME', '/app/yt_home')
+os.makedirs(YT_HOME, exist_ok=True)
 
-def _stream_download(url, out_path):
-    headers = {'User-Agent': 'Mozilla/5.0', 'Referer': 'https://piped.video/'}
-    with requests.get(url, stream=True, timeout=300, headers=headers) as r:
-        r.raise_for_status()
-        with open(out_path, 'wb') as f:
-            for chunk in r.iter_content(65536):
-                if chunk:
-                    f.write(chunk)
+def _ytdlp(extra_args, timeout=300):
+    env = {**os.environ, 'HOME': YT_HOME}
+    return subprocess.run(
+        ['yt-dlp', '--username', 'oauth2', '--password', ''] + extra_args,
+        capture_output=True, text=True, timeout=timeout, env=env,
+    )
 
 def _download_video(video_id, out_path):
-    data = None
-    for base in PIPED_INSTANCES:
-        try:
-            r = requests.get(f'{base}/streams/{video_id}', timeout=10)
-            if r.ok:
-                data = r.json()
-                break
-        except Exception:
-            continue
-
-    if not data:
-        raise RuntimeError('Kein Piped-Server erreichbar')
-
-    # Try combined (non-adaptive) stream first
-    combined = [s for s in data.get('videoStreams', []) if not s.get('videoOnly', True)]
-    if combined:
-        combined.sort(key=lambda x: x.get('bitrate', 0), reverse=True)
-        _stream_download(combined[0]['url'], out_path)
-        return
-
-    # Adaptive: download video + audio separately, merge with ffmpeg
-    v_streams = [s for s in data.get('videoStreams', [])
-                 if s.get('quality', '') in ('720p', '480p', '360p')]
-    if not v_streams:
-        v_streams = data.get('videoStreams', [])
-    a_streams = data.get('audioStreams', [])
-
-    if not v_streams or not a_streams:
-        raise RuntimeError('Keine Streams in Piped-Antwort')
-
-    v_streams.sort(key=lambda x: x.get('bitrate', 0), reverse=True)
-    a_streams.sort(key=lambda x: x.get('bitrate', 0), reverse=True)
-
-    v_tmp = out_path + '.v.tmp'
-    a_tmp = out_path + '.a.tmp'
-    _stream_download(v_streams[0]['url'], v_tmp)
-    _stream_download(a_streams[0]['url'], a_tmp)
-
-    result = subprocess.run(
-        ['ffmpeg', '-y', '-i', v_tmp, '-i', a_tmp, '-c', 'copy', out_path],
-        capture_output=True, timeout=180,
-    )
-    for f in (v_tmp, a_tmp):
-        try: os.unlink(f)
-        except OSError: pass
-
-    if result.returncode != 0:
-        raise RuntimeError(f'ffmpeg: {result.stderr.decode()[-300:]}')
+    r = _ytdlp([
+        '-f', 'bestvideo[height<=720]+bestaudio/best[height<=720]',
+        '--merge-output-format', 'mp4',
+        '-o', out_path, '--no-playlist',
+        f'https://www.youtube.com/watch?v={video_id}',
+    ])
+    if r.returncode != 0 or not os.path.exists(out_path):
+        raise RuntimeError(r.stderr[-400:] if r.stderr else 'Download fehlgeschlagen')
 
 # ── HTML ──────────────────────────────────────────────────────────────────────
 
@@ -326,6 +278,66 @@ def host_page():
 @app.route('/display')
 def display_page():
     return DISPLAY_HTML, 200, {'Content-Type': 'text/html; charset=utf-8'}
+
+@app.route('/setup')
+def setup_page():
+    return '''<!DOCTYPE html>
+<html lang="de"><head><meta charset="UTF-8"/>
+<title>YouTube Setup</title>
+<style>
+body{font-family:sans-serif;background:#0f0f1a;color:#e0e0f0;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;}
+.card{background:#1a1a2e;border:1px solid #2a2a4a;border-radius:1rem;padding:2rem;max-width:600px;width:100%;}
+h1{font-size:1.4rem;margin-bottom:0.5rem;color:#a78bfa;}
+p{color:#888;font-size:0.9rem;margin-bottom:1.5rem;}
+.btn{padding:0.75rem 1.5rem;border-radius:0.6rem;border:none;background:linear-gradient(135deg,#7c3aed,#2563eb);color:#fff;font-size:1rem;font-weight:600;cursor:pointer;}
+.btn:disabled{opacity:0.4;}
+#log{margin-top:1.5rem;background:#000;border-radius:0.5rem;padding:1rem;font-family:monospace;font-size:0.85rem;white-space:pre-wrap;min-height:100px;color:#4ade80;display:none;}
+a{color:#60a5fa;}
+</style></head>
+<body><div class="card">
+<h1>&#128274; YouTube verknüpfen</h1>
+<p>Klicke auf "Start" — du bekommst einen Link und einen Code.<br>
+Öffne den Link, gib den Code ein und logge dich mit Google ein.<br>
+Danach funktioniert der YouTube-Download dauerhaft.</p>
+<button class="btn" id="btn" onclick="start()">Start</button>
+<div id="log"></div>
+</div>
+<script>
+function start(){
+  const btn=document.getElementById("btn");
+  const log=document.getElementById("log");
+  btn.disabled=true; btn.textContent="Warte...";
+  log.style.display="block"; log.textContent="";
+  const es=new EventSource("/setup/stream");
+  es.onmessage=e=>{
+    if(e.data==="DONE"){es.close();btn.textContent="Fertig! YouTube verknüpft ✓";log.textContent+="\\n\\nErfolgreich! Du kannst diese Seite schliessen.";}
+    else if(e.data==="ERROR"){es.close();btn.disabled=false;btn.textContent="Fehler — nochmal versuchen";}
+    else{log.textContent+=e.data+"\\n";}
+  };
+  es.onerror=()=>{es.close();btn.disabled=false;btn.textContent="Verbindungsfehler";};
+}
+</script></body></html>
+''', 200, {'Content-Type': 'text/html; charset=utf-8'}
+
+@app.route('/setup/stream')
+def setup_stream():
+    def generate():
+        env = {**os.environ, 'HOME': YT_HOME}
+        proc = subprocess.Popen(
+            ['yt-dlp', '--username', 'oauth2', '--password', '',
+             '--skip-download', 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, bufsize=1, env=env,
+        )
+        for line in proc.stdout:
+            line = line.strip()
+            if line:
+                yield f'data: {line}\n\n'
+        proc.wait()
+        yield f'data: {"DONE" if proc.returncode == 0 else "ERROR"}\n\n'
+
+    return Response(stream_with_context(generate()), mimetype='text/event-stream',
+                    headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
 
 @app.route('/search')
 def search():
