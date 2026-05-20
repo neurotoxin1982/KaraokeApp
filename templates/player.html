@@ -195,27 +195,37 @@
     if (cdgPlayer) { cdgPlayer.stop(); cdgPlayer = null; }
     _revokeBlobs();
 
-    // Try local FS first, fall back to server media
-    const cdgBuffer = song.file_path ? await localFsArrayBuffer(song.file_path) : null;
-    let audioSrc = song.audio_path ? await localFsBlobUrl(song.audio_path) : null;
-    if (audioSrc) _blobUrls.push(audioSrc);
-    else audioSrc = `/media/${song.song_id}/audio`;
-
-    audioEl = new Audio(audioSrc);
-    audioEl.volume = parseFloat(document.getElementById('volume-slider').value);
+    // Load both files in parallel for speed
+    const [cdgBuffer, audioSrc] = await Promise.all([
+      song.file_path  ? localFsArrayBuffer(song.file_path)  : Promise.resolve(null),
+      song.audio_path ? localFsBlobUrl(song.audio_path)     : Promise.resolve(null),
+    ]);
 
     if (!cdgBuffer) {
       showToast('Cannot read CDG file — grant folder access first', 'error');
       showIdleScreen();
       return;
     }
-    cdgPlayer = new CdgPlayer(canvas, null, audioEl);
-    cdgPlayer.loadFromBuffer(cdgBuffer);
-    audioEl.play();
-    isPlaying = true;
-    updatePlayIcon();
+    if (!audioSrc) {
+      showToast('Cannot read audio file — grant folder access first', 'error');
+      showIdleScreen();
+      return;
+    }
+    _blobUrls.push(audioSrc);
+
+    audioEl = new Audio(audioSrc);
+    audioEl.volume = parseFloat(document.getElementById('volume-slider').value);
     audioEl.onended = () => nextSong();
     audioEl.ontimeupdate = updateProgress;
+
+    // CdgPlayer listens for the 'playing' event and starts in sync.
+    cdgPlayer = new CdgPlayer(canvas, audioEl);
+    cdgPlayer.loadFromBuffer(cdgBuffer);
+
+    // Start audio — CDG will begin exactly when 'playing' fires.
+    await audioEl.play();
+    isPlaying = true;
+    updatePlayIcon();
     scaleCanvas(canvas);
   }
 
@@ -239,8 +249,8 @@
       if (cdgPlayer) cdgPlayer.pause();
       isPlaying = false;
     } else {
+      if (cdgPlayer) cdgPlayer.resume(); // re-anchor wall clock before audio starts
       audioEl.play();
-      if (cdgPlayer) cdgPlayer.resume();
       isPlaying = true;
     }
     updatePlayIcon();
