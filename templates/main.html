@@ -398,13 +398,23 @@ async function playVideo(song) {
   video.classList.remove('hidden');
 
   const src = await localFsBlobUrl(song.file_path);
-  if (!src) { showToast('Cannot read video file', 'error'); showPlayerIdle(); return; }
+  if (!src) { showToast('Cannot read video file — select folder in Settings', 'error'); showPlayerIdle(); return; }
   video.src = src; video.volume = _vol();
   video.onended = () => nextSong();
   video.ontimeupdate = updateProgress;
-  await video.play();
-  _videoEl = video; _songDur = video.duration || 0;
-  isPlaying = true; updatePlayIcon(); startProgress();
+  _videoEl = video;
+
+  try {
+    await video.play();
+    isPlaying = true;
+  } catch(e) {
+    // Browser blocked autoplay — resume on next user click
+    isPlaying = false;
+    const resume = async () => { await video.play(); isPlaying = true; updatePlayIcon(); };
+    document.addEventListener('click', resume, { once: true, capture: true });
+  }
+  _songDur = video.duration || 0;
+  updatePlayIcon(); startProgress();
 }
 
 // ── Controls ──────────────────────────────────────────────────────────────────
@@ -556,18 +566,15 @@ function modalSearch(q) {
   _mTimer = setTimeout(async () => {
     if (!q.trim()) { document.getElementById('modal-results').innerHTML = ''; _lastSongs = []; return; }
     _lastSongs = await apiFetch(`/api/songs/search?q=${encodeURIComponent(q)}`);
-    // Auto-select first result immediately
-    if (_lastSongs.length > 0) {
-      _setSong(_lastSongs[0].id, _lastSongs[0].artist + ' — ' + _lastSongs[0].title);
-    }
     document.getElementById('modal-results').innerHTML = _lastSongs.map((s, i) => `
-      <div onclick="selectSong(${s.id}, ${JSON.stringify(s.artist+' — '+s.title)})"
-        data-song-id="${s.id}"
-        class="result-item px-3 py-2 rounded-lg cursor-pointer flex items-center justify-between
-               ${i === 0 ? 'bg-brand/30 border border-brand/50' : 'hover:bg-gray-700'}">
+      <div onclick="selectSong(${s.id}, ${JSON.stringify(s.artist + ' — ' + s.title)})"
+           data-song-id="${s.id}"
+           class="result-item px-3 py-2 rounded-lg cursor-pointer flex items-center justify-between">
         <span class="text-sm text-gray-100">${s.artist} <span class="text-gray-400">—</span> ${s.title}</span>
         <span class="text-xs text-gray-500 ml-2 flex-shrink-0">${s.file_format.toUpperCase()}</span>
       </div>`).join('') || '<p class="text-sm text-gray-500 px-3 py-2">No results</p>';
+    // Auto-select first result
+    if (_lastSongs.length > 0) _setSong(_lastSongs[0].id, _lastSongs[0].artist + ' — ' + _lastSongs[0].title);
   }, 200);
 }
 
@@ -575,17 +582,20 @@ function _setSong(id, label) {
   document.getElementById('modal-song-id').value = id;
   document.getElementById('modal-selected').textContent = '✓ ' + label;
   document.getElementById('modal-selected').classList.remove('hidden');
-  // Highlight selected in list
+  // Use inline styles to avoid Tailwind class-name issues
   document.querySelectorAll('.result-item').forEach(el => {
-    const active = el.dataset.songId == id;
-    el.className = el.className.replace(/bg-brand\/30 border border-brand\/50|hover:bg-gray-700/g, '');
-    el.className += active ? ' bg-brand/30 border border-brand/50' : ' hover:bg-gray-700';
+    if (String(el.dataset.songId) === String(id)) {
+      el.style.background = 'rgba(124,58,237,0.25)';
+      el.style.outline    = '1px solid rgba(167,139,250,0.5)';
+    } else {
+      el.style.background = '';
+      el.style.outline    = '';
+    }
   });
 }
 
 function selectSong(id, label) {
   _setSong(id, label);
-  // Don't clear results — let user change selection
   document.getElementById('modal-singer').focus();
 }
 
