@@ -96,7 +96,6 @@
   </div>
   {% endif %}
 </div>
-{% endblock %}
 
 <!-- Folder Browser Modal -->
 <div id="folder-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
@@ -107,26 +106,16 @@
       <button onclick="document.getElementById('folder-modal').classList.add('hidden')"
         class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
     </div>
-
-    <!-- Breadcrumb path -->
     <div class="px-5 py-2 bg-gray-900/50 border-b border-gray-700 flex-shrink-0">
       <span id="browser-path" class="font-mono text-sm text-brand-light break-all">/</span>
     </div>
-
-    <!-- Directory list -->
     <div id="browser-list" class="overflow-y-auto flex-1 py-2"></div>
-
-    <!-- Actions -->
     <div class="px-5 py-4 border-t border-gray-700 flex items-center gap-3 flex-shrink-0">
-      <span class="text-sm text-gray-400 flex-1">
-        Select a folder, then click <strong>Use This Folder</strong>
-      </span>
+      <span class="text-sm text-gray-400 flex-1">Select a folder, then click <strong>Use This Folder</strong></span>
       <button onclick="document.getElementById('folder-modal').classList.add('hidden')"
         class="px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-sm">Cancel</button>
-      <button id="use-folder-btn" onclick="useSelectedFolder()"
-        class="px-4 py-2 rounded bg-brand hover:bg-brand-dark text-white text-sm font-medium">
-        Use This Folder
-      </button>
+      <button onclick="useSelectedFolder()"
+        class="px-4 py-2 rounded bg-brand hover:bg-brand-dark text-white text-sm font-medium">Use This Folder</button>
     </div>
   </div>
 </div>
