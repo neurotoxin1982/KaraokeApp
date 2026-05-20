@@ -21,6 +21,16 @@
       <p class="text-gray-700 text-sm mt-2">Add songs to the <a href="/queue" class="text-brand-light hover:underline">queue</a> to get started</p>
     </div>
 
+    <!-- Audio unlock overlay — required by browser autoplay policy -->
+    <div id="audio-unlock" class="absolute inset-0 flex items-center justify-center bg-black cursor-pointer z-40"
+         onclick="unlockAudio()">
+      <div class="text-center select-none">
+        <i class="fa-solid fa-play-circle text-brand-light mb-6 block" style="font-size:6rem"></i>
+        <p class="text-white text-2xl font-bold mb-2">Tap to start</p>
+        <p class="text-gray-500 text-sm">Required once to enable audio</p>
+      </div>
+    </div>
+
     <!-- Re-grant access banner (Safari / after reload) -->
     <div id="fs-banner" class="hidden absolute top-4 left-4 right-4">
       <div class="bg-yellow-900/80 border border-yellow-600 rounded-lg px-4 py-3 flex items-center gap-3 text-sm">
@@ -99,29 +109,40 @@
 <script src="/static/js/local-fs.js"></script>
 <script src="/static/js/cdg-player.js"></script>
 <script>
-  // ── State ────────────────────────────────────────────────────────────────
+  // ── Shared AudioContext — created ONCE on first user click ───────────────
+  // Must NOT be closed between songs (browser won't allow re-creation without click).
+  let _audioCtx = null;
+
+  async function unlockAudio() {
+    document.getElementById('audio-unlock').classList.add('hidden');
+    _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (_audioCtx.state === 'suspended') await _audioCtx.resume();
+    await init();
+  }
+
+  // ── Song state ────────────────────────────────────────────────────────────
   let currentSong      = null;
   let cdgPlayer        = null;
   let isPlaying        = false;
   let progressInterval = null;
 
-  // Web Audio API (CDG playback)
-  let _audioCtx  = null;   // AudioContext
-  let _gainNode  = null;   // volume control
-  let _audioSrc  = null;   // AudioBufferSourceNode
+  let _gainNode  = null;   // GainNode — persists across songs for volume
+  let _audioSrc  = null;   // AudioBufferSourceNode — new per song
   let _audioBuf  = null;   // decoded AudioBuffer
-  let _startAt   = 0;      // audioCtx.currentTime when song started
-  let _pausedPos = 0;      // position (seconds) when paused
-  let _songDur   = 0;      // total duration in seconds
+  let _startAt   = 0;      // audioCtx.currentTime when this song started
+  let _pausedPos = 0;      // position in seconds at pause
+  let _songDur   = 0;
 
-  // HTML <video> element (video format playback)
-  let _videoEl = null;
+  let _videoEl   = null;   // HTMLVideoElement (video formats)
 
   // ── Helpers ──────────────────────────────────────────────────────────────
-  function _stopAll() {
-    if (_audioSrc) { try { _audioSrc.onended = null; _audioSrc.stop(); } catch(_){} _audioSrc = null; }
-    if (_audioCtx) { _audioCtx.close(); _audioCtx = null; }
-    if (_gainNode) { _gainNode = null; }
+  function _stopCurrent() {
+    // Stop audio source but keep AudioContext alive
+    if (_audioSrc) {
+      try { _audioSrc.onended = null; _audioSrc.stop(0); } catch(_) {}
+      _audioSrc = null;
+    }
+    if (_gainNode) { _gainNode.disconnect(); _gainNode = null; }
     if (_audioBuf) { _audioBuf = null; }
     if (_videoEl)  { _videoEl.pause(); _videoEl.src = ''; _videoEl = null; }
     if (cdgPlayer) { cdgPlayer.stop(); cdgPlayer = null; }
@@ -144,7 +165,7 @@
 
   // ── Idle screen ──────────────────────────────────────────────────────────
   function showIdleScreen() {
-    _stopAll();
+    _stopCurrent();
     currentSong = null;
     document.getElementById('idle-screen').classList.remove('hidden');
     document.getElementById('cdg-canvas').classList.add('hidden');
@@ -171,7 +192,7 @@
     }
 
     currentSong = data;
-    _stopAll();
+    _stopCurrent();
     document.getElementById('idle-screen').classList.add('hidden');
     document.getElementById('ctrl-title').textContent = `${data.artist} — ${data.title}`;
     document.getElementById('ctrl-meta').textContent = data.singer_name ? `Singer: ${data.singer_name}` : '';
@@ -190,42 +211,43 @@
 
   // ── CDG + Web Audio (sample-accurate sync) ───────────────────────────────
   async function playCdg(song) {
+    if (!_audioCtx) { showToast('Tap the screen first to enable audio', 'error'); return; }
+
     const canvas = document.getElementById('cdg-canvas');
     document.getElementById('video-player').classList.add('hidden');
     canvas.classList.remove('hidden');
     document.getElementById('song-overlay').classList.remove('hidden');
 
     // Load CDG and MP3 bytes in parallel
-    const [cdgBuf, mp3Buf] = await Promise.all([
+    const [cdgBuf, mp3BufRaw] = await Promise.all([
       localFsArrayBuffer(song.file_path),
       localFsArrayBuffer(song.audio_path),
     ]);
-    if (!cdgBuf || !mp3Buf) {
+    if (!cdgBuf || !mp3BufRaw) {
       showToast('Cannot read files — grant folder access', 'error');
       showIdleScreen(); return;
     }
 
-    // Create AudioContext and decode MP3
-    _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    _audioBuf = await _audioCtx.decodeAudioData(mp3Buf);
+    // Decode MP3 — decodeAudioData detaches the buffer so we copy it first
+    _audioBuf = await _audioCtx.decodeAudioData(mp3BufRaw);
     _songDur  = _audioBuf.duration;
 
-    // Volume
+    // GainNode for volume (persists across songs if needed)
     _gainNode = _audioCtx.createGain();
     _gainNode.gain.value = _vol();
     _gainNode.connect(_audioCtx.destination);
 
-    // Schedule source exactly 100ms from now — gives browser time to prepare
+    // BufferSource — schedule exactly 200ms ahead so browser has time
     _audioSrc = _audioCtx.createBufferSource();
     _audioSrc.buffer = _audioBuf;
     _audioSrc.connect(_gainNode);
     _audioSrc.onended = () => { if (isPlaying) nextSong(); };
 
-    _startAt = _audioCtx.currentTime + 0.1;
-    _audioSrc.start(_startAt);     // MP3 starts at _startAt
+    _startAt   = _audioCtx.currentTime + 0.2;
     _pausedPos = 0;
+    _audioSrc.start(_startAt);
 
-    // CDG starts at the SAME _startAt — zero offset, guaranteed
+    // CDG uses the IDENTICAL _startAt — same clock, zero offset
     cdgPlayer = new CdgPlayer(canvas);
     cdgPlayer.loadFromBuffer(cdgBuf);
     cdgPlayer.start(_audioCtx, _startAt);
@@ -335,7 +357,7 @@
 
   // ── Next song ────────────────────────────────────────────────────────────
   async function nextSong() {
-    _stopAll();
+    _stopCurrent();
     currentSong = null;
     await apiFetch('/api/queue/next', { method: 'POST' });
     await loadCurrentSong();
@@ -393,14 +415,14 @@
     } catch(_) {}
   });
 
-  // ── Boot ─────────────────────────────────────────────────────────────────
+  // ── Boot — waits for user tap before doing anything ──────────────────────
   async function init() {
     const h = await localFsRestore();
     document.getElementById('fs-banner').classList.toggle('hidden', !!h);
     await loadCurrentSong();
   }
 
-  setInterval(() => { if (!currentSong) loadCurrentSong(); }, 5000);
-  init();
+  setInterval(() => { if (_audioCtx && !currentSong) loadCurrentSong(); }, 5000);
+  // init() is called by unlockAudio() on first tap — NOT on page load.
 </script>
 {% endblock %}
