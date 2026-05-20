@@ -61,40 +61,24 @@ def _fetch_lyrics(title, channel):
     return ''
 
 def _download_audio(video_id, out_path):
-    """Download audio via Invidious stream URL + ffmpeg conversion."""
-    data = _invidious(f'videos/{video_id}')
-    if not data:
-        raise RuntimeError('Kein Invidious-Server erreichbar')
+    """Try yt-dlp with multiple player clients to bypass bot detection."""
+    url = f'https://www.youtube.com/watch?v={video_id}'
+    clients = ['tv_embedded', 'web_creator', 'ios', 'android', 'mweb']
+    last_err = ''
+    for client in clients:
+        result = subprocess.run([
+            'yt-dlp',
+            '--extract-audio', '--audio-format', 'mp3', '--audio-quality', '4',
+            '-o', out_path,
+            '--extractor-args', f'youtube:player_client={client}',
+            '--no-playlist',
+            url,
+        ], capture_output=True, text=True, timeout=300)
+        if result.returncode == 0 and os.path.exists(out_path):
+            return
+        last_err = result.stderr[-200:] if result.stderr else 'unbekannter Fehler'
 
-    # Pick best audio-only stream
-    fmts = [f for f in data.get('adaptiveFormats', [])
-            if 'audio' in f.get('type', '')]
-    if not fmts:
-        raise RuntimeError('Kein Audio-Stream gefunden')
-    fmts.sort(key=lambda x: int(x.get('bitrate', 0)), reverse=True)
-    stream_url = fmts[0]['url']
-
-    # Download raw stream to temp file
-    tmp = out_path + '.tmp'
-    headers = {'User-Agent': 'Mozilla/5.0 (compatible; bot)'}
-    with requests.get(stream_url, stream=True, timeout=180, headers=headers) as r:
-        r.raise_for_status()
-        with open(tmp, 'wb') as f:
-            for chunk in r.iter_content(65536):
-                if chunk:
-                    f.write(chunk)
-
-    # Convert to mp3
-    result = subprocess.run(
-        ['ffmpeg', '-y', '-i', tmp, '-acodec', 'libmp3lame', '-q:a', '4', out_path],
-        capture_output=True, timeout=180,
-    )
-    try:
-        os.unlink(tmp)
-    except OSError:
-        pass
-    if result.returncode != 0:
-        raise RuntimeError(f'ffmpeg: {result.stderr.decode()[-300:]}')
+    raise RuntimeError(f'Download fehlgeschlagen (alle Clients versucht): {last_err}')
 
 # ── HTML ──────────────────────────────────────────────────────────────────────
 
