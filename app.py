@@ -14,39 +14,74 @@ os.makedirs(VIDEO_DIR, exist_ok=True)
 
 _state = {'song': None, 'playing': False}
 
-# ── Download via cobalt.tools ─────────────────────────────────────────────────
+# ── Download via Piped API ────────────────────────────────────────────────────
 
-def _download_via_cobalt(youtube_url, out_path):
-    r = requests.post(
-        'https://api.cobalt.tools/',
-        json={'url': youtube_url, 'videoQuality': '720', 'downloadMode': 'auto'},
-        headers={
-            'Accept': 'application/json',
-            'Content-Type': 'application/json',
-            'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36',
-        },
-        timeout=30,
-    )
-    if not r.ok:
-        raise RuntimeError(f'Cobalt API: HTTP {r.status_code} — {r.text[:200]}')
+PIPED_INSTANCES = [
+    'https://pipedapi.kavin.rocks',
+    'https://pipedapi.tokhmi.xyz',
+    'https://pipedapi.moomoo.me',
+    'https://piped-api.garudalinux.org',
+    'https://api.piped.yt',
+]
 
-    data = r.json()
-    status = data.get('status', '')
-
-    if status in ('redirect', 'tunnel', 'stream'):
-        dl_url = data['url']
-    elif status == 'picker':
-        dl_url = data['picker'][0]['url']
-    else:
-        raise RuntimeError(f'Cobalt Fehler: {data}')
-
-    with requests.get(dl_url, stream=True, timeout=300,
-                      headers={'User-Agent': 'Mozilla/5.0'}) as resp:
-        resp.raise_for_status()
+def _stream_download(url, out_path):
+    headers = {'User-Agent': 'Mozilla/5.0', 'Referer': 'https://piped.video/'}
+    with requests.get(url, stream=True, timeout=300, headers=headers) as r:
+        r.raise_for_status()
         with open(out_path, 'wb') as f:
-            for chunk in resp.iter_content(65536):
+            for chunk in r.iter_content(65536):
                 if chunk:
                     f.write(chunk)
+
+def _download_video(video_id, out_path):
+    data = None
+    for base in PIPED_INSTANCES:
+        try:
+            r = requests.get(f'{base}/streams/{video_id}', timeout=10)
+            if r.ok:
+                data = r.json()
+                break
+        except Exception:
+            continue
+
+    if not data:
+        raise RuntimeError('Kein Piped-Server erreichbar')
+
+    # Try combined (non-adaptive) stream first
+    combined = [s for s in data.get('videoStreams', []) if not s.get('videoOnly', True)]
+    if combined:
+        combined.sort(key=lambda x: x.get('bitrate', 0), reverse=True)
+        _stream_download(combined[0]['url'], out_path)
+        return
+
+    # Adaptive: download video + audio separately, merge with ffmpeg
+    v_streams = [s for s in data.get('videoStreams', [])
+                 if s.get('quality', '') in ('720p', '480p', '360p')]
+    if not v_streams:
+        v_streams = data.get('videoStreams', [])
+    a_streams = data.get('audioStreams', [])
+
+    if not v_streams or not a_streams:
+        raise RuntimeError('Keine Streams in Piped-Antwort')
+
+    v_streams.sort(key=lambda x: x.get('bitrate', 0), reverse=True)
+    a_streams.sort(key=lambda x: x.get('bitrate', 0), reverse=True)
+
+    v_tmp = out_path + '.v.tmp'
+    a_tmp = out_path + '.a.tmp'
+    _stream_download(v_streams[0]['url'], v_tmp)
+    _stream_download(a_streams[0]['url'], a_tmp)
+
+    result = subprocess.run(
+        ['ffmpeg', '-y', '-i', v_tmp, '-i', a_tmp, '-c', 'copy', out_path],
+        capture_output=True, timeout=180,
+    )
+    for f in (v_tmp, a_tmp):
+        try: os.unlink(f)
+        except OSError: pass
+
+    if result.returncode != 0:
+        raise RuntimeError(f'ffmpeg: {result.stderr.decode()[-300:]}')
 
 # ── HTML ──────────────────────────────────────────────────────────────────────
 
@@ -333,8 +368,7 @@ def load():
     def work():
         try:
             out_path = os.path.join(VIDEO_DIR, f'{job_id}.mp4')
-            yt_url   = f'https://www.youtube.com/watch?v={vid_id}'
-            _download_via_cobalt(yt_url, out_path)
+            _download_video(vid_id, out_path)
 
             song = {
                 'job_id':    job_id,
