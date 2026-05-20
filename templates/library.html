@@ -231,10 +231,10 @@
   <div class="bg-gray-800 rounded-xl shadow-2xl w-full max-w-md p-6">
     <h3 class="text-lg font-semibold mb-1">Add to Queue</h3>
     <p id="queue-modal-song" class="text-sm text-gray-400 mb-4"></p>
-    <label class="text-sm text-gray-400 block mb-1">Singer (optional)</label>
-    <select id="queue-singer" class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm mb-4">
-      <option value="">— No singer —</option>
-    </select>
+    <label class="text-sm text-gray-400 block mb-1">Singer name</label>
+    <input id="queue-singer" type="text" placeholder="Enter name…"
+      class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-gray-100 mb-4"
+      onkeydown="if(event.key==='Enter') confirmAddToQueue()">
     <div class="flex gap-2 justify-end">
       <button onclick="closeAddToQueue()" class="px-4 py-2 rounded bg-gray-700 hover:bg-gray-600 text-sm">Cancel</button>
       <button onclick="confirmAddToQueue()" class="px-4 py-2 rounded bg-brand hover:bg-brand-dark text-white text-sm font-medium">Add</button>
@@ -312,16 +312,9 @@
   async function openAddToQueue(ds) {
     queueSongId = ds.songId;
     document.getElementById('queue-modal-song').textContent = `${ds.artist} — ${ds.title}`;
-    const singers = await apiFetch('/api/singers');
-    const sel = document.getElementById('queue-singer');
-    sel.innerHTML = '<option value="">— No singer —</option>';
-    singers.forEach(s => {
-      const o = document.createElement('option');
-      o.value = s.id;
-      o.textContent = s.name;
-      sel.appendChild(o);
-    });
+    document.getElementById('queue-singer').value = '';
     document.getElementById('queue-modal').classList.remove('hidden');
+    setTimeout(() => document.getElementById('queue-singer').focus(), 50);
   }
 
   function closeAddToQueue() {
@@ -330,8 +323,8 @@
   }
 
   async function confirmAddToQueue() {
-    const singerId = document.getElementById('queue-singer').value;
-    const url = `/api/queue?song_id=${queueSongId}${singerId ? '&singer_id=' + singerId : ''}`;
+    const name = document.getElementById('queue-singer').value.trim();
+    const url = `/api/queue?song_id=${queueSongId}${name ? '&singer_name=' + encodeURIComponent(name) : ''}`;
     await apiFetch(url, { method: 'POST' });
     showToast('Added to queue!');
     closeAddToQueue();

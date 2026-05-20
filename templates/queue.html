@@ -146,13 +146,10 @@
     <div id="search-results" class="max-h-60 overflow-y-auto space-y-1 mb-4"></div>
     <div id="selected-song-info" class="hidden text-sm text-brand-light mb-2"></div>
     <input type="hidden" id="selected-song-id">
-    <label class="text-sm text-gray-400 block mb-1">Singer (optional)</label>
-    <select id="add-singer" class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm mb-4">
-      <option value="">— No singer —</option>
-      {% for singer in singers %}
-      <option value="{{ singer.id }}">{{ singer.name }}</option>
-      {% endfor %}
-    </select>
+    <label class="text-sm text-gray-400 block mb-1">Singer name</label>
+    <input id="add-singer" type="text" placeholder="Enter name…"
+      class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-gray-100 mb-4"
+      onkeydown="if(event.key==='Enter') addToQueue()">
     <div class="flex gap-2 justify-end">
       <button onclick="document.getElementById('add-modal').classList.add('hidden')"
         class="px-4 py-2 rounded bg-gray-700 hover:bg-gray-600 text-sm">Cancel</button>
@@ -199,8 +196,8 @@
   async function addToQueue() {
     const songId = document.getElementById('selected-song-id').value;
     if (!songId) { showToast('Please select a song', 'error'); return; }
-    const singerId = document.getElementById('add-singer').value;
-    const url = `/api/queue?song_id=${songId}${singerId ? '&singer_id=' + singerId : ''}`;
+    const name = document.getElementById('add-singer').value.trim();
+    const url = `/api/queue?song_id=${songId}${name ? '&singer_name=' + encodeURIComponent(name) : ''}`;
     await apiFetch(url, { method: 'POST' });
     showToast('Added to queue!');
     document.getElementById('add-modal').classList.add('hidden');

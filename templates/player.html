@@ -107,11 +107,19 @@
 
   async function loadCurrentSong() {
     const data = await apiFetch('/api/queue/current');
-    if (!data.id) {
-      showIdleScreen();
+    if (!data.id) { showIdleScreen(); return; }
+    if (currentSong && currentSong.id === data.id) return;
+
+    // Don't play until local folder access is granted
+    if (!localFsReady()) {
+      document.getElementById('fs-banner').classList.remove('hidden');
+      document.getElementById('idle-screen').classList.remove('hidden');
+      document.getElementById('ctrl-title').textContent = `${data.artist} — ${data.title}`;
+      document.getElementById('ctrl-meta').textContent = 'Grant folder access to play';
+      currentSong = data; // remember so we auto-play after access is granted
       return;
     }
-    if (currentSong && currentSong.id === data.id) return;
+
     currentSong = data;
     playSong(data);
     loadUpcoming();
@@ -196,21 +204,16 @@
     audioEl = new Audio(audioSrc);
     audioEl.volume = parseFloat(document.getElementById('volume-slider').value);
 
-    cdgPlayer = new CdgPlayer(canvas, null, audioEl);
-    if (cdgBuffer) {
-      cdgPlayer.loadFromBuffer(cdgBuffer);
-      audioEl.play();
-      isPlaying = true;
-      updatePlayIcon();
-    } else {
-      // Fall back to server fetch
-      cdgPlayer.cdgUrl = `/media/${song.song_id}/cdg`;
-      cdgPlayer.load().then(() => {
-        audioEl.play();
-        isPlaying = true;
-        updatePlayIcon();
-      });
+    if (!cdgBuffer) {
+      showToast('Cannot read CDG file — grant folder access first', 'error');
+      showIdleScreen();
+      return;
     }
+    cdgPlayer = new CdgPlayer(canvas, null, audioEl);
+    cdgPlayer.loadFromBuffer(cdgBuffer);
+    audioEl.play();
+    isPlaying = true;
+    updatePlayIcon();
     audioEl.onended = () => nextSong();
     audioEl.ontimeupdate = updateProgress;
     scaleCanvas(canvas);
@@ -313,6 +316,12 @@
     if (h) {
       document.getElementById('fs-banner').classList.add('hidden');
       showToast('Folder access granted: ' + h.name);
+      // Auto-play the song that was waiting
+      if (currentSong) {
+        const pending = currentSong;
+        currentSong = null;
+        await loadCurrentSong();
+      }
     }
   }
 

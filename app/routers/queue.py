@@ -71,16 +71,29 @@ def get_queue(db: Session = Depends(get_db)):
     ]
 
 
+def _get_or_create_singer(db: Session, name: str):
+    name = name.strip()
+    if not name:
+        return None
+    singer = db.query(Singer).filter(Singer.name == name).first()
+    if not singer:
+        singer = Singer(name=name)
+        db.add(singer)
+        db.flush()
+    return singer
+
+
 @router.post("/api/queue")
-def add_to_queue(song_id: int, singer_id: int = None, db: Session = Depends(get_db)):
+def add_to_queue(song_id: int, singer_name: str = "", db: Session = Depends(get_db)):
     song = db.query(Song).filter(Song.id == song_id).first()
     if not song:
         raise HTTPException(status_code=404, detail="Song not found")
 
+    singer = _get_or_create_singer(db, singer_name) if singer_name.strip() else None
     max_pos = db.query(QueueEntry).filter(QueueEntry.status == "pending").count()
     entry = QueueEntry(
         song_id=song_id,
-        singer_id=singer_id,
+        singer_id=singer.id if singer else None,
         position=max_pos,
         status="pending",
     )
