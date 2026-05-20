@@ -325,17 +325,54 @@
     }
   }
 
-  // Check if local FS is available; show banner if not (Safari after reload)
-  localFsRestore().then(h => {
-    if (!h) document.getElementById('fs-banner').classList.remove('hidden');
+  // ── Pitch / Tempo (applied by queue page via BroadcastChannel) ────────
+  let _pitch = 0, _tempo = 0;
+
+  function applyPlaybackRate() {
+    if (!audioEl) return;
+    // pitch: semitone ratio, tempo: percentage steps of 4%
+    const rate = Math.pow(2, _pitch / 12) * (1 + _tempo * 0.04);
+    audioEl.playbackRate = Math.max(0.25, Math.min(4, rate));
+    audioEl.preservesPitch = (_tempo !== 0 && _pitch === 0);
+  }
+
+  // ── BroadcastChannel + localStorage listener ──────────────────────────
+  function handleCommand(cmd) {
+    if (cmd.pitch  !== undefined) { _pitch = cmd.pitch;  applyPlaybackRate(); }
+    if (cmd.tempo  !== undefined) { _tempo = cmd.tempo;  applyPlaybackRate(); }
+    if (cmd.volume !== undefined && audioEl) audioEl.volume = cmd.volume;
+    if (cmd.play)  { if (audioEl && !isPlaying) { audioEl.play(); if (cdgPlayer) cdgPlayer.resume(); isPlaying = true; updatePlayIcon(); } }
+    if (cmd.next)  { nextSong(); }
+  }
+
+  try {
+    const bc = new BroadcastChannel('karaoke');
+    bc.onmessage = e => handleCommand(e.data);
+  } catch (_) {}
+
+  window.addEventListener('storage', e => {
+    const keys = ['karaoke-pitch', 'karaoke-tempo', 'karaoke-volume', 'karaoke-play', 'karaoke-next'];
+    if (!keys.includes(e.key)) return;
+    try {
+      const { val, ts } = JSON.parse(e.newValue);
+      if (Date.now() - ts > 3000) return;
+      const k = e.key.replace('karaoke-', '');
+      handleCommand({ [k]: val });
+    } catch (_) {}
   });
 
-  // Auto-refresh check for new song in queue
-  setInterval(async () => {
-    if (!currentSong) await loadCurrentSong();
-  }, 5000);
+  // ── Init: restore local FS FIRST, then load song ──────────────────────
+  async function init() {
+    const h = await localFsRestore();
+    const banner = document.getElementById('fs-banner');
+    if (h) { banner.classList.add('hidden'); }
+    else   { banner.classList.remove('hidden'); }
+    await loadCurrentSong();
+  }
 
-  // Initial load
-  loadCurrentSong();
+  // Auto-refresh for new songs
+  setInterval(async () => { if (!currentSong) await loadCurrentSong(); }, 5000);
+
+  init();
 </script>
 {% endblock %}

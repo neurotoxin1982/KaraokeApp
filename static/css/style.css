@@ -1,5 +1,13 @@
 /* Additional styles beyond Tailwind */
 
+.btn-sm {
+  padding: 0.25rem 0.625rem;
+  border-radius: 0.5rem;
+  font-size: 0.8rem;
+  color: #e5e7eb;
+  transition: background-color 0.15s;
+}
+
 /* Smooth scrollbar for Firefox */
 * { scrollbar-width: thin; scrollbar-color: #4b5563 #1f2937; }
 
