@@ -1,21 +1,13 @@
 version: '3.8'
 
 services:
-  bgutil:
-    image: ghcr.io/brainicism/bgutil-yt-dlp-plugin:latest
-    restart: always
-
   web:
     build: .
     restart: always
     ports:
       - "5000:5000"
     volumes:
-      - video_data:/app/video
-      - yt_home:/app/yt_home
-    depends_on:
-      - bgutil
+      - library:/app/library
 
 volumes:
-  video_data:
-  yt_home:
+  library:
