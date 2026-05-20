@@ -248,8 +248,15 @@ async function unlockAudio() {
   await initPlayer();
 }
 
+// ── BroadcastChannel — sync popout ───────────────────────────────────────────
+let _bc = null;
+try { _bc = new BroadcastChannel('karaoke'); } catch(_) {}
+
+function _broadcast(msg) { if (_bc) try { _bc.postMessage(msg); } catch(_) {} }
+
 // ── Player state ──────────────────────────────────────────────────────────────
 let currentSong      = null;
+let _cdgBuf          = null; // stored for popout late-join
 let cdgPlayer        = null;
 let isPlaying        = false;
 let progressInterval = null;
@@ -270,8 +277,8 @@ function _stopCurrent() {
   if (_audioBuf) { _audioBuf = null; }
   if (_videoEl)  { _videoEl.pause(); _videoEl.src = ''; _videoEl = null; }
   if (cdgPlayer) { cdgPlayer.stop(); cdgPlayer = null; }
-  stopProgress();
-  isPlaying = false;
+  stopProgress(); isPlaying = false;
+  _broadcast({ type: 'stop' });
 }
 
 function scaleCanvas(c) {
@@ -343,6 +350,7 @@ async function playCdg(song) {
 
   _audioBuf = await _audioCtx.decodeAudioData(mp3Raw);
   _songDur  = _audioBuf.duration;
+  _cdgBuf   = cdgBuf; // store for popout late-join
 
   _gainNode = _audioCtx.createGain();
   _gainNode.gain.value = _vol();
@@ -360,6 +368,10 @@ async function playCdg(song) {
   cdgPlayer = new CdgPlayer(canvas);
   cdgPlayer.loadFromBuffer(cdgBuf);
   cdgPlayer.start(_audioCtx, _startAt);
+
+  // Tell popout about the new song + send CDG data
+  _broadcast({ type: 'song_info', title: song.title, artist: song.artist, singer_name: song.singer_name, file_path: song.file_path });
+  _broadcast({ type: 'cdg_data', data: cdgBuf.slice() });
 
   isPlaying = true; updatePlayIcon(); startProgress(); scaleCanvas(canvas);
 }
@@ -583,8 +595,31 @@ function quickAdd(id, label) {
   selectSong(id, label); openAddModal();
 }
 
-// ── Popout player sync (BroadcastChannel) ─────────────────────────────────────
-try { new BroadcastChannel('karaoke').onmessage = () => {}; } catch(_) {}
+// ── BroadcastChannel: respond to popout late-join ─────────────────────────────
+if (_bc) {
+  _bc.onmessage = (e) => {
+    if (e.data.type === 'request_state') {
+      if (currentSong && _cdgBuf) {
+        _broadcast({ type: 'song_info', title: currentSong.title, artist: currentSong.artist, singer_name: currentSong.singer_name });
+        _broadcast({ type: 'cdg_data', data: _cdgBuf.slice() });
+        _broadcast({ type: 'position', pos: _getCurrentPos() });
+      } else {
+        _broadcast({ type: 'stop' });
+      }
+    }
+  };
+}
+
+function _getCurrentPos() {
+  if (_audioCtx && _audioBuf) return isPlaying ? Math.max(0, _audioCtx.currentTime - _startAt) : _pausedPos;
+  if (_videoEl) return _videoEl.currentTime || 0;
+  return 0;
+}
+
+// Broadcast position every 250ms for popout sync
+setInterval(() => {
+  if (currentSong && isPlaying) _broadcast({ type: 'position', pos: _getCurrentPos() });
+}, 250);
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 setInterval(() => { if (_audioCtx && !currentSong) loadCurrentSong(); }, 5000);

@@ -1,105 +1,40 @@
 {% extends "base.html" %}
-{% block title %}Player — Karaoke Manager{% endblock %}
+{% block title %}Player{% endblock %}
 
 {% block content %}
-<div class="flex flex-col h-full bg-black">
+<div class="flex flex-col h-full bg-black relative overflow-hidden">
 
-  <!-- Player area -->
-  <div class="flex-1 flex items-center justify-center relative overflow-hidden" id="player-area">
-    <!-- CDG Canvas -->
-    <canvas id="cdg-canvas" class="hidden" style="image-rendering: pixelated;"></canvas>
+  <!-- CDG Canvas -->
+  <canvas id="cdg-canvas" class="hidden absolute inset-0 m-auto" style="image-rendering:pixelated"></canvas>
 
-    <!-- Video player -->
-    <video id="video-player" class="hidden max-w-full max-h-full" controls controlsList="nodownload">
-      Your browser does not support the video tag.
-    </video>
+  <!-- Video -->
+  <video id="video-player" class="hidden absolute inset-0 w-full h-full object-contain"></video>
 
-    <!-- Idle screen -->
-    <div id="idle-screen" class="text-center">
-      <i class="fa-solid fa-microphone text-gray-700 text-8xl mb-4"></i>
-      <p class="text-gray-600 text-xl">No song playing</p>
-      <p class="text-gray-700 text-sm mt-2">Add songs to the <a href="/queue" class="text-brand-light hover:underline">queue</a> to get started</p>
-    </div>
-
-    <!-- Audio unlock overlay — required by browser autoplay policy -->
-    <div id="audio-unlock" class="absolute inset-0 flex items-center justify-center bg-black cursor-pointer z-40"
-         onclick="unlockAudio()">
-      <div class="text-center select-none">
-        <i class="fa-solid fa-play-circle text-brand-light mb-6 block" style="font-size:6rem"></i>
-        <p class="text-white text-2xl font-bold mb-2">Tap to start</p>
-        <p class="text-gray-500 text-sm">Required once to enable audio</p>
-      </div>
-    </div>
-
-    <!-- Re-grant access banner (Safari / after reload) -->
-    <div id="fs-banner" class="hidden absolute top-4 left-4 right-4">
-      <div class="bg-yellow-900/80 border border-yellow-600 rounded-lg px-4 py-3 flex items-center gap-3 text-sm">
-        <i class="fa-solid fa-folder-open text-yellow-400 text-lg"></i>
-        <span class="flex-1 text-yellow-200">Grant access to your music folder to enable playback.</span>
-        <button onclick="regrantAccess()" class="bg-yellow-600 hover:bg-yellow-500 text-white px-3 py-1.5 rounded font-medium">
-          Select Folder
-        </button>
-      </div>
-    </div>
-
-    <!-- Song info overlay (CDG mode) -->
-    <div id="song-overlay" class="hidden absolute bottom-4 left-4 right-4">
-      <div class="bg-black/70 backdrop-blur rounded-lg px-4 py-2 flex items-center gap-4">
-        <div class="flex-1 min-w-0">
-          <div id="overlay-title" class="font-bold text-white truncate text-lg"></div>
-          <div id="overlay-artist" class="text-gray-300 text-sm truncate"></div>
-        </div>
-        <div id="overlay-singer" class="text-brand-light text-sm whitespace-nowrap"></div>
-      </div>
+  <!-- Idle -->
+  <div id="idle-screen" class="absolute inset-0 flex items-center justify-center text-center">
+    <div>
+      <i class="fa-solid fa-microphone text-gray-800 text-9xl mb-4 block"></i>
+      <p class="text-gray-700 text-xl">Waiting for playback…</p>
+      <p class="text-gray-800 text-sm mt-2">Start a song on the main screen</p>
     </div>
   </div>
 
-  <!-- Controls bar -->
-  <div class="bg-gray-900 border-t border-gray-800 px-6 py-4 flex-shrink-0">
-    <div class="max-w-4xl mx-auto flex items-center gap-4">
-
-      <!-- Now playing info -->
-      <div class="flex-1 min-w-0">
-        <div id="ctrl-title" class="font-semibold text-white truncate">—</div>
-        <div id="ctrl-meta" class="text-xs text-gray-400 truncate"></div>
-      </div>
-
-      <!-- Controls -->
-      <div class="flex items-center gap-3">
-        <button id="btn-play-pause" onclick="togglePlayPause()"
-          class="w-10 h-10 rounded-full bg-brand hover:bg-brand-dark flex items-center justify-center text-white text-lg">
-          <i class="fa-solid fa-play" id="play-icon"></i>
-        </button>
-        <button onclick="nextSong()"
-          class="w-8 h-8 rounded-full bg-gray-700 hover:bg-gray-600 flex items-center justify-center text-white">
-          <i class="fa-solid fa-forward-step"></i>
-        </button>
-      </div>
-
-      <!-- Volume -->
-      <div class="flex items-center gap-2">
-        <i class="fa-solid fa-volume-high text-gray-400 text-sm"></i>
-        <input type="range" id="volume-slider" min="0" max="1" step="0.02" value="1"
-          oninput="setVolume(this.value)"
-          class="w-20 accent-brand-light">
-      </div>
-
-      <!-- Progress -->
-      <div class="flex items-center gap-2 min-w-0" style="width:180px">
-        <span id="time-cur" class="text-xs text-gray-400 w-10 text-right">0:00</span>
-        <input type="range" id="progress-slider" min="0" max="100" step="0.1" value="0"
-          oninput="seek(this.value)"
-          class="flex-1 accent-brand-light">
-        <span id="time-dur" class="text-xs text-gray-400 w-10">0:00</span>
-      </div>
+  <!-- Song info overlay -->
+  <div id="song-overlay" class="hidden absolute bottom-0 left-0 right-0">
+    <div class="bg-gradient-to-t from-black/90 to-transparent px-8 py-6">
+      <div id="overlay-singer" class="text-brand-light text-xl font-bold mb-1"></div>
+      <div id="overlay-title"  class="text-white text-3xl font-bold truncate"></div>
+      <div id="overlay-artist" class="text-gray-300 text-lg truncate"></div>
     </div>
   </div>
 
-  <!-- Upcoming -->
-  <div id="upcoming-bar" class="bg-gray-900 border-t border-gray-800 px-6 py-2 flex-shrink-0 hidden">
-    <div class="max-w-4xl mx-auto flex items-center gap-4 overflow-x-auto">
-      <span class="text-xs text-gray-500 whitespace-nowrap">Up next:</span>
-      <div id="upcoming-list" class="flex gap-4"></div>
+  <!-- Tap overlay (folder access for video) -->
+  <div id="tap-overlay" class="hidden absolute inset-0 flex items-center justify-center bg-black/80 z-20 cursor-pointer"
+       onclick="grantAccess()">
+    <div class="text-center">
+      <i class="fa-solid fa-folder-open text-yellow-400 text-6xl mb-4 block"></i>
+      <p class="text-white text-xl font-bold">Tap to grant folder access</p>
+      <p class="text-gray-400 text-sm mt-1">Required for video playback</p>
     </div>
   </div>
 </div>
@@ -109,320 +44,119 @@
 <script src="/static/js/local-fs.js"></script>
 <script src="/static/js/cdg-player.js"></script>
 <script>
-  // ── Shared AudioContext — created ONCE on first user click ───────────────
-  // Must NOT be closed between songs (browser won't allow re-creation without click).
-  let _audioCtx = null;
+  let cdgPlayer   = null;
+  let _currentFile = null;
+  let _recvPos     = 0;
+  let _recvWall    = 0;
+  let _videoEl     = document.getElementById('video-player');
+  let _videoSrc    = null;
 
-  async function unlockAudio() {
-    document.getElementById('audio-unlock').classList.add('hidden');
-    _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    if (_audioCtx.state === 'suspended') await _audioCtx.resume();
-    await init();
+  // Interpolated position (for smooth CDG between BC messages)
+  function getFollowerPos() {
+    return _recvPos + (performance.now() - _recvWall) / 1000;
   }
 
-  // ── Song state ────────────────────────────────────────────────────────────
-  let currentSong      = null;
-  let cdgPlayer        = null;
-  let isPlaying        = false;
-  let progressInterval = null;
+  // ── BroadcastChannel ────────────────────────────────────────────────────────
+  let _bc = null;
+  try { _bc = new BroadcastChannel('karaoke'); } catch(_) {}
 
-  let _gainNode  = null;   // GainNode — persists across songs for volume
-  let _audioSrc  = null;   // AudioBufferSourceNode — new per song
-  let _audioBuf  = null;   // decoded AudioBuffer
-  let _startAt   = 0;      // audioCtx.currentTime when this song started
-  let _pausedPos = 0;      // position in seconds at pause
-  let _songDur   = 0;
+  if (_bc) {
+    _bc.onmessage = async (e) => {
+      const d = e.data;
 
-  let _videoEl   = null;   // HTMLVideoElement (video formats)
+      if (d.type === 'cdg_data') {
+        // New CDG data received — start follower renderer
+        const canvas = document.getElementById('cdg-canvas');
+        document.getElementById('idle-screen').classList.add('hidden');
+        document.getElementById('video-player').classList.add('hidden');
+        document.getElementById('video-player').src = '';
+        canvas.classList.remove('hidden');
+        document.getElementById('song-overlay').classList.remove('hidden');
 
-  // ── Helpers ──────────────────────────────────────────────────────────────
-  function _stopCurrent() {
-    // Stop audio source but keep AudioContext alive
-    if (_audioSrc) {
-      try { _audioSrc.onended = null; _audioSrc.stop(0); } catch(_) {}
-      _audioSrc = null;
+        if (cdgPlayer) cdgPlayer.stop();
+        cdgPlayer = new CdgPlayer(canvas);
+        cdgPlayer.loadFromBuffer(d.data);
+        cdgPlayer.startFollower(getFollowerPos);
+        scaleCanvas(canvas);
+      }
+
+      if (d.type === 'song_info') {
+        document.getElementById('overlay-title').textContent  = d.title  || '';
+        document.getElementById('overlay-artist').textContent = d.artist || '';
+        document.getElementById('overlay-singer').textContent = d.singer_name ? `♪ ${d.singer_name}` : '';
+        _currentFile = d.file_path || null;
+      }
+
+      if (d.type === 'position') {
+        // Update interpolation anchor
+        const newPos = d.pos;
+        _recvPos  = newPos;
+        _recvWall = performance.now();
+
+        // If CDG is significantly out of sync, jump to correct position
+        if (cdgPlayer && cdgPlayer._data) {
+          const cdgPos = cdgPlayer._pktIdx / CDG_PACKETS_PER_SEC;
+          if (Math.abs(newPos - cdgPos) > 1.0) {
+            cdgPlayer.seekTo(newPos);
+          }
+        }
+
+        // Sync video position if needed
+        if (_videoEl.src && !_videoEl.paused) {
+          if (Math.abs(_videoEl.currentTime - newPos) > 0.5) {
+            _videoEl.currentTime = newPos;
+          }
+        }
+      }
+
+      if (d.type === 'stop') {
+        if (cdgPlayer) { cdgPlayer.stop(); cdgPlayer = null; }
+        if (_videoEl.src) { _videoEl.pause(); _videoEl.src = ''; }
+        document.getElementById('cdg-canvas').classList.add('hidden');
+        document.getElementById('video-player').classList.add('hidden');
+        document.getElementById('song-overlay').classList.add('hidden');
+        document.getElementById('idle-screen').classList.remove('hidden');
+      }
+    };
+
+    // Tell main page we just opened — request current state
+    _bc.postMessage({ type: 'request_state' });
+  }
+
+  // ── Video (loaded from local FS if folder is accessible) ────────────────────
+  async function tryLoadVideo(filePath) {
+    const h = await localFsRestore();
+    if (!h) { document.getElementById('tap-overlay').classList.remove('hidden'); return; }
+    const src = await localFsBlobUrl(filePath);
+    if (!src) return;
+    _videoSrc = src;
+    _videoEl.src = src;
+    _videoEl.classList.remove('hidden');
+    document.getElementById('cdg-canvas').classList.add('hidden');
+    document.getElementById('idle-screen').classList.add('hidden');
+    document.getElementById('song-overlay').classList.remove('hidden');
+    _videoEl.muted = true; // audio plays on main screen
+    _videoEl.play().catch(() => {});
+  }
+
+  async function grantAccess() {
+    const h = await localFsPick();
+    if (h) {
+      document.getElementById('tap-overlay').classList.add('hidden');
+      if (_currentFile) tryLoadVideo(_currentFile);
     }
-    if (_gainNode) { _gainNode.disconnect(); _gainNode = null; }
-    if (_audioBuf) { _audioBuf = null; }
-    if (_videoEl)  { _videoEl.pause(); _videoEl.src = ''; _videoEl = null; }
-    if (cdgPlayer) { cdgPlayer.stop(); cdgPlayer = null; }
-    stopProgress();
-    isPlaying = false;
   }
 
-  function _vol() { return parseFloat(document.getElementById('volume-slider').value); }
-
-  function scaleCanvas(canvas) {
-    const area = document.getElementById('player-area');
-    const scale = Math.min(area.clientWidth / 300, area.clientHeight / 216);
-    canvas.style.width  = `${300 * scale}px`;
-    canvas.style.height = `${216 * scale}px`;
+  // ── Canvas scaling ───────────────────────────────────────────────────────────
+  function scaleCanvas(c) {
+    const W = window.innerWidth, H = window.innerHeight;
+    const scale = Math.min(W / 300, H / 216);
+    c.style.width  = `${300 * scale}px`;
+    c.style.height = `${216 * scale}px`;
   }
   window.addEventListener('resize', () => {
     const c = document.getElementById('cdg-canvas');
     if (!c.classList.contains('hidden')) scaleCanvas(c);
   });
-
-  // ── Idle screen ──────────────────────────────────────────────────────────
-  function showIdleScreen() {
-    _stopCurrent();
-    currentSong = null;
-    document.getElementById('idle-screen').classList.remove('hidden');
-    document.getElementById('cdg-canvas').classList.add('hidden');
-    document.getElementById('video-player').classList.add('hidden');
-    document.getElementById('song-overlay').classList.add('hidden');
-    document.getElementById('ctrl-title').textContent = '—';
-    document.getElementById('ctrl-meta').textContent = '';
-    document.getElementById('upcoming-bar').classList.add('hidden');
-  }
-
-  // ── Load current song from queue ─────────────────────────────────────────
-  async function loadCurrentSong() {
-    const data = await apiFetch('/api/queue/current');
-    if (!data.id) { showIdleScreen(); return; }
-    if (currentSong && currentSong.id === data.id) return;
-
-    if (!localFsReady()) {
-      document.getElementById('fs-banner').classList.remove('hidden');
-      document.getElementById('idle-screen').classList.remove('hidden');
-      document.getElementById('ctrl-title').textContent = `${data.artist} — ${data.title}`;
-      document.getElementById('ctrl-meta').textContent = 'Grant folder access to play';
-      currentSong = data;
-      return;
-    }
-
-    currentSong = data;
-    _stopCurrent();
-    document.getElementById('idle-screen').classList.add('hidden');
-    document.getElementById('ctrl-title').textContent = `${data.artist} — ${data.title}`;
-    document.getElementById('ctrl-meta').textContent = data.singer_name ? `Singer: ${data.singer_name}` : '';
-    document.getElementById('overlay-title').textContent = data.title;
-    document.getElementById('overlay-artist').textContent = data.artist;
-    document.getElementById('overlay-singer').textContent = data.singer_name ? `♪ ${data.singer_name}` : '';
-
-    const fmt = data.file_format;
-    if (['mp4','avi','webm','mkv','m4v','mpeg','mpg'].includes(fmt)) {
-      await playVideo(data);
-    } else if (fmt === 'cdg' || fmt === 'zip-cdg') {
-      await playCdg(data);
-    }
-    loadUpcoming();
-  }
-
-  // ── CDG + Web Audio (sample-accurate sync) ───────────────────────────────
-  async function playCdg(song) {
-    if (!_audioCtx) { showToast('Tap the screen first to enable audio', 'error'); return; }
-
-    const canvas = document.getElementById('cdg-canvas');
-    document.getElementById('video-player').classList.add('hidden');
-    canvas.classList.remove('hidden');
-    document.getElementById('song-overlay').classList.remove('hidden');
-
-    // Load CDG and MP3 bytes in parallel
-    const [cdgBuf, mp3BufRaw] = await Promise.all([
-      localFsArrayBuffer(song.file_path),
-      localFsArrayBuffer(song.audio_path),
-    ]);
-    if (!cdgBuf || !mp3BufRaw) {
-      showToast('Cannot read files — grant folder access', 'error');
-      showIdleScreen(); return;
-    }
-
-    // Decode MP3 — decodeAudioData detaches the buffer so we copy it first
-    _audioBuf = await _audioCtx.decodeAudioData(mp3BufRaw);
-    _songDur  = _audioBuf.duration;
-
-    // GainNode for volume (persists across songs if needed)
-    _gainNode = _audioCtx.createGain();
-    _gainNode.gain.value = _vol();
-    _gainNode.connect(_audioCtx.destination);
-
-    // BufferSource — schedule exactly 200ms ahead so browser has time
-    _audioSrc = _audioCtx.createBufferSource();
-    _audioSrc.buffer = _audioBuf;
-    _audioSrc.connect(_gainNode);
-    _audioSrc.onended = () => { if (isPlaying) nextSong(); };
-
-    _startAt   = _audioCtx.currentTime + 0.2;
-    _pausedPos = 0;
-    _audioSrc.start(_startAt);
-
-    // CDG uses the IDENTICAL _startAt — same clock, zero offset
-    cdgPlayer = new CdgPlayer(canvas);
-    cdgPlayer.loadFromBuffer(cdgBuf);
-    cdgPlayer.start(_audioCtx, _startAt);
-
-    isPlaying = true;
-    updatePlayIcon();
-    startProgress();
-    scaleCanvas(canvas);
-  }
-
-  // ── Video playback (HTML <video>) ────────────────────────────────────────
-  async function playVideo(song) {
-    const video = document.getElementById('video-player');
-    document.getElementById('cdg-canvas').classList.add('hidden');
-    document.getElementById('song-overlay').classList.add('hidden');
-    video.classList.remove('hidden');
-
-    const src = await localFsBlobUrl(song.file_path);
-    if (!src) { showToast('Cannot read video file', 'error'); showIdleScreen(); return; }
-    video.src = src;
-    video.volume = _vol();
-    video.onended = () => nextSong();
-    video.ontimeupdate = updateProgress;
-    await video.play();
-    _videoEl = video;
-    _songDur = video.duration || 0;
-    isPlaying = true;
-    updatePlayIcon();
-    startProgress();
-  }
-
-  // ── Playback controls ────────────────────────────────────────────────────
-  function togglePlayPause() {
-    if (_audioCtx) {
-      if (isPlaying) {
-        _pausedPos = Math.max(0, _audioCtx.currentTime - _startAt);
-        _audioCtx.suspend();
-        if (cdgPlayer) cdgPlayer.pause();
-        isPlaying = false;
-      } else {
-        _audioCtx.resume();
-        _startAt = _audioCtx.currentTime - _pausedPos;
-        if (cdgPlayer) cdgPlayer.resume(_audioCtx, _startAt);
-        isPlaying = true;
-      }
-    } else if (_videoEl) {
-      if (isPlaying) { _videoEl.pause(); isPlaying = false; }
-      else           { _videoEl.play();  isPlaying = true;  }
-    }
-    updatePlayIcon();
-  }
-
-  function setVolume(v) {
-    if (_gainNode) _gainNode.gain.value = parseFloat(v);
-    if (_videoEl)  _videoEl.volume = parseFloat(v);
-  }
-
-  function seek(pct) {
-    if (_audioCtx && _audioBuf && _audioSrc) {
-      const seekPos = (pct / 100) * _audioBuf.duration;
-      // Stop old source, start new one at offset
-      try { _audioSrc.onended = null; _audioSrc.stop(); } catch(_){}
-      _audioSrc = _audioCtx.createBufferSource();
-      _audioSrc.buffer = _audioBuf;
-      _audioSrc.connect(_gainNode);
-      _audioSrc.onended = () => { if (isPlaying) nextSong(); };
-      const newStart = _audioCtx.currentTime + 0.05;
-      _audioSrc.start(newStart, seekPos);
-      _startAt = newStart - seekPos;
-      if (cdgPlayer) cdgPlayer.seekTo(seekPos, _audioCtx, _startAt);
-    } else if (_videoEl) {
-      _videoEl.currentTime = (pct / 100) * (_videoEl.duration || 0);
-    }
-  }
-
-  // ── Progress bar ─────────────────────────────────────────────────────────
-  function startProgress() {
-    stopProgress();
-    progressInterval = setInterval(updateProgress, 250);
-  }
-  function stopProgress() {
-    if (progressInterval) { clearInterval(progressInterval); progressInterval = null; }
-  }
-  function updateProgress() {
-    let cur = 0, dur = _songDur;
-    if (_audioCtx && isPlaying) {
-      cur = Math.max(0, _audioCtx.currentTime - _startAt);
-    } else if (_audioCtx && !isPlaying) {
-      cur = _pausedPos;
-    } else if (_videoEl) {
-      cur = _videoEl.currentTime || 0;
-      dur = _videoEl.duration    || 0;
-    }
-    document.getElementById('time-cur').textContent = fmtTime(cur);
-    document.getElementById('time-dur').textContent = fmtTime(dur);
-    if (dur > 0) document.getElementById('progress-slider').value = (cur / dur) * 100;
-  }
-
-  function fmtTime(s) {
-    if (!s || isNaN(s)) return '0:00';
-    return `${Math.floor(s/60)}:${Math.floor(s%60).toString().padStart(2,'0')}`;
-  }
-
-  function updatePlayIcon() {
-    document.getElementById('play-icon').className = isPlaying ? 'fa-solid fa-pause' : 'fa-solid fa-play';
-  }
-
-  // ── Next song ────────────────────────────────────────────────────────────
-  async function nextSong() {
-    _stopCurrent();
-    currentSong = null;
-    await apiFetch('/api/queue/next', { method: 'POST' });
-    await loadCurrentSong();
-  }
-
-  // ── Upcoming bar ─────────────────────────────────────────────────────────
-  async function loadUpcoming() {
-    const queue   = await apiFetch('/api/queue');
-    const pending = queue.filter(e => e.status === 'pending').slice(0, 5);
-    const bar  = document.getElementById('upcoming-bar');
-    const list = document.getElementById('upcoming-list');
-    if (!pending.length) { bar.classList.add('hidden'); return; }
-    bar.classList.remove('hidden');
-    list.innerHTML = pending.map(e => `
-      <div class="flex items-center gap-2 bg-gray-800 rounded px-3 py-1 whitespace-nowrap text-sm">
-        <span class="text-gray-300">${e.singer_name ? '<b>'+e.singer_name+'</b> · ' : ''}${e.title}</span>
-      </div>`).join('');
-  }
-
-  // ── Folder access ────────────────────────────────────────────────────────
-  async function regrantAccess() {
-    const h = await localFsPick();
-    if (h) {
-      document.getElementById('fs-banner').classList.add('hidden');
-      showToast('Access granted: ' + h.name);
-      if (currentSong) { currentSong = null; await loadCurrentSong(); }
-    }
-  }
-
-  // ── Remote controls (from queue page via BroadcastChannel) ──────────────
-  let _pitch = 0, _tempo = 0;
-
-  function _applyRate() {
-    const rate = Math.pow(2, _pitch / 12) * (1 + _tempo * 0.04);
-    const clamped = Math.max(0.25, Math.min(4, rate));
-    if (_audioSrc) _audioSrc.playbackRate.value = clamped;
-    if (_videoEl)  { _videoEl.playbackRate = clamped; _videoEl.preservesPitch = true; }
-  }
-
-  function handleCommand(cmd) {
-    if (cmd.pitch  !== undefined) { _pitch = cmd.pitch; _applyRate(); }
-    if (cmd.tempo  !== undefined) { _tempo = cmd.tempo; _applyRate(); }
-    if (cmd.volume !== undefined) setVolume(cmd.volume);
-    if (cmd.sync   !== undefined) cdgSyncOffset = cmd.sync;
-    if (cmd.play && !isPlaying)   togglePlayPause();
-    if (cmd.next)                 nextSong();
-  }
-
-  try { new BroadcastChannel('karaoke').onmessage = e => handleCommand(e.data); } catch(_) {}
-  window.addEventListener('storage', e => {
-    if (!e.key?.startsWith('karaoke-')) return;
-    try {
-      const { val, ts } = JSON.parse(e.newValue);
-      if (Date.now() - ts < 3000) handleCommand({ [e.key.replace('karaoke-','')]: val });
-    } catch(_) {}
-  });
-
-  // ── Boot — waits for user tap before doing anything ──────────────────────
-  async function init() {
-    const h = await localFsRestore();
-    document.getElementById('fs-banner').classList.toggle('hidden', !!h);
-    await loadCurrentSong();
-  }
-
-  setInterval(() => { if (_audioCtx && !currentSong) loadCurrentSong(); }, 5000);
-  // init() is called by unlockAudio() on first tap — NOT on page load.
 </script>
 {% endblock %}
