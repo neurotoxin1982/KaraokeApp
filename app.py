@@ -12,6 +12,14 @@ socketio = SocketIO(app, cors_allowed_origins='*', async_mode='eventlet')
 AUDIO_DIR = os.environ.get('AUDIO_DIR', '/app/audio')
 os.makedirs(AUDIO_DIR, exist_ok=True)
 
+# Write YouTube cookies from env var to a temp file on startup
+_COOKIES_FILE = None
+_cookies_content = os.environ.get('YOUTUBE_COOKIES', '').strip()
+if _cookies_content:
+    _COOKIES_FILE = '/tmp/yt-cookies.txt'
+    with open(_COOKIES_FILE, 'w') as _f:
+        _f.write(_cookies_content)
+
 _state = {'song': None, 'start_ts': None, 'paused_pos': None}
 
 INVIDIOUS_INSTANCES = [
@@ -61,24 +69,38 @@ def _fetch_lyrics(title, channel):
     return ''
 
 def _download_audio(video_id, out_path):
-    """Try yt-dlp with multiple player clients to bypass bot detection."""
+    """Try yt-dlp with cookies (if available) then multiple player clients."""
     url = f'https://www.youtube.com/watch?v={video_id}'
-    clients = ['tv_embedded', 'web_creator', 'ios', 'android', 'mweb']
-    last_err = ''
-    for client in clients:
-        result = subprocess.run([
-            'yt-dlp',
-            '--extract-audio', '--audio-format', 'mp3', '--audio-quality', '4',
-            '-o', out_path,
-            '--extractor-args', f'youtube:player_client={client}',
-            '--no-playlist',
-            url,
-        ], capture_output=True, text=True, timeout=300)
-        if result.returncode == 0 and os.path.exists(out_path):
-            return
-        last_err = result.stderr[-200:] if result.stderr else 'unbekannter Fehler'
 
-    raise RuntimeError(f'Download fehlgeschlagen (alle Clients versucht): {last_err}')
+    base_args = [
+        'yt-dlp',
+        '--extract-audio', '--audio-format', 'mp3', '--audio-quality', '4',
+        '-o', out_path, '--no-playlist',
+    ]
+    if _COOKIES_FILE:
+        base_args += ['--cookies', _COOKIES_FILE]
+
+    # With cookies: try once directly
+    if _COOKIES_FILE:
+        r = subprocess.run(base_args + [url], capture_output=True, text=True, timeout=300)
+        if r.returncode == 0 and os.path.exists(out_path):
+            return
+
+    # Without cookies (or if cookies failed): try multiple player clients
+    last_err = ''
+    for client in ['tv_embedded', 'web_creator', 'ios', 'android']:
+        args = base_args + ['--extractor-args', f'youtube:player_client={client}', url]
+        r = subprocess.run(args, capture_output=True, text=True, timeout=300)
+        if r.returncode == 0 and os.path.exists(out_path):
+            return
+        last_err = r.stderr[-300:] if r.stderr else ''
+
+    if not _COOKIES_FILE:
+        raise RuntimeError(
+            'YouTube blockiert diesen Server. Lösung: YOUTUBE_COOKIES Umgebungsvariable setzen '
+            '(cookies.txt Inhalt aus eingeloggtem Chrome-Browser via "Get cookies.txt LOCALLY" Extension).'
+        )
+    raise RuntimeError(f'Download fehlgeschlagen: {last_err}')
 
 # ── HTML ──────────────────────────────────────────────────────────────────────
 
