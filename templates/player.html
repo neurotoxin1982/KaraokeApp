@@ -99,33 +99,52 @@
 <script src="/static/js/local-fs.js"></script>
 <script src="/static/js/cdg-player.js"></script>
 <script>
-  let currentSong = null;
-  let audioEl = null;
-  let cdgPlayer = null;
-  let isPlaying = false;
+  // ── State ────────────────────────────────────────────────────────────────
+  let currentSong      = null;
+  let cdgPlayer        = null;
+  let isPlaying        = false;
   let progressInterval = null;
 
-  async function loadCurrentSong() {
-    const data = await apiFetch('/api/queue/current');
-    if (!data.id) { showIdleScreen(); return; }
-    if (currentSong && currentSong.id === data.id) return;
+  // Web Audio API (CDG playback)
+  let _audioCtx  = null;   // AudioContext
+  let _gainNode  = null;   // volume control
+  let _audioSrc  = null;   // AudioBufferSourceNode
+  let _audioBuf  = null;   // decoded AudioBuffer
+  let _startAt   = 0;      // audioCtx.currentTime when song started
+  let _pausedPos = 0;      // position (seconds) when paused
+  let _songDur   = 0;      // total duration in seconds
 
-    // Don't play until local folder access is granted
-    if (!localFsReady()) {
-      document.getElementById('fs-banner').classList.remove('hidden');
-      document.getElementById('idle-screen').classList.remove('hidden');
-      document.getElementById('ctrl-title').textContent = `${data.artist} — ${data.title}`;
-      document.getElementById('ctrl-meta').textContent = 'Grant folder access to play';
-      currentSong = data; // remember so we auto-play after access is granted
-      return;
-    }
+  // HTML <video> element (video format playback)
+  let _videoEl = null;
 
-    currentSong = data;
-    playSong(data);
-    loadUpcoming();
+  // ── Helpers ──────────────────────────────────────────────────────────────
+  function _stopAll() {
+    if (_audioSrc) { try { _audioSrc.onended = null; _audioSrc.stop(); } catch(_){} _audioSrc = null; }
+    if (_audioCtx) { _audioCtx.close(); _audioCtx = null; }
+    if (_gainNode) { _gainNode = null; }
+    if (_audioBuf) { _audioBuf = null; }
+    if (_videoEl)  { _videoEl.pause(); _videoEl.src = ''; _videoEl = null; }
+    if (cdgPlayer) { cdgPlayer.stop(); cdgPlayer = null; }
+    stopProgress();
+    isPlaying = false;
   }
 
+  function _vol() { return parseFloat(document.getElementById('volume-slider').value); }
+
+  function scaleCanvas(canvas) {
+    const area = document.getElementById('player-area');
+    const scale = Math.min(area.clientWidth / 300, area.clientHeight / 216);
+    canvas.style.width  = `${300 * scale}px`;
+    canvas.style.height = `${216 * scale}px`;
+  }
+  window.addEventListener('resize', () => {
+    const c = document.getElementById('cdg-canvas');
+    if (!c.classList.contains('hidden')) scaleCanvas(c);
+  });
+
+  // ── Idle screen ──────────────────────────────────────────────────────────
   function showIdleScreen() {
+    _stopAll();
     currentSong = null;
     document.getElementById('idle-screen').classList.remove('hidden');
     document.getElementById('cdg-canvas').classList.add('hidden');
@@ -134,256 +153,254 @@
     document.getElementById('ctrl-title').textContent = '—';
     document.getElementById('ctrl-meta').textContent = '';
     document.getElementById('upcoming-bar').classList.add('hidden');
-    stopProgress();
-    if (audioEl) { audioEl.pause(); audioEl = null; }
   }
 
-  function playSong(song) {
-    document.getElementById('idle-screen').classList.add('hidden');
+  // ── Load current song from queue ─────────────────────────────────────────
+  async function loadCurrentSong() {
+    const data = await apiFetch('/api/queue/current');
+    if (!data.id) { showIdleScreen(); return; }
+    if (currentSong && currentSong.id === data.id) return;
 
-    const fmt = song.file_format;
-    const isVideo = ['mp4', 'avi', 'webm', 'mkv', 'm4v', 'mpeg', 'mpg'].includes(fmt);
-    const isCdg = fmt === 'cdg' || fmt === 'zip-cdg';
-
-    document.getElementById('ctrl-title').textContent = `${song.artist} — ${song.title}`;
-    document.getElementById('ctrl-meta').textContent = song.singer_name ? `Singer: ${song.singer_name}` : '';
-    document.getElementById('overlay-title').textContent = song.title;
-    document.getElementById('overlay-artist').textContent = song.artist;
-    document.getElementById('overlay-singer').textContent = song.singer_name ? `♪ ${song.singer_name}` : '';
-
-    if (isVideo) {
-      playVideo(song);
-    } else if (isCdg) {
-      playCdg(song);
+    if (!localFsReady()) {
+      document.getElementById('fs-banner').classList.remove('hidden');
+      document.getElementById('idle-screen').classList.remove('hidden');
+      document.getElementById('ctrl-title').textContent = `${data.artist} — ${data.title}`;
+      document.getElementById('ctrl-meta').textContent = 'Grant folder access to play';
+      currentSong = data;
+      return;
     }
+
+    currentSong = data;
+    _stopAll();
+    document.getElementById('idle-screen').classList.add('hidden');
+    document.getElementById('ctrl-title').textContent = `${data.artist} — ${data.title}`;
+    document.getElementById('ctrl-meta').textContent = data.singer_name ? `Singer: ${data.singer_name}` : '';
+    document.getElementById('overlay-title').textContent = data.title;
+    document.getElementById('overlay-artist').textContent = data.artist;
+    document.getElementById('overlay-singer').textContent = data.singer_name ? `♪ ${data.singer_name}` : '';
+
+    const fmt = data.file_format;
+    if (['mp4','avi','webm','mkv','m4v','mpeg','mpg'].includes(fmt)) {
+      await playVideo(data);
+    } else if (fmt === 'cdg' || fmt === 'zip-cdg') {
+      await playCdg(data);
+    }
+    loadUpcoming();
+  }
+
+  // ── CDG + Web Audio (sample-accurate sync) ───────────────────────────────
+  async function playCdg(song) {
+    const canvas = document.getElementById('cdg-canvas');
+    document.getElementById('video-player').classList.add('hidden');
+    canvas.classList.remove('hidden');
+    document.getElementById('song-overlay').classList.remove('hidden');
+
+    // Load CDG and MP3 bytes in parallel
+    const [cdgBuf, mp3Buf] = await Promise.all([
+      localFsArrayBuffer(song.file_path),
+      localFsArrayBuffer(song.audio_path),
+    ]);
+    if (!cdgBuf || !mp3Buf) {
+      showToast('Cannot read files — grant folder access', 'error');
+      showIdleScreen(); return;
+    }
+
+    // Create AudioContext and decode MP3
+    _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    _audioBuf = await _audioCtx.decodeAudioData(mp3Buf);
+    _songDur  = _audioBuf.duration;
+
+    // Volume
+    _gainNode = _audioCtx.createGain();
+    _gainNode.gain.value = _vol();
+    _gainNode.connect(_audioCtx.destination);
+
+    // Schedule source exactly 100ms from now — gives browser time to prepare
+    _audioSrc = _audioCtx.createBufferSource();
+    _audioSrc.buffer = _audioBuf;
+    _audioSrc.connect(_gainNode);
+    _audioSrc.onended = () => { if (isPlaying) nextSong(); };
+
+    _startAt = _audioCtx.currentTime + 0.1;
+    _audioSrc.start(_startAt);     // MP3 starts at _startAt
+    _pausedPos = 0;
+
+    // CDG starts at the SAME _startAt — zero offset, guaranteed
+    cdgPlayer = new CdgPlayer(canvas);
+    cdgPlayer.loadFromBuffer(cdgBuf);
+    cdgPlayer.start(_audioCtx, _startAt);
+
+    isPlaying = true;
+    updatePlayIcon();
     startProgress();
+    scaleCanvas(canvas);
   }
 
-  let _blobUrls = [];
-  function _revokeBlobs() {
-    _blobUrls.forEach(u => URL.revokeObjectURL(u));
-    _blobUrls = [];
-  }
-
+  // ── Video playback (HTML <video>) ────────────────────────────────────────
   async function playVideo(song) {
     const video = document.getElementById('video-player');
     document.getElementById('cdg-canvas').classList.add('hidden');
     document.getElementById('song-overlay').classList.add('hidden');
     video.classList.remove('hidden');
-    _revokeBlobs();
 
-    let src = await localFsBlobUrl(song.file_path);
-    if (src) { _blobUrls.push(src); }
-    else { src = `/media/${song.song_id}/video`; }
-
+    const src = await localFsBlobUrl(song.file_path);
+    if (!src) { showToast('Cannot read video file', 'error'); showIdleScreen(); return; }
     video.src = src;
-    video.volume = parseFloat(document.getElementById('volume-slider').value);
-    video.play();
-    video.ontimeupdate = updateProgress;
+    video.volume = _vol();
     video.onended = () => nextSong();
-    audioEl = video;
+    video.ontimeupdate = updateProgress;
+    await video.play();
+    _videoEl = video;
+    _songDur = video.duration || 0;
     isPlaying = true;
     updatePlayIcon();
+    startProgress();
   }
 
-  async function playCdg(song) {
-    document.getElementById('video-player').classList.add('hidden');
-    const canvas = document.getElementById('cdg-canvas');
-    canvas.classList.remove('hidden');
-    document.getElementById('song-overlay').classList.remove('hidden');
-    if (audioEl) { audioEl.pause(); }
-    if (cdgPlayer) { cdgPlayer.stop(); cdgPlayer = null; }
-    _revokeBlobs();
-
-    // Load both files in parallel for speed
-    const [cdgBuffer, audioSrc] = await Promise.all([
-      song.file_path  ? localFsArrayBuffer(song.file_path)  : Promise.resolve(null),
-      song.audio_path ? localFsBlobUrl(song.audio_path)     : Promise.resolve(null),
-    ]);
-
-    if (!cdgBuffer) {
-      showToast('Cannot read CDG file — grant folder access first', 'error');
-      showIdleScreen();
-      return;
-    }
-    if (!audioSrc) {
-      showToast('Cannot read audio file — grant folder access first', 'error');
-      showIdleScreen();
-      return;
-    }
-    _blobUrls.push(audioSrc);
-
-    audioEl = new Audio(audioSrc);
-    audioEl.volume = parseFloat(document.getElementById('volume-slider').value);
-    audioEl.onended = () => nextSong();
-    audioEl.ontimeupdate = updateProgress;
-
-    // CdgPlayer listens for the 'playing' event and starts in sync.
-    cdgPlayer = new CdgPlayer(canvas, audioEl);
-    cdgPlayer.loadFromBuffer(cdgBuffer);
-
-    // Start audio — CDG will begin exactly when 'playing' fires.
-    await audioEl.play();
-    isPlaying = true;
-    updatePlayIcon();
-    scaleCanvas(canvas);
-  }
-
-  function scaleCanvas(canvas) {
-    const area = document.getElementById('player-area');
-    const aW = area.clientWidth, aH = area.clientHeight;
-    const scale = Math.min(aW / 300, aH / 216);
-    canvas.style.width = `${300 * scale}px`;
-    canvas.style.height = `${216 * scale}px`;
-  }
-
-  window.addEventListener('resize', () => {
-    const canvas = document.getElementById('cdg-canvas');
-    if (!canvas.classList.contains('hidden')) scaleCanvas(canvas);
-  });
-
+  // ── Playback controls ────────────────────────────────────────────────────
   function togglePlayPause() {
-    if (!audioEl) return;
-    if (isPlaying) {
-      audioEl.pause();
-      if (cdgPlayer) cdgPlayer.pause();
-      isPlaying = false;
-    } else {
-      if (cdgPlayer) cdgPlayer.resume(); // re-anchor wall clock before audio starts
-      audioEl.play();
-      isPlaying = true;
+    if (_audioCtx) {
+      if (isPlaying) {
+        _pausedPos = Math.max(0, _audioCtx.currentTime - _startAt);
+        _audioCtx.suspend();
+        if (cdgPlayer) cdgPlayer.pause();
+        isPlaying = false;
+      } else {
+        _audioCtx.resume();
+        _startAt = _audioCtx.currentTime - _pausedPos;
+        if (cdgPlayer) cdgPlayer.resume(_audioCtx, _startAt);
+        isPlaying = true;
+      }
+    } else if (_videoEl) {
+      if (isPlaying) { _videoEl.pause(); isPlaying = false; }
+      else           { _videoEl.play();  isPlaying = true;  }
     }
     updatePlayIcon();
-  }
-
-  function updatePlayIcon() {
-    const icon = document.getElementById('play-icon');
-    icon.className = isPlaying ? 'fa-solid fa-pause' : 'fa-solid fa-play';
   }
 
   function setVolume(v) {
-    if (audioEl) audioEl.volume = parseFloat(v);
+    if (_gainNode) _gainNode.gain.value = parseFloat(v);
+    if (_videoEl)  _videoEl.volume = parseFloat(v);
   }
 
   function seek(pct) {
-    if (!audioEl || !audioEl.duration) return;
-    audioEl.currentTime = (pct / 100) * audioEl.duration;
+    if (_audioCtx && _audioBuf && _audioSrc) {
+      const seekPos = (pct / 100) * _audioBuf.duration;
+      // Stop old source, start new one at offset
+      try { _audioSrc.onended = null; _audioSrc.stop(); } catch(_){}
+      _audioSrc = _audioCtx.createBufferSource();
+      _audioSrc.buffer = _audioBuf;
+      _audioSrc.connect(_gainNode);
+      _audioSrc.onended = () => { if (isPlaying) nextSong(); };
+      const newStart = _audioCtx.currentTime + 0.05;
+      _audioSrc.start(newStart, seekPos);
+      _startAt = newStart - seekPos;
+      if (cdgPlayer) cdgPlayer.seekTo(seekPos, _audioCtx, _startAt);
+    } else if (_videoEl) {
+      _videoEl.currentTime = (pct / 100) * (_videoEl.duration || 0);
+    }
   }
 
+  // ── Progress bar ─────────────────────────────────────────────────────────
   function startProgress() {
     stopProgress();
-    progressInterval = setInterval(updateProgress, 500);
+    progressInterval = setInterval(updateProgress, 250);
   }
-
   function stopProgress() {
     if (progressInterval) { clearInterval(progressInterval); progressInterval = null; }
   }
-
   function updateProgress() {
-    if (!audioEl) return;
-    const cur = audioEl.currentTime || 0;
-    const dur = audioEl.duration || 0;
+    let cur = 0, dur = _songDur;
+    if (_audioCtx && isPlaying) {
+      cur = Math.max(0, _audioCtx.currentTime - _startAt);
+    } else if (_audioCtx && !isPlaying) {
+      cur = _pausedPos;
+    } else if (_videoEl) {
+      cur = _videoEl.currentTime || 0;
+      dur = _videoEl.duration    || 0;
+    }
     document.getElementById('time-cur').textContent = fmtTime(cur);
     document.getElementById('time-dur').textContent = fmtTime(dur);
-    if (dur > 0) {
-      document.getElementById('progress-slider').value = (cur / dur) * 100;
-    }
+    if (dur > 0) document.getElementById('progress-slider').value = (cur / dur) * 100;
   }
 
   function fmtTime(s) {
     if (!s || isNaN(s)) return '0:00';
-    const m = Math.floor(s / 60);
-    const sec = Math.floor(s % 60).toString().padStart(2, '0');
-    return `${m}:${sec}`;
+    return `${Math.floor(s/60)}:${Math.floor(s%60).toString().padStart(2,'0')}`;
   }
 
+  function updatePlayIcon() {
+    document.getElementById('play-icon').className = isPlaying ? 'fa-solid fa-pause' : 'fa-solid fa-play';
+  }
+
+  // ── Next song ────────────────────────────────────────────────────────────
   async function nextSong() {
-    const data = await apiFetch('/api/queue/next', { method: 'POST' });
-    if (audioEl) { audioEl.pause(); audioEl = null; }
-    if (cdgPlayer) { cdgPlayer.stop(); cdgPlayer = null; }
-    isPlaying = false;
+    _stopAll();
     currentSong = null;
+    await apiFetch('/api/queue/next', { method: 'POST' });
     await loadCurrentSong();
   }
 
+  // ── Upcoming bar ─────────────────────────────────────────────────────────
   async function loadUpcoming() {
-    const queue = await apiFetch('/api/queue');
+    const queue   = await apiFetch('/api/queue');
     const pending = queue.filter(e => e.status === 'pending').slice(0, 5);
-    const bar = document.getElementById('upcoming-bar');
+    const bar  = document.getElementById('upcoming-bar');
     const list = document.getElementById('upcoming-list');
     if (!pending.length) { bar.classList.add('hidden'); return; }
     bar.classList.remove('hidden');
     list.innerHTML = pending.map(e => `
       <div class="flex items-center gap-2 bg-gray-800 rounded px-3 py-1 whitespace-nowrap text-sm">
-        <span class="text-gray-300">${e.artist} — ${e.title}</span>
-        ${e.singer_name ? `<span class="text-brand-light text-xs">${e.singer_name}</span>` : ''}
-      </div>
-    `).join('');
+        <span class="text-gray-300">${e.singer_name ? '<b>'+e.singer_name+'</b> · ' : ''}${e.title}</span>
+      </div>`).join('');
   }
 
+  // ── Folder access ────────────────────────────────────────────────────────
   async function regrantAccess() {
     const h = await localFsPick();
     if (h) {
       document.getElementById('fs-banner').classList.add('hidden');
-      showToast('Folder access granted: ' + h.name);
-      // Auto-play the song that was waiting
-      if (currentSong) {
-        const pending = currentSong;
-        currentSong = null;
-        await loadCurrentSong();
-      }
+      showToast('Access granted: ' + h.name);
+      if (currentSong) { currentSong = null; await loadCurrentSong(); }
     }
   }
 
-  // ── Pitch / Tempo (applied by queue page via BroadcastChannel) ────────
+  // ── Remote controls (from queue page via BroadcastChannel) ──────────────
   let _pitch = 0, _tempo = 0;
 
-  function applyPlaybackRate() {
-    if (!audioEl) return;
-    // pitch: semitone ratio, tempo: percentage steps of 4%
+  function _applyRate() {
     const rate = Math.pow(2, _pitch / 12) * (1 + _tempo * 0.04);
-    audioEl.playbackRate = Math.max(0.25, Math.min(4, rate));
-    audioEl.preservesPitch = (_tempo !== 0 && _pitch === 0);
+    const clamped = Math.max(0.25, Math.min(4, rate));
+    if (_audioSrc) _audioSrc.playbackRate.value = clamped;
+    if (_videoEl)  { _videoEl.playbackRate = clamped; _videoEl.preservesPitch = true; }
   }
 
-  // ── BroadcastChannel + localStorage listener ──────────────────────────
   function handleCommand(cmd) {
-    if (cmd.pitch  !== undefined) { _pitch = cmd.pitch;  applyPlaybackRate(); }
-    if (cmd.tempo  !== undefined) { _tempo = cmd.tempo;  applyPlaybackRate(); }
-    if (cmd.volume !== undefined && audioEl) audioEl.volume = cmd.volume;
-    if (cmd.sync   !== undefined) { cdgSyncOffset = cmd.sync; } // seconds
-    if (cmd.play)  { if (audioEl && !isPlaying) { audioEl.play(); if (cdgPlayer) cdgPlayer.resume(); isPlaying = true; updatePlayIcon(); } }
-    if (cmd.next)  { nextSong(); }
+    if (cmd.pitch  !== undefined) { _pitch = cmd.pitch; _applyRate(); }
+    if (cmd.tempo  !== undefined) { _tempo = cmd.tempo; _applyRate(); }
+    if (cmd.volume !== undefined) setVolume(cmd.volume);
+    if (cmd.sync   !== undefined) cdgSyncOffset = cmd.sync;
+    if (cmd.play && !isPlaying)   togglePlayPause();
+    if (cmd.next)                 nextSong();
   }
 
-  try {
-    const bc = new BroadcastChannel('karaoke');
-    bc.onmessage = e => handleCommand(e.data);
-  } catch (_) {}
-
+  try { new BroadcastChannel('karaoke').onmessage = e => handleCommand(e.data); } catch(_) {}
   window.addEventListener('storage', e => {
-    const keys = ['karaoke-pitch', 'karaoke-tempo', 'karaoke-volume', 'karaoke-play', 'karaoke-next'];
-    if (!keys.includes(e.key)) return;
+    if (!e.key?.startsWith('karaoke-')) return;
     try {
       const { val, ts } = JSON.parse(e.newValue);
-      if (Date.now() - ts > 3000) return;
-      const k = e.key.replace('karaoke-', '');
-      handleCommand({ [k]: val });
-    } catch (_) {}
+      if (Date.now() - ts < 3000) handleCommand({ [e.key.replace('karaoke-','')]: val });
+    } catch(_) {}
   });
 
-  // ── Init: restore local FS FIRST, then load song ──────────────────────
+  // ── Boot ─────────────────────────────────────────────────────────────────
   async function init() {
     const h = await localFsRestore();
-    const banner = document.getElementById('fs-banner');
-    if (h) { banner.classList.add('hidden'); }
-    else   { banner.classList.remove('hidden'); }
+    document.getElementById('fs-banner').classList.toggle('hidden', !!h);
     await loadCurrentSong();
   }
 
-  // Auto-refresh for new songs
-  setInterval(async () => { if (!currentSong) await loadCurrentSong(); }, 5000);
-
+  setInterval(() => { if (!currentSong) loadCurrentSong(); }, 5000);
   init();
 </script>
 {% endblock %}
