@@ -56,7 +56,11 @@ class CdgPlayer {
   async load() {
     const resp = await fetch(this.cdgUrl);
     const buf = await resp.arrayBuffer();
-    this._cdgData = new Uint8Array(buf);
+    this.loadFromBuffer(buf);
+  }
+
+  loadFromBuffer(buffer) {
+    this._cdgData = new Uint8Array(buffer);
     this._reset();
     this._renderLoop();
   }

@@ -85,6 +85,7 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="/static/js/local-fs.js"></script>
 <script src="/static/js/cdg-player.js"></script>
 <script>
   let currentSong = null;
@@ -139,12 +140,24 @@
     startProgress();
   }
 
-  function playVideo(song) {
+  let _blobUrls = [];
+  function _revokeBlobs() {
+    _blobUrls.forEach(u => URL.revokeObjectURL(u));
+    _blobUrls = [];
+  }
+
+  async function playVideo(song) {
     const video = document.getElementById('video-player');
     document.getElementById('cdg-canvas').classList.add('hidden');
     document.getElementById('song-overlay').classList.add('hidden');
     video.classList.remove('hidden');
-    video.src = `/media/${song.song_id}/video`;
+    _revokeBlobs();
+
+    let src = await localFsBlobUrl(song.file_path);
+    if (src) { _blobUrls.push(src); }
+    else { src = `/media/${song.song_id}/video`; }
+
+    video.src = src;
     video.volume = parseFloat(document.getElementById('volume-slider').value);
     video.play();
     video.ontimeupdate = updateProgress;
@@ -154,27 +167,41 @@
     updatePlayIcon();
   }
 
-  function playCdg(song) {
+  async function playCdg(song) {
     document.getElementById('video-player').classList.add('hidden');
     const canvas = document.getElementById('cdg-canvas');
     canvas.classList.remove('hidden');
     document.getElementById('song-overlay').classList.remove('hidden');
-
     if (audioEl) { audioEl.pause(); }
-    audioEl = new Audio(`/media/${song.song_id}/audio`);
+    if (cdgPlayer) { cdgPlayer.stop(); cdgPlayer = null; }
+    _revokeBlobs();
+
+    // Try local FS first, fall back to server media
+    const cdgBuffer = song.file_path ? await localFsArrayBuffer(song.file_path) : null;
+    let audioSrc = song.audio_path ? await localFsBlobUrl(song.audio_path) : null;
+    if (audioSrc) _blobUrls.push(audioSrc);
+    else audioSrc = `/media/${song.song_id}/audio`;
+
+    audioEl = new Audio(audioSrc);
     audioEl.volume = parseFloat(document.getElementById('volume-slider').value);
 
-    if (cdgPlayer) cdgPlayer.stop();
-    cdgPlayer = new CdgPlayer(canvas, `/media/${song.song_id}/cdg`, audioEl);
-    cdgPlayer.load().then(() => {
+    cdgPlayer = new CdgPlayer(canvas, null, audioEl);
+    if (cdgBuffer) {
+      cdgPlayer.loadFromBuffer(cdgBuffer);
       audioEl.play();
       isPlaying = true;
       updatePlayIcon();
-    });
+    } else {
+      // Fall back to server fetch
+      cdgPlayer.cdgUrl = `/media/${song.song_id}/cdg`;
+      cdgPlayer.load().then(() => {
+        audioEl.play();
+        isPlaying = true;
+        updatePlayIcon();
+      });
+    }
     audioEl.onended = () => nextSong();
     audioEl.ontimeupdate = updateProgress;
-
-    // Scale canvas to fill container
     scaleCanvas(canvas);
   }
 

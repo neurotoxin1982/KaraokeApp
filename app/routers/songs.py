@@ -1,8 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
+from typing import Optional
 
 from app.database import get_db
 from app.models import Song
@@ -83,6 +85,43 @@ def library_page(
         "decades": decades,
         "formats": formats,
     })
+
+
+class SongImport(BaseModel):
+    title: str
+    artist: str
+    file_path: str
+    audio_path: Optional[str] = None
+    file_format: str
+    duration: Optional[float] = 0.0
+    genre: Optional[str] = ""
+    language: Optional[str] = ""
+    decade: Optional[str] = ""
+    year: Optional[int] = None
+
+
+@router.post("/api/songs/import")
+def import_song(data: SongImport, db: Session = Depends(get_db)):
+    existing = db.query(Song).filter(Song.file_path == data.file_path).first()
+    if existing:
+        return {"id": existing.id, "status": "exists"}
+    song = Song(
+        title=data.title,
+        artist=data.artist,
+        file_path=data.file_path,
+        audio_path=data.audio_path,
+        file_format=data.file_format,
+        duration=data.duration or 0.0,
+        genre=data.genre or "",
+        language=data.language or "",
+        decade=data.decade or "",
+        year=data.year,
+        is_active=True,
+    )
+    db.add(song)
+    db.commit()
+    db.refresh(song)
+    return {"id": song.id, "status": "created"}
 
 
 # Must come before /{song_id} to avoid route conflict

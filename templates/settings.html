@@ -27,22 +27,23 @@
       <i class="fa-solid fa-folder-open text-brand-light"></i> Library
     </h2>
     <div class="flex gap-3 items-center mb-4">
-      <input id="music-dir" type="text" value="{{ music_dir }}" placeholder="/music"
-        class="flex-1 bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-gray-100 font-mono">
-      <button onclick="openFolderBrowser()"
-        title="Browse folders"
-        class="bg-gray-600 hover:bg-gray-500 text-white px-3 py-2 rounded-lg text-sm flex items-center gap-1 whitespace-nowrap">
-        <i class="fa-solid fa-folder-open"></i> Browse
+      <div class="flex-1 bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-gray-400 font-mono" id="folder-label">
+        No folder selected
+      </div>
+      <button onclick="pickFolder()"
+        class="bg-gray-600 hover:bg-gray-500 text-white px-3 py-2 rounded-lg text-sm flex items-center gap-2 whitespace-nowrap">
+        <i class="fa-solid fa-folder-open"></i> Select Folder
       </button>
       <button onclick="startScan()"
         class="bg-brand hover:bg-brand-dark text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 whitespace-nowrap">
         <i class="fa-solid fa-magnifying-glass"></i> Scan
       </button>
-      <button onclick="rescanMissing()"
-        class="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg text-sm flex items-center gap-2 whitespace-nowrap">
-        <i class="fa-solid fa-rotate"></i> Check Missing
-      </button>
     </div>
+    <p class="text-xs text-gray-500 mb-4">
+      <i class="fa-solid fa-circle-info mr-1"></i>
+      Files stay on your local hard drive — only metadata is sent to the server.
+      Requires Chrome or Edge.
+    </p>
 
     <!-- Scan progress -->
     <div id="scan-progress" class="hidden bg-gray-700 rounded-lg p-4">
@@ -97,103 +98,50 @@
   {% endif %}
 </div>
 
-<!-- Folder Browser Modal -->
-<div id="folder-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-  <div class="bg-gray-800 rounded-xl shadow-2xl w-full max-w-lg flex flex-col" style="max-height:70vh">
-    <div class="px-5 py-4 border-b border-gray-700 flex items-center gap-3 flex-shrink-0">
-      <i class="fa-solid fa-folder-open text-yellow-400"></i>
-      <h3 class="font-semibold flex-1">Select Music Folder</h3>
-      <button onclick="document.getElementById('folder-modal').classList.add('hidden')"
-        class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
-    </div>
-    <div class="px-5 py-2 bg-gray-900/50 border-b border-gray-700 flex-shrink-0">
-      <span id="browser-path" class="font-mono text-sm text-brand-light break-all">/</span>
-    </div>
-    <div id="browser-list" class="overflow-y-auto flex-1 py-2"></div>
-    <div class="px-5 py-4 border-t border-gray-700 flex items-center gap-3 flex-shrink-0">
-      <span class="text-sm text-gray-400 flex-1">Select a folder, then click <strong>Use This Folder</strong></span>
-      <button onclick="document.getElementById('folder-modal').classList.add('hidden')"
-        class="px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-sm">Cancel</button>
-      <button onclick="useSelectedFolder()"
-        class="px-4 py-2 rounded bg-brand hover:bg-brand-dark text-white text-sm font-medium">Use This Folder</button>
-    </div>
-  </div>
-</div>
-
 {% endblock %}
 
 {% block scripts %}
+<script src="/static/js/local-fs.js"></script>
 <script>
-  let scanInterval;
-  let currentBrowsePath = '/';
+  // Restore saved folder handle on page load
+  localFsRestore().then(h => {
+    if (h) document.getElementById('folder-label').textContent = h.name;
+  });
 
-  async function openFolderBrowser() {
-    document.getElementById('folder-modal').classList.remove('hidden');
-    await browseTo('/');
-  }
-
-  async function browseTo(path) {
-    currentBrowsePath = path;
-    document.getElementById('browser-path').textContent = path;
-    const data = await apiFetch(`/api/fs/browse?path=${encodeURIComponent(path)}`);
-    const list = document.getElementById('browser-list');
-
-    let html = '';
-    if (data.parent !== null) {
-      html += `
-        <div onclick="browseTo(${JSON.stringify(data.parent)})"
-          class="flex items-center gap-3 px-5 py-2.5 hover:bg-gray-700/50 cursor-pointer text-sm text-gray-400">
-          <i class="fa-solid fa-arrow-left w-4 text-center"></i>
-          <span>.. (up)</span>
-        </div>`;
+  async function pickFolder() {
+    const handle = await localFsPick();
+    if (handle) {
+      document.getElementById('folder-label').textContent = handle.name;
+      showToast('Folder selected: ' + handle.name);
     }
-    if (data.dirs.length === 0) {
-      html += '<p class="px-5 py-4 text-sm text-gray-500">No subdirectories</p>';
-    }
-    data.dirs.forEach(d => {
-      html += `
-        <div onclick="browseTo(${JSON.stringify(d.path)})"
-          class="flex items-center gap-3 px-5 py-2.5 hover:bg-gray-700/50 cursor-pointer text-sm group">
-          <i class="fa-solid fa-folder text-yellow-500 w-4 text-center"></i>
-          <span class="flex-1 text-gray-200 group-hover:text-white">${d.name}</span>
-          <i class="fa-solid fa-chevron-right text-gray-600 text-xs"></i>
-        </div>`;
-    });
-    list.innerHTML = html;
-  }
-
-  function useSelectedFolder() {
-    document.getElementById('music-dir').value = currentBrowsePath;
-    document.getElementById('folder-modal').classList.add('hidden');
   }
 
   async function startScan() {
-    const dir = document.getElementById('music-dir').value.trim();
-    await apiFetch(`/api/settings?music_dir=${encodeURIComponent(dir)}`, { method: 'POST' });
-    await apiFetch(`/api/library/scan?music_dir=${encodeURIComponent(dir)}`, { method: 'POST' });
-    document.getElementById('scan-progress').classList.remove('hidden');
-    scanInterval = setInterval(pollProgress, 1000);
-  }
-
-  async function pollProgress() {
-    const p = await apiFetch('/api/library/scan/progress');
-    const pct = p.total > 0 ? Math.round((p.done / p.total) * 100) : 0;
-    document.getElementById('scan-bar').style.width = `${pct}%`;
-    document.getElementById('scan-counts').textContent = `${p.done}/${p.total} scanned, ${p.added} added`;
-    if (!p.running) {
-      clearInterval(scanInterval);
-      document.getElementById('scan-status').textContent = `Done! ${p.added} songs added.`;
-      if (p.errors.length) {
-        const errDiv = document.getElementById('scan-errors');
-        errDiv.classList.remove('hidden');
-        errDiv.innerHTML = p.errors.slice(0, 5).map(e => `<div>${e}</div>`).join('');
-      }
+    const root = localFsRootName();
+    if (!root) {
+      showToast('Please select a folder first', 'error');
+      return;
     }
-  }
 
-  async function rescanMissing() {
-    const data = await apiFetch('/api/library/rescan-missing', { method: 'POST' });
-    showToast(`${data.fixed} songs marked as missing`, 'info');
+    const prog = document.getElementById('scan-progress');
+    const bar  = document.getElementById('scan-bar');
+    const status = document.getElementById('scan-status');
+    const counts = document.getElementById('scan-counts');
+    prog.classList.remove('hidden');
+    status.textContent = 'Scanning…';
+
+    const result = await localFsScan((done, total, added) => {
+      const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+      bar.style.width = `${pct}%`;
+      counts.textContent = `${done}/${total} files, ${added} songs added`;
+    });
+
+    if (result.error) {
+      status.textContent = result.error;
+      return;
+    }
+    status.textContent = `Done! ${result.added} songs added.`;
+    showToast(`${result.added} songs added to library`);
   }
 </script>
 {% endblock %}
