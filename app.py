@@ -209,7 +209,7 @@ PLAYER_HTML = r"""<!DOCTYPE html>
     #standby p{color:#444;font-size:1.2rem;margin-top:1rem;}
     #cdg-wrap{display:none;position:fixed;inset:0;background:#000;align-items:center;justify-content:center;}
     #cdg-wrap.visible{display:flex;}
-    canvas{max-width:100%;max-height:100%;image-rendering:pixelated;image-rendering:crisp-edges;}
+    canvas{image-rendering:pixelated;image-rendering:crisp-edges;display:block;}
     #vid-wrap{display:none;position:fixed;inset:0;background:#000;}
     #vid-wrap.visible{display:block;}
     video{width:100%;height:100%;object-fit:contain;}
@@ -357,6 +357,18 @@ class CDGPlayer {
     this.ctx.putImageData(this.imgData, 0, 0);
   }
 }
+
+// ── Scale CDG canvas to fill window ───────────────────────────────────────
+function scaleCanvas() {
+  const el = document.getElementById('cdg');
+  const sx = window.innerWidth  / 300;
+  const sy = window.innerHeight / 216;
+  const s  = Math.min(sx, sy);
+  el.style.width  = (300 * s) + 'px';
+  el.style.height = (216 * s) + 'px';
+}
+window.addEventListener('resize', scaleCanvas);
+scaleCanvas();
 
 // ── Player setup ───────────────────────────────────────────────────────────
 const socket  = io({transports:['polling','websocket']});
