@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Settings – Karaoke Manager</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+    .page { flex: 1; overflow-y: auto; padding: 24px; max-width: 760px; margin: 0 auto; width: 100%; }
+    .section-title { font-size: 1rem; font-weight: 600; color: #a78bfa; margin-bottom: 12px; margin-top: 28px; }
+    .section-title:first-child { margin-top: 0; }
+    .stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    .stat-card { background: #1f2937; border-radius: 12px; padding: 16px; text-align: center; }
+    .stat-num  { font-size: 2rem; font-weight: 700; color: #a78bfa; }
+    .stat-label{ font-size: 0.8rem; color: #9ca3af; margin-top: 4px; }
+    .top-list  { background: #1f2937; border-radius: 12px; overflow: hidden; }
+    .top-row   { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid #374151; }
+    .top-row:last-child { border-bottom: none; }
+    .top-rank  { font-size: 0.8rem; color: #6b7280; min-width: 24px; }
+    .top-info  { flex: 1; min-width: 0; }
+    .top-count { font-size: 0.8rem; color: #9ca3af; white-space: nowrap; }
+    .progress-bar-wrap { background: #374151; border-radius: 4px; height: 8px; margin-top: 8px; }
+    .progress-bar { background: #7c3aed; height: 8px; border-radius: 4px; width: 0%; transition: width 0.2s; }
+    .scan-status { font-size: 0.85rem; color: #9ca3af; margin-top: 8px; }
+    .path-row { display: flex; gap: 8px; align-items: center; }
+    .path-row input { flex: 1; }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a class="logo" href="index.html">🎤 Karaoke Manager</a>
+  <div style="display:flex;gap:8px;">
+    <a href="index.html" class="nav-btn">Queue & Player</a>
+  </div>
+</nav>
+
+<div class="page">
+
+  <!-- Library -->
+  <div class="section-title">Library</div>
+  <div class="card">
+    <label class="field-label">Music folder</label>
+    <div class="path-row">
+      <input type="text" id="folder-path" placeholder="C:\Karaoke\Songs" readonly>
+      <button class="btn btn-gray" id="btn-browse">Browse…</button>
+    </div>
+    <div style="margin-top:12px;">
+      <button class="btn btn-primary" id="btn-scan" disabled>Scan Library</button>
+      <button class="btn btn-gray" id="btn-rescan" style="margin-left:8px;" disabled>Re-scan (full)</button>
+    </div>
+    <div id="scan-wrap" class="hidden" style="margin-top:12px;">
+      <div class="progress-bar-wrap"><div class="progress-bar" id="scan-progress"></div></div>
+      <div class="scan-status" id="scan-status">Scanning…</div>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="section-title">Statistics</div>
+  <div class="stat-grid" id="stat-grid">
+    <div class="stat-card"><div class="stat-num" id="st-songs">–</div><div class="stat-label">Songs</div></div>
+    <div class="stat-card"><div class="stat-num" id="st-singers">–</div><div class="stat-label">Singers</div></div>
+    <div class="stat-card"><div class="stat-num" id="st-plays">–</div><div class="stat-label">Plays</div></div>
+  </div>
+
+  <div class="section-title">Top Songs</div>
+  <div class="top-list" id="top-songs"><div style="padding:16px;color:#6b7280;font-size:0.85rem;">No plays yet.</div></div>
+
+  <div class="section-title">Top Singers</div>
+  <div class="top-list" id="top-singers"><div style="padding:16px;color:#6b7280;font-size:0.85rem;">No plays yet.</div></div>
+
+  <!-- Player settings -->
+  <div class="section-title">Player</div>
+  <div class="card">
+    <label class="field-label">CDG sync offset (seconds)</label>
+    <div style="display:flex;align-items:center;gap:12px;">
+      <input type="range" id="sync-range" min="-2" max="2" step="0.05" value="0" style="flex:1;">
+      <span id="sync-val" style="min-width:48px;text-align:right;color:#a78bfa;font-size:0.9rem;">0.00 s</span>
+    </div>
+    <div style="margin-top:16px;">
+      <label class="field-label">Volume</label>
+      <input type="range" id="vol-range" min="0" max="1" step="0.01" value="1">
+    </div>
+  </div>
+
+  <div style="height:32px;"></div>
+</div>
+
+<script>
+const api = window.api;
+
+// ── Stats ─────────────────────────────────────────────────────────────────────
+async function loadStats() {
+  const s = await api.getStats();
+  document.getElementById('st-songs').textContent   = s.total_songs;
+  document.getElementById('st-singers').textContent = s.total_singers;
+  document.getElementById('st-plays').textContent   = s.total_plays;
+
+  const topSongsEl = document.getElementById('top-songs');
+  if (s.top_songs.length) {
+    topSongsEl.innerHTML = s.top_songs.map((t,i) => `
+      <div class="top-row">
+        <div class="top-rank">${i+1}</div>
+        <div class="top-info">
+          <div class="truncate" style="font-size:0.9rem;">${esc(t.title)}</div>
+          <div class="truncate" style="font-size:0.75rem;color:#9ca3af;">${esc(t.artist)}</div>
+        </div>
+        <div class="top-count">${t.play_count}×</div>
+      </div>`).join('');
+  }
+
+  const topSingersEl = document.getElementById('top-singers');
+  if (s.top_singers.length) {
+    topSingersEl.innerHTML = s.top_singers.map((t,i) => `
+      <div class="top-row">
+        <div class="top-rank">${i+1}</div>
+        <div class="top-info" style="font-size:0.9rem;">${esc(t.name)}</div>
+        <div class="top-count">${t.total_songs_sung} songs</div>
+      </div>`).join('');
+  }
+}
+loadStats();
+
+// ── Library scan ──────────────────────────────────────────────────────────────
+const folderInput = document.getElementById('folder-path');
+const btnBrowse   = document.getElementById('btn-browse');
+const btnScan     = document.getElementById('btn-scan');
+const btnRescan   = document.getElementById('btn-rescan');
+const scanWrap    = document.getElementById('scan-wrap');
+const scanBar     = document.getElementById('scan-progress');
+const scanStatus  = document.getElementById('scan-status');
+
+// Load saved folder
+api.getSettings().then(s => {
+  if (s.library_path) {
+    folderInput.value = s.library_path;
+    btnScan.disabled   = false;
+    btnRescan.disabled = false;
+  }
+});
+
+btnBrowse.addEventListener('click', async () => {
+  const dir = await api.openFolderDialog();
+  if (!dir) return;
+  folderInput.value  = dir;
+  btnScan.disabled   = false;
+  btnRescan.disabled = false;
+  await api.setSetting('library_path', dir);
+});
+
+async function runScan() {
+  const dir = folderInput.value.trim();
+  if (!dir) return;
+  btnScan.disabled   = true;
+  btnRescan.disabled = true;
+  scanWrap.classList.remove('hidden');
+  scanBar.style.width = '0%';
+  scanStatus.textContent = 'Scanning…';
+
+  api.onScanProgress(({ done, total, added }) => {
+    const pct = total ? Math.round((done / total) * 100) : 0;
+    scanBar.style.width = pct + '%';
+    if (done === true) {
+      scanStatus.textContent = `Done — ${added} new songs added.`;
+      btnScan.disabled   = false;
+      btnRescan.disabled = false;
+      loadStats();
+    } else {
+      scanStatus.textContent = `${done} / ${total} files… (${added} added)`;
+    }
+  });
+
+  await api.scanLibrary(dir);
+}
+
+btnScan.addEventListener('click', runScan);
+btnRescan.addEventListener('click', runScan);
+
+// ── Sync offset ───────────────────────────────────────────────────────────────
+const syncRange = document.getElementById('sync-range');
+const syncVal   = document.getElementById('sync-val');
+api.getSettings().then(s => {
+  if (s.cdg_sync_offset) {
+    syncRange.value = s.cdg_sync_offset;
+    syncVal.textContent = parseFloat(s.cdg_sync_offset).toFixed(2) + ' s';
+  }
+});
+syncRange.addEventListener('input', () => {
+  syncVal.textContent = parseFloat(syncRange.value).toFixed(2) + ' s';
+});
+syncRange.addEventListener('change', () => {
+  api.setSetting('cdg_sync_offset', syncRange.value);
+  // Notify any open windows
+  try { new BroadcastChannel('karaoke').postMessage({ type: 'setting', key: 'cdg_sync_offset', value: parseFloat(syncRange.value) }); } catch(_) {}
+});
+
+// ── Volume ────────────────────────────────────────────────────────────────────
+const volRange = document.getElementById('vol-range');
+api.getSettings().then(s => {
+  if (s.volume != null) volRange.value = s.volume;
+});
+volRange.addEventListener('change', () => {
+  api.setSetting('volume', volRange.value);
+  try { new BroadcastChannel('karaoke').postMessage({ type: 'setting', key: 'volume', value: parseFloat(volRange.value) }); } catch(_) {}
+});
+
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+</script>
+</body>
+</html>

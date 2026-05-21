@@ -1,0 +1,1561 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Karaoke Manager</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <style>
+    body { display: flex; flex-direction: column; }
+    #app  { display: flex; flex: 1; overflow: hidden; }
+    #queue-panel  { display: flex; flex-direction: column; overflow: hidden; border-right: 1px solid #374151; transition: width 0.2s; }
+    #player-panel { display: flex; flex-direction: column; overflow: hidden; background: #000; transition: width 0.2s; }
+    #player-area  { flex: 1; position: relative; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+    /* Player fullscreen mode */
+    #app.player-fs #queue-panel  { width: 0 !important; min-width: 0; overflow: hidden; border: none; }
+    #app.player-fs #player-panel { width: 100% !important; }
+    body.player-fs > nav          { display: none; }
+    .stepper-group { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+    .stepper-label { font-size: 10px; color: #4b5563; text-align: center; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 4px; }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="logo" href="#"><i class="fa-solid fa-microphone"></i> Karaoke</a>
+  <div style="display:flex;align-items:center;gap:8px">
+    <button class="nav-btn" id="req-nav-btn" onclick="openRequestModal()" title="Singer Requests">
+      <i class="fa-solid fa-mobile-screen-button"></i> Requests
+    </button>
+    <button class="nav-btn" onclick="openSettings()"><i class="fa-solid fa-gear"></i> Settings</button>
+  </div>
+</nav>
+
+<div id="app">
+  <!-- ══ LEFT: Queue ══════════════════════════════════════════════════ -->
+  <div id="queue-panel" style="width:55%">
+
+    <!-- Search -->
+    <div style="padding:12px 16px; border-bottom:1px solid #374151; flex-shrink:0">
+      <div style="position:relative">
+        <i class="fa-solid fa-magnifying-glass" style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:#6b7280;font-size:.875rem"></i>
+        <input id="q-search" type="text" placeholder="Find songs…"
+          style="padding-left:36px;border-radius:999px;background:#1f2937"
+          oninput="liveSearch(this.value)">
+      </div>
+      <div id="live-results" class="hidden" style="margin-top:6px;background:#1f2937;border-radius:10px;border:1px solid #374151;max-height:240px;overflow-y:auto"></div>
+    </div>
+
+    <!-- Queue list (75%) -->
+    <div style="flex:3;min-height:0;overflow-y:auto" id="queue-list"></div>
+
+    <!-- History header -->
+    <div style="flex-shrink:0;padding:7px 16px;border-top:2px solid #374151;border-bottom:1px solid #374151;background:#111827;display:flex;align-items:center;gap:8px">
+      <i class="fa-solid fa-clock-rotate-left" style="color:#7c3aed;font-size:.8rem"></i>
+      <span style="font-size:.72rem;color:#9ca3af;font-weight:600;text-transform:uppercase;letter-spacing:.07em">Recently Played</span>
+      <span style="font-size:.7rem;color:#4b5563;margin-left:auto"><i class="fa-solid fa-hand-pointer" style="font-size:.65rem"></i> drag to re-add</span>
+    </div>
+
+    <!-- History list (25%) -->
+    <div style="flex:1;min-height:0;overflow-y:auto;background:#111827" id="history-list"
+         ondragover="event.preventDefault()" ondrop="historyDrop(event)"></div>
+
+    <!-- Add button -->
+    <div style="padding:10px;border-top:1px solid #374151;flex-shrink:0">
+      <button class="btn btn-primary w-full" onclick="openAddModal()">
+        <i class="fa-solid fa-plus"></i> Add Song
+      </button>
+    </div>
+  </div>
+
+  <!-- ══ RIGHT: Player ════════════════════════════════════════════════ -->
+  <div id="player-panel" style="width:45%">
+    <div id="player-area">
+      <div id="sync-hud" style="position:absolute;top:4px;left:4px;z-index:99;background:rgba(0,0,0,.75);color:#0f0;font:11px monospace;padding:4px 6px;border-radius:4px;pointer-events:none"></div>
+      <canvas id="cdg-canvas" class="hidden"></canvas>
+      <video  id="video-player" class="hidden" style="width:100%;height:100%;object-fit:contain"></video>
+      <div id="player-idle" style="text-align:center;color:#374151">
+        <i class="fa-solid fa-microphone" style="font-size:5rem;display:block;margin-bottom:12px"></i>
+        <p style="font-size:1.1rem">No song playing</p>
+      </div>
+      <!-- Between-song transition screen -->
+      <div id="transition-overlay" style="display:none;position:absolute;inset:0;z-index:55">
+        <!-- Phase 1: Thank you -->
+        <div id="tr-p1" style="display:none;position:absolute;inset:0;background:#000;flex-direction:column;align-items:center;justify-content:center;gap:16px;text-align:center">
+          <div style="font-size:5rem">👏</div>
+          <div style="font-size:2rem;font-weight:700;color:#fff">Thank You!</div>
+          <div id="tr-singer" style="font-size:1.6rem;color:#a78bfa"></div>
+        </div>
+        <!-- Phase 2: Venue background + banner -->
+        <div id="tr-p2" style="display:none;position:absolute;inset:0;background:#000;flex-direction:column">
+          <div style="flex:1;display:flex;align-items:stretch;justify-content:center;overflow:hidden;min-height:0;position:relative">
+            <img id="tr-venue" style="width:100%;height:100%;object-fit:contain;display:none">
+            <div id="tr-countdown" style="position:absolute;top:14px;right:14px;background:rgba(0,0,0,0.72);border-radius:14px;padding:10px 18px;text-align:center;backdrop-filter:blur(4px)">
+              <div style="font-size:.65rem;color:#a78bfa;letter-spacing:.1em;font-weight:600;margin-bottom:4px">GET READY</div>
+              <div id="tr-countdown-num" style="font-size:2.4rem;font-weight:700;color:#fff;font-variant-numeric:tabular-nums;line-height:1"></div>
+            </div>
+          </div>
+          <div id="tr-ticker-wrap" style="background:rgba(124,58,237,0.92);padding:10px 0;overflow:hidden;flex-shrink:0">
+            <div class="ticker-track" id="tr-ticker" style="font-size:.95rem;font-weight:600;color:#fff;white-space:nowrap;display:inline-block"></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="song-overlay" class="hidden absolute" style="bottom:8px;left:8px;right:8px">
+        <div style="background:rgba(0,0,0,.75);backdrop-filter:blur(8px);border-radius:8px;padding:8px 14px;display:flex;align-items:center;gap:12px">
+          <div class="flex-1 truncate">
+            <div id="ov-title"  style="font-weight:700;color:#fff;font-size:.95rem" class="truncate"></div>
+            <div id="ov-artist" style="color:#9ca3af;font-size:.8rem" class="truncate"></div>
+          </div>
+          <div id="ov-singer" style="color:#a78bfa;font-size:.8rem;white-space:nowrap"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Song info + progress -->
+    <div class="player-controls">
+      <div id="ctrl-title" style="font-weight:600;color:#fff;font-size:.875rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">—</div>
+      <div id="ctrl-meta"  style="font-size:.75rem;color:#6b7280;margin-bottom:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>
+      <div class="flex items-center gap-2">
+        <span id="time-cur" style="font-size:.75rem;color:#6b7280;width:32px;text-align:right" class="tabular-nums">0:00</span>
+        <input type="range" id="progress-slider" min="0" max="100" step="0.1" value="0" oninput="seek(this.value)" style="flex:1">
+        <span id="time-dur" style="font-size:.75rem;color:#6b7280;width:32px" class="tabular-nums">0:00</span>
+      </div>
+    </div>
+
+    <!-- Controls row -->
+    <div class="player-controls flex items-center gap-2" style="padding-top:6px">
+      <button class="btn btn-primary btn-icon btn-icon-lg" onclick="togglePlayPause()">
+        <i class="fa-solid fa-play" id="play-icon"></i>
+      </button>
+      <button class="btn btn-gray btn-icon" onclick="skipSong()" title="Next">
+        <i class="fa-solid fa-forward-step"></i>
+      </button>
+      <div class="flex items-center gap-1" style="flex:1">
+        <i class="fa-solid fa-volume-low" style="color:#4b5563;font-size:.8rem"></i>
+        <input type="range" id="vol-slider" min="0" max="1" step="0.02" value="1" oninput="setVolume(this.value)" style="flex:1">
+        <i class="fa-solid fa-volume-high" style="color:#4b5563;font-size:.8rem"></i>
+      </div>
+      <button class="btn btn-gray btn-sm" onclick="api.openPlayer()" title="Popout player">
+        <i class="fa-solid fa-arrow-up-right-from-square"></i>
+      </button>
+      <button class="btn btn-gray btn-sm" id="cast-btn" onclick="openCastModal()" title="Mirror to wireless screen">
+        <i class="fa-solid fa-wifi"></i>
+      </button>
+      <button class="btn btn-gray btn-sm" id="fs-btn" onclick="togglePlayerFullscreen()" title="Fullscreen player (F)">
+        <i class="fa-solid fa-expand" id="fs-icon"></i>
+      </button>
+    </div>
+
+    <!-- Sync / Pitch / Tempo -->
+    <div class="player-controls stepper-group" style="padding-top:6px">
+      <div>
+        <div class="stepper-label">A/V Sync</div>
+        <div class="stepper">
+          <button onclick="adjSync(-50)">−</button>
+          <span id="sync-val">0 ms</span>
+          <button onclick="adjSync(50)">+</button>
+        </div>
+      </div>
+      <div>
+        <div class="stepper-label">Pitch</div>
+        <div class="stepper">
+          <button onclick="adjPitch(-1)">−</button>
+          <span id="pitch-val">0</span>
+          <button onclick="adjPitch(1)">+</button>
+        </div>
+      </div>
+      <div>
+        <div class="stepper-label">Tempo</div>
+        <div class="stepper">
+          <button onclick="adjTempo(-1)">−</button>
+          <span id="tempo-val">0</span>
+          <button onclick="adjTempo(1)">+</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Add Song Modal ─────────────────────────────────────────────────── -->
+<div id="add-modal" class="modal-overlay hidden">
+  <div class="modal" style="max-width:540px">
+    <div class="modal-header">
+      <h3 style="font-size:1.1rem;font-weight:600">Add to Queue</h3>
+      <button class="btn btn-gray btn-sm" onclick="closeAdd()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:14px">
+
+      <!-- Tabs -->
+      <div style="display:flex;gap:4px;background:#111827;border-radius:8px;padding:3px">
+        <button id="tab-local" class="btn btn-primary btn-sm" style="flex:1;border-radius:6px" onclick="switchTab('local')">
+          <i class="fa-solid fa-hard-drive"></i> Local
+        </button>
+        <button id="tab-yt" class="btn btn-gray btn-sm" style="flex:1;border-radius:6px" onclick="switchTab('yt')">
+          <i class="fa-brands fa-youtube" style="color:#ff4444"></i> YouTube
+        </button>
+      </div>
+
+      <!-- Local tab -->
+      <div id="tab-local-content">
+        <label class="field-label">Song</label>
+        <input id="modal-search" type="text" placeholder="Search title or artist…" oninput="modalSearch(this.value)" autocomplete="off">
+        <div id="modal-results" style="margin-top:6px;max-height:180px;overflow-y:auto;display:flex;flex-direction:column;gap:3px"></div>
+        <div id="modal-selected" class="hidden" style="margin-top:6px;font-size:.8rem;color:#a78bfa"></div>
+        <input type="hidden" id="modal-song-id">
+      </div>
+
+      <!-- YouTube tab -->
+      <div id="tab-yt-content" class="hidden">
+        <div style="display:flex;gap:8px">
+          <input id="yt-query" type="text" placeholder="Search YouTube karaoke…" autocomplete="off"
+            onkeydown="if(event.key==='Enter') ytSearch()" style="flex:1">
+          <button class="btn btn-primary btn-sm" onclick="ytSearch()" style="white-space:nowrap">
+            <i class="fa-solid fa-magnifying-glass"></i> Search
+          </button>
+        </div>
+        <div id="yt-status" style="font-size:.8rem;color:#6b7280;margin-top:6px;min-height:1.2em"></div>
+        <div id="yt-results" style="margin-top:4px;max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:4px"></div>
+        <div id="yt-selected" class="hidden" style="margin-top:6px;font-size:.8rem;color:#a78bfa"></div>
+        <input type="hidden" id="yt-video-id">
+        <input type="hidden" id="yt-video-title">
+        <input type="hidden" id="yt-video-artist">
+        <input type="hidden" id="yt-video-duration">
+      </div>
+
+      <div>
+        <label class="field-label">Singer name</label>
+        <input id="modal-singer" type="text" placeholder="Enter name…" autocomplete="off"
+          onkeydown="if(event.key==='Enter') confirmAdd()">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-gray" onclick="closeAdd()">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmAdd()">Add to Queue</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Settings Modal ────────────────────────────────────────────────── -->
+<div id="settings-modal" class="modal-overlay hidden">
+  <div class="modal" style="max-width:600px;max-height:85vh;overflow-y:auto">
+    <div class="modal-header">
+      <h3 style="font-size:1.1rem;font-weight:600">Settings</h3>
+      <button class="btn btn-gray btn-sm" onclick="closeSettings()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:20px">
+      <!-- Library scan -->
+      <div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <h4 style="font-size:.95rem;font-weight:600"><i class="fa-solid fa-folder-open" style="color:#a78bfa;margin-right:6px"></i>Local Library</h4>
+          <button class="btn btn-gray btn-sm" id="add-lib-btn" onclick="addLibraryRow()"><i class="fa-solid fa-plus"></i> Add Library</button>
+        </div>
+        <div id="library-rows"></div>
+      </div>
+      <!-- Between songs -->
+      <div class="card">
+        <h4 style="font-size:.95rem;font-weight:600;margin-bottom:14px"><i class="fa-solid fa-clock" style="color:#a78bfa;margin-right:6px"></i>Between Songs</h4>
+
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+          <input type="checkbox" id="set-thanks" style="width:16px;height:16px;accent-color:#7c3aed;cursor:pointer">
+          <label for="set-thanks" style="font-size:.85rem;color:#d1d5db;cursor:pointer">Show "Thank You [Singer]" screen</label>
+          <input type="number" id="set-thanks-time" min="1" max="60" value="5"
+            style="width:60px;text-align:center;padding:5px;margin-left:auto">
+          <span style="font-size:.8rem;color:#6b7280">sec</span>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+          <label style="font-size:.85rem;color:#d1d5db;white-space:nowrap">Background screen duration</label>
+          <input type="number" id="set-bg-time" min="0" max="120" value="10"
+            style="width:60px;text-align:center;padding:5px;margin-left:auto">
+          <span style="font-size:.8rem;color:#6b7280">sec</span>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+          <label style="font-size:.85rem;color:#d1d5db;white-space:nowrap">Banner speed</label>
+          <input type="range" id="set-banner-speed" min="1" max="10" step="1" value="4"
+            style="flex:1;margin-left:auto" oninput="document.getElementById('banner-speed-val').textContent=this.value">
+          <span id="banner-speed-val" style="font-size:.8rem;color:#a78bfa;min-width:16px;text-align:center">4</span>
+          <span style="font-size:.8rem;color:#6b7280">/ 10</span>
+        </div>
+
+        <div style="margin-bottom:12px">
+          <label class="field-label">Venue image (displayed between songs)</label>
+          <div style="display:flex;gap:8px;margin-top:4px">
+            <input id="set-venue-path" type="text" readonly placeholder="No image selected" style="flex:1;font-size:.8rem">
+            <button class="btn btn-gray btn-sm" onclick="browseVenueImage()"><i class="fa-solid fa-folder"></i></button>
+            <button class="btn btn-red btn-sm" onclick="clearVenueImage()"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+          <img id="set-venue-preview" style="display:none;margin-top:8px;max-height:80px;border-radius:6px;object-fit:cover">
+        </div>
+
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+          <label style="font-size:.85rem;color:#d1d5db;white-space:nowrap">Max songs per user (request)</label>
+          <input type="number" id="set-song-limit" min="1" max="20" value="3"
+            style="width:60px;text-align:center;padding:5px;margin-left:auto">
+          <span style="font-size:.8rem;color:#6b7280">songs</span>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+          <input type="checkbox" id="set-prevent-recent" style="width:16px;height:16px;accent-color:#7c3aed;cursor:pointer"
+            onchange="document.getElementById('set-recent-hours').disabled=!this.checked">
+          <label for="set-prevent-recent" style="font-size:.85rem;color:#d1d5db;cursor:pointer;flex:1">Block recently played songs</label>
+          <input type="number" id="set-recent-hours" min="1" max="12" value="2" disabled
+            style="width:55px;text-align:center;padding:5px">
+          <span style="font-size:.8rem;color:#6b7280">h</span>
+        </div>
+
+        <button class="btn btn-primary btn-sm" onclick="saveTransitionSettings()">
+          <i class="fa-solid fa-floppy-disk"></i> Save
+        </button>
+      </div>
+
+      <!-- Top songs -->
+      <div class="card" id="top-songs-card" style="display:none">
+        <h4 style="font-size:.95rem;font-weight:600;margin-bottom:10px"><i class="fa-solid fa-trophy" style="color:#facc15;margin-right:6px"></i>Most Played</h4>
+        <div id="top-songs"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+
+<!-- ── Cast Modal ───────────────────────────────────────────────────── -->
+<div id="cast-modal" class="modal-overlay hidden">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-header">
+      <h3 style="font-size:1.1rem;font-weight:600"><i class="fa-solid fa-wifi" style="color:#a78bfa;margin-right:8px"></i>Mirror to Wireless Screen</h3>
+      <button class="btn btn-gray btn-sm" onclick="closeCastModal()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:16px">
+
+      <!-- Stopped state -->
+      <div id="cast-stopped">
+        <p style="font-size:.875rem;color:#9ca3af;margin-bottom:14px">
+          Start the wireless server so any device on your network can open the karaoke display in a browser — smart TV, tablet, phone, or Chromecast via Chrome.
+        </p>
+        <button class="btn btn-primary w-full" onclick="castStart()">
+          <i class="fa-solid fa-play"></i> Start Wireless Server
+        </button>
+      </div>
+
+      <!-- Running state -->
+      <div id="cast-running" class="hidden">
+        <p style="font-size:.75rem;color:#9ca3af;margin-bottom:6px">Open this URL on any device on your Wi-Fi network:</p>
+        <div style="display:flex;gap:8px;margin-bottom:14px">
+          <input id="cast-url" type="text" readonly style="flex:1;font-size:.95rem;font-weight:600;color:#a78bfa;background:#111827;border-color:#7c3aed">
+          <button class="btn btn-gray btn-sm" onclick="castCopyUrl()" title="Copy">
+            <i class="fa-solid fa-copy"></i>
+          </button>
+        </div>
+        <div style="background:#111827;border-radius:10px;padding:12px 16px;margin-bottom:14px">
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <span style="font-size:.8rem;color:#6b7280">Connected screens</span>
+            <span id="cast-clients" style="font-size:1.1rem;font-weight:700;color:#a78bfa">0</span>
+          </div>
+          <div style="font-size:.75rem;color:#4b5563;margin-top:4px">Auto-refreshes every 3 seconds</div>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:10px;padding-top:10px;border-top:1px solid #374151">
+            <i class="fa-solid fa-volume-high" style="color:#6b7280;font-size:.85rem"></i>
+            <span style="font-size:.82rem;color:#9ca3af;flex:1">Send audio to wireless screens</span>
+            <input type="checkbox" id="cast-audio" style="width:16px;height:16px;accent-color:#7c3aed;cursor:pointer"
+              onchange="api.networkSetAudio(this.checked)">
+          </div>
+        </div>
+        <div id="cast-alt-urls" class="hidden" style="font-size:.8rem;color:#6b7280;margin-bottom:6px;background:#1f2937;border-radius:8px;padding:10px 12px">
+          <div style="color:#9ca3af;margin-bottom:6px">Other addresses on this machine:</div>
+          <div id="cast-alt-list"></div>
+        </div>
+        <div style="font-size:.8rem;color:#6b7280;margin-bottom:14px;background:#1f2937;border-radius:8px;padding:10px 12px">
+          <b style="color:#d1d5db">How to cast to TV:</b><br>
+          Chrome/Edge → menu → Cast… → select your TV<br>
+          Samsung Smart TV → open browser → type the URL above<br>
+          Apple TV → open Safari on Mac → AirPlay
+        </div>
+        <button class="btn btn-red w-full" onclick="castStop()">
+          <i class="fa-solid fa-stop"></i> Stop Wireless Server
+        </button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ── Requests Modal ──────────────────────────────────────────────── -->
+<div id="requests-modal" class="modal-overlay hidden">
+  <div class="modal" style="max-width:440px">
+    <div class="modal-header">
+      <h3 style="font-size:1.1rem;font-weight:600">
+        <i class="fa-solid fa-mobile-screen-button" style="color:#a78bfa;margin-right:8px"></i>Singer Requests
+      </h3>
+      <button class="btn btn-gray btn-sm" onclick="closeRequestModal()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:16px">
+
+      <div id="req-stopped">
+        <p style="font-size:.875rem;color:#9ca3af;margin-bottom:14px">
+          Start the request server so singers can browse the song library and add themselves to the queue from their phone.
+        </p>
+        <button class="btn btn-primary w-full" onclick="reqStart()">
+          <i class="fa-solid fa-play"></i> Start Request Server
+        </button>
+      </div>
+
+      <div id="req-running" class="hidden">
+        <p style="font-size:.75rem;color:#9ca3af;margin-bottom:6px">Singers open this URL on their phone:</p>
+        <div style="display:flex;gap:8px;margin-bottom:14px">
+          <input id="req-url" type="text" readonly style="flex:1;font-size:.95rem;font-weight:600;color:#a78bfa;background:#111827;border-color:#7c3aed">
+          <button class="btn btn-gray btn-sm" onclick="reqCopyUrl()" title="Copy"><i class="fa-solid fa-copy"></i></button>
+        </div>
+        <div style="background:#111827;border-radius:10px;padding:12px 16px;margin-bottom:14px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+            <span style="font-size:.8rem;color:#6b7280">Connected phones</span>
+            <span id="req-clients" style="font-size:1.1rem;font-weight:700;color:#a78bfa">0</span>
+          </div>
+          <div id="req-last-request" style="font-size:.78rem;color:#4b5563"></div>
+        </div>
+        <div id="req-alt-urls" class="hidden" style="font-size:.8rem;color:#6b7280;margin-bottom:14px;background:#1f2937;border-radius:8px;padding:10px 12px">
+          <div style="color:#9ca3af;margin-bottom:6px">Other addresses:</div>
+          <div id="req-alt-list"></div>
+        </div>
+        <button class="btn btn-red w-full" onclick="reqStop()">
+          <i class="fa-solid fa-stop"></i> Stop Request Server
+        </button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script src="js/cdg-player.js"></script>
+<script>
+// ── AudioContext (no restrictions in Electron) ────────────────────────────────
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let currentSong = null, cdgPlayer = null, isPlaying = false;
+let _transitioning = false; // blocks checkAndPlay during the gap
+let _gainNode = null, _audioSrc = null, _audioBuf = null;
+let _startAt = 0, _pausedPos = 0, _songDur = 0;
+let _videoEl = null, _videoBlobUrl = null, _ytStreamUrl = null;
+let _cdgBuf  = null; // stored for popout broadcast
+let _pitch = 0, _tempo = 0, _sync = 0;
+
+// ── Broadcast to popout ───────────────────────────────────────────────────────
+function broadcast(msg) { api.broadcast(msg); }
+
+api.onBroadcast((msg) => {
+  if (msg.type === 'request_state') {
+    if (!currentSong) { broadcast({ type: 'stop' }); return; }
+    broadcast({ type: 'song_info', title: currentSong.title, artist: currentSong.artist, singer_name: currentSong.singer_name });
+    broadcast({ type: 'position', pos: getPos(), playing: isPlaying });
+    if (_cdgBuf) {
+      broadcast({ type: 'cdg_path', path: currentSong.file_path, pos: getPos() });
+    } else if (currentSong.file_format === 'youtube' && _ytStreamUrl) {
+      broadcast({ type: 'video_url', url: _ytStreamUrl, pos: getPos() });
+    } else if (_videoEl && currentSong.file_path) {
+      broadcast({ type: 'video_path', path: currentSong.file_path, mime: MIME_MAP[currentSong.file_format] || 'video/mp4', pos: getPos() });
+    }
+  }
+});
+
+setInterval(() => {
+  if (currentSong && isPlaying) broadcast({ type: 'position', pos: getPos(), playing: true });
+  else if (currentSong) broadcast({ type: 'position', pos: getPos(), playing: false });
+}, 250);
+
+// ── Queue rendering ───────────────────────────────────────────────────────────
+async function renderQueue() {
+  const queue = await api.getQueue();
+  const el = document.getElementById('queue-list');
+  if (!queue.length) {
+    el.innerHTML = '<div style="text-align:center;padding:40px;color:#374151"><i class="fa-solid fa-inbox" style="font-size:3rem;display:block;margin-bottom:12px"></i>Queue is empty</div>';
+    return;
+  }
+  let mins = 0, firstPending = true;
+  el.innerHTML = queue.map(entry => {
+    const dur = Math.round((entry.duration || 180) / 60);
+    const isPlaying = entry.status === 'playing';
+    const timeLabel = (!isPlaying && !firstPending) ? `<span style="font-size:.8rem;color:#6b7280">${mins}min</span>` : '';
+    const badge = isPlaying
+      ? `<span class="badge badge-green">Now playing</span>`
+      : (firstPending ? `<span class="badge badge-gray">Coming up next</span>` : '');
+    if (entry.status === 'pending') { mins += dur; firstPending = false; }
+    return `
+      <div class="queue-row ${isPlaying ? 'playing' : ''}" id="qrow-${entry.id}" ${!isPlaying ? `draggable="true" data-id="${entry.id}" onmouseleave="closeMenu(${entry.id})"` : ''}>
+        <div class="queue-row-main">
+          ${!isPlaying ? `<i class="fa-solid fa-grip-vertical drag-handle" onclick="openMenu(${entry.id});event.stopPropagation()"></i>` : ''}
+          <div class="cover">
+            ${isPlaying ? '<i class="fa-solid fa-wave-square" style="color:#a78bfa;font-size:.7rem;animation:pulse 1s infinite"></i>'
+                        : '<i class="fa-solid fa-music" style="font-size:.75rem"></i>'}
+          </div>
+          <div class="flex-1" style="min-width:0">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px">
+              <span style="font-weight:600;color:#fff;font-size:.875rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${entry.singer_name || '—'}</span>
+              ${badge}
+            </div>
+            <div style="font-size:.8rem;color:#9ca3af;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+              ${entry.title} · <span style="color:#6b7280">${entry.artist}</span>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+            ${timeLabel}
+            <i class="fa-solid fa-chevron-right" style="color:#374151;font-size:.75rem"></i>
+          </div>
+        </div>
+        <div class="queue-row-actions" id="menu-${entry.id}">
+          ${entry.status === 'pending' ? `
+            <button class="btn btn-gray btn-sm" onclick="mv(${entry.id},'up')"><i class="fa-solid fa-arrow-up"></i></button>
+            <button class="btn btn-gray btn-sm" onclick="mv(${entry.id},'down')"><i class="fa-solid fa-arrow-down"></i></button>` : ''}
+          <button class="btn btn-sm" style="background:#78350f;color:#fcd34d" onclick="sk(${entry.id})"><i class="fa-solid fa-forward"></i> Skip</button>
+          <button class="btn btn-red btn-sm" onclick="rm(${entry.id})"><i class="fa-solid fa-xmark"></i> Remove</button>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+// ── History rendering ─────────────────────────────────────────────────────────
+async function renderHistory() {
+  const history = await api.getHistory();
+  const el = document.getElementById('history-list');
+  if (!history.length) {
+    el.innerHTML = '<div style="text-align:center;padding:16px;color:#1f2937;font-size:.8rem">No songs played yet</div>';
+    return;
+  }
+  el.innerHTML = history.map(entry => `
+    <div class="history-row" draggable="true"
+         data-song-id="${entry.song_id}"
+         data-singer="${(entry.singer_name || '').replace(/"/g,'&quot;')}">
+      <i class="fa-solid fa-grip-vertical drag-handle"></i>
+      <div style="width:32px;height:32px;border-radius:6px;background:#1f2937;display:flex;align-items:center;justify-content:center;color:#6b7280;flex-shrink:0">
+        <i class="fa-solid fa-music" style="font-size:.7rem"></i>
+      </div>
+      <div class="flex-1" style="min-width:0">
+        <div style="font-size:.8rem;font-weight:600;color:#d1d5db;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${entry.singer_name || '—'}</div>
+        <div style="font-size:.73rem;color:#6b7280;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${entry.title} · <span style="color:#4b5563">${entry.artist}</span></div>
+      </div>
+      <button class="btn btn-gray btn-sm" style="padding:3px 8px;font-size:.7rem;flex-shrink:0"
+              onclick="requeueEntry(${entry.song_id},'${(entry.singer_name||'').replace(/'/g,"\\'")}')">
+        <i class="fa-solid fa-plus"></i>
+      </button>
+    </div>`).join('');
+
+  // DnD: set drag data on mousedown so the history DnD handler can read it
+  el.querySelectorAll('.history-row').forEach(row => {
+    row.addEventListener('dragstart', e => {
+      window._histDrag = { songId: Number(row.dataset.songId), singer: row.dataset.singer };
+      e.dataTransfer.effectAllowed = 'copy';
+      e.dataTransfer.setData('text/plain', 'history');
+      setTimeout(() => row.classList.add('dragging'), 0);
+    });
+    row.addEventListener('dragend', () => {
+      window._histDrag = null;
+      row.classList.remove('dragging');
+    });
+  });
+}
+
+async function requeueEntry(songId, singerName) {
+  await api.addToQueue(songId, singerName);
+  await renderQueue();
+  toast(`${singerName || 'Song'} added to queue`);
+}
+
+async function historyDrop(e) {
+  e.preventDefault();
+  if (!window._histDrag) return;
+  const { songId, singer } = window._histDrag;
+  window._histDrag = null;
+  await api.addToQueue(songId, singer);
+  await renderQueue();
+  toast(`${singer || 'Song'} added to queue`);
+}
+
+let _openMenu = null;
+function openMenu(id) {
+  const el = document.getElementById('menu-' + id);
+  if (!el) return;
+  if (_openMenu && _openMenu !== el) _openMenu.classList.remove('open');
+  el.classList.add('open');
+  _openMenu = el;
+}
+function closeMenu(id) {
+  const el = document.getElementById('menu-' + id);
+  if (!el) return;
+  el.classList.remove('open');
+  if (_openMenu === el) _openMenu = null;
+}
+
+async function mv(id, dir) { await api.moveEntry(id, dir); renderQueue(); }
+async function sk(id) { await api.skipEntry(id); renderQueue(); toast('Song skipped'); }
+async function rm(id) { await api.removeFromQueue(id); renderQueue(); toast('Removed'); }
+
+// ── Player ────────────────────────────────────────────────────────────────────
+async function checkAndPlay() {
+  if (_transitioning) return;
+  let song = await api.getCurrentSong();
+  if (!song) {
+    // Auto-advance: start the first pending song if the queue is idle
+    song = await api.nextSong();
+    if (song) await renderQueue();
+  }
+  if (!song) { if (currentSong) showIdle(); return; }
+  if (currentSong && currentSong.queue_id === song.queue_id) return;
+  currentSong = song;
+  stopCurrent();
+  setInfo(song);
+  const fmt = song.file_format;
+  if (fmt === 'cdg' || fmt === 'zip-cdg') await playCdg(song);
+  else if (fmt === 'youtube') await playYoutube(song);
+  else await playVideo(song);
+}
+
+function showIdle() {
+  stopCurrent(); currentSong = null;
+  show('player-idle'); hide('cdg-canvas'); hide('video-player'); hide('song-overlay');
+  document.getElementById('ctrl-title').textContent = '—';
+  document.getElementById('ctrl-meta').textContent  = '';
+  broadcast({ type: 'stop' });
+}
+
+function setInfo(song) {
+  document.getElementById('ctrl-title').textContent = `${song.artist} — ${song.title}`;
+  document.getElementById('ctrl-meta').textContent  = song.singer_name ? `Singer: ${song.singer_name}` : '';
+  document.getElementById('ov-title').textContent   = song.title;
+  document.getElementById('ov-artist').textContent  = song.artist;
+  document.getElementById('ov-singer').textContent  = song.singer_name ? `♪ ${song.singer_name}` : '';
+}
+
+function stopCurrent() {
+  if (_audioSrc) { try { _audioSrc.onended=null; _audioSrc.stop(0); } catch(_){} _audioSrc=null; }
+  if (_gainNode) { _gainNode.disconnect(); _gainNode=null; }
+  if (_audioBuf) { _audioBuf=null; }
+  if (_videoEl)  { _videoEl.pause(); _videoEl.src=''; _videoEl=null; }
+  if (_videoBlobUrl) { URL.revokeObjectURL(_videoBlobUrl); _videoBlobUrl=null; }
+  _ytStreamUrl = null;
+  if (cdgPlayer) { cdgPlayer.stop(); cdgPlayer=null; }
+  stopProgress(); isPlaying=false;
+}
+
+async function playCdg(song) {
+  const canvas = document.getElementById('cdg-canvas');
+  hide('video-player'); hide('player-idle'); show('cdg-canvas'); show('song-overlay');
+
+  let cdgBytes, mp3Bytes;
+  try {
+    [cdgBytes, mp3Bytes] = await Promise.all([
+      api.readFile(song.file_path),
+      api.readFile(song.audio_path),
+    ]);
+  } catch(err) {
+    toast('File read error: ' + err.message, 'error');
+    currentSong = null; show('player-idle'); hide('cdg-canvas'); hide('song-overlay'); return;
+  }
+  // Electron IPC returns Uint8Array; get underlying ArrayBuffer for Web Audio
+  const toAB = b => b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength);
+  const cdgBuf = toAB(cdgBytes);
+  const mp3Raw = toAB(mp3Bytes);
+
+  _cdgBuf   = cdgBuf; // ArrayBuffer
+  let _audioBufDecoded;
+  try { _audioBufDecoded = await audioCtx.decodeAudioData(mp3Raw); }
+  catch(err) { toast('Audio decode error: ' + err.message, 'error'); currentSong=null; show('player-idle'); hide('cdg-canvas'); hide('song-overlay'); return; }
+  _audioBuf = _audioBufDecoded;
+  _songDur  = _audioBuf.duration;
+
+  _gainNode = audioCtx.createGain();
+  _gainNode.gain.value = vol();
+  _gainNode.connect(audioCtx.destination);
+
+  _audioSrc = audioCtx.createBufferSource();
+  _audioSrc.buffer = _audioBuf;
+  _audioSrc.connect(_gainNode);
+  _audioSrc.onended = () => { if (isPlaying) advanceQueue(); };
+  applyRate();
+
+  _startAt   = audioCtx.currentTime + 0.1;
+  _pausedPos = 0;
+  _audioSrc.start(_startAt);
+
+  cdgPlayer = new CdgPlayer(canvas);
+  cdgPlayer.loadFromBuffer(cdgBuf);
+  cdgPlayer.start(audioCtx, _startAt);
+  scaleCanvas(canvas);
+
+  broadcast({ type: 'song_info', title: song.title, artist: song.artist, singer_name: song.singer_name });
+  broadcast({ type: 'cdg_path', path: song.file_path, pos: 0 });
+
+  isPlaying = true; updateIcon(); startProgress();
+}
+
+async function playYoutube(song) {
+  const videoId = song.file_path.replace('yt:', '');
+  const video   = document.getElementById('video-player');
+  hide('cdg-canvas'); hide('player-idle'); show('video-player'); hide('song-overlay');
+
+  document.getElementById('ctrl-title').textContent = `${song.artist} — ${song.title}`;
+  document.getElementById('ctrl-meta').textContent  = '';
+
+  toast('Loading YouTube…', 'info');
+  let streamUrl;
+  try {
+    streamUrl = await api.youtubeStream(videoId);
+  } catch(err) {
+    toast('YouTube error: ' + err.message, 'error');
+    currentSong = null; show('player-idle'); hide('video-player'); return;
+  }
+
+  video.src = streamUrl;
+  video.volume = vol();
+  video.onended = () => advanceQueue();
+  video.ontimeupdate = updateProgress;
+  _videoEl = video; _songDur = 0;
+  try {
+    await video.play();
+  } catch(err) {
+    toast('Playback error: ' + err.message, 'error');
+    currentSong = null; show('player-idle'); hide('video-player'); return;
+  }
+  _songDur = video.duration || 0;
+  isPlaying = true; updateIcon(); startProgress();
+  setInfo(song);
+  _ytStreamUrl = streamUrl;
+  broadcast({ type: 'song_info', title: song.title, artist: song.artist, singer_name: song.singer_name });
+  broadcast({ type: 'video_url', url: streamUrl, pos: 0 });
+}
+
+const MIME_MAP = {
+  mp4:'video/mp4', m4v:'video/mp4', webm:'video/webm',
+  avi:'video/x-msvideo', mkv:'video/x-matroska',
+  mpeg:'video/mpeg', mpg:'video/mpeg',
+  mp3:'audio/mpeg', m4a:'audio/mp4', aac:'audio/aac',
+  ogg:'audio/ogg', flac:'audio/flac', wav:'audio/wav',
+};
+async function playVideo(song) {
+  const video = document.getElementById('video-player');
+  hide('cdg-canvas'); hide('player-idle'); show('video-player'); hide('song-overlay');
+
+  let fileBytes;
+  try {
+    fileBytes = await api.readFile(song.file_path);
+  } catch(err) {
+    toast('File read error: ' + err.message, 'error');
+    currentSong = null; show('player-idle'); hide('video-player'); return;
+  }
+
+  const mime = MIME_MAP[song.file_format] || 'application/octet-stream';
+  const blob = new Blob([fileBytes], { type: mime });
+  if (_videoBlobUrl) URL.revokeObjectURL(_videoBlobUrl);
+  _videoBlobUrl = URL.createObjectURL(blob);
+
+  video.src = _videoBlobUrl;
+  video.volume = vol();
+  video.onended = () => advanceQueue();
+  video.ontimeupdate = updateProgress;
+  _videoEl = video; _songDur = 0;
+  try {
+    await video.play();
+  } catch(err) {
+    toast('Video error: ' + err.message, 'error');
+    currentSong = null; show('player-idle'); hide('video-player'); return;
+  }
+  _songDur = video.duration || 0;
+  isPlaying = true; updateIcon(); startProgress();
+  broadcast({ type: 'song_info', title: song.title, artist: song.artist, singer_name: song.singer_name });
+  broadcast({ type: 'video_path', path: song.file_path, mime: MIME_MAP[song.file_format] || 'video/mp4', pos: 0 });
+}
+
+async function advanceQueue() {
+  const prevSinger = currentSong?.singer_name || null;
+  stopCurrent(); currentSong = null;
+  const nextEntry = await api.nextSong();
+  await renderQueue();
+  await doTransition(prevSinger, nextEntry);
+  await checkAndPlay();
+}
+
+// ── Controls ──────────────────────────────────────────────────────────────────
+function togglePlayPause() {
+  if (_audioBuf && audioCtx) {
+    if (isPlaying) {
+      _pausedPos = getPos(); audioCtx.suspend();
+      if (cdgPlayer) cdgPlayer.pause(); isPlaying=false;
+    } else {
+      audioCtx.resume(); _startAt = audioCtx.currentTime - _pausedPos;
+      if (cdgPlayer) cdgPlayer.resume(audioCtx, _startAt); isPlaying=true;
+    }
+  } else if (_videoEl) {
+    isPlaying ? _videoEl.pause() : _videoEl.play(); isPlaying=!isPlaying;
+  }
+  updateIcon();
+}
+
+async function skipSong() { await advanceQueue(); }
+
+function setVolume(v) {
+  if (_gainNode) _gainNode.gain.value=parseFloat(v);
+  if (_videoEl)  _videoEl.volume=parseFloat(v);
+}
+
+function seek(pct) {
+  if (_audioBuf && audioCtx && _audioSrc) {
+    const pos=(pct/100)*_audioBuf.duration;
+    try{_audioSrc.onended=null;_audioSrc.stop(0);}catch(_){}
+    _audioSrc=audioCtx.createBufferSource();
+    _audioSrc.buffer=_audioBuf; _audioSrc.connect(_gainNode);
+    _audioSrc.onended=()=>{if(isPlaying)advanceQueue();};
+    applyRate();
+    const at=audioCtx.currentTime+0.05;
+    _audioSrc.start(at,pos); _startAt=at-pos;
+    const wallWhen=performance.now()+(at-audioCtx.currentTime)*1000;
+    if(cdgPlayer) cdgPlayer.seekTo(pos,wallWhen);
+  } else if (_videoEl) {
+    _videoEl.currentTime=(pct/100)*(_videoEl.duration||0);
+  }
+}
+
+function applyRate() {
+  const r=Math.max(0.25,Math.min(4,Math.pow(2,_pitch/12)*(1+_tempo*0.04)));
+  if(_audioSrc) _audioSrc.playbackRate.value=r;
+  if(_videoEl)  {_videoEl.playbackRate=r;_videoEl.preservesPitch=true;}
+}
+
+function adjPitch(d){_pitch=Math.max(-6,Math.min(6,_pitch+d));document.getElementById('pitch-val').textContent=(_pitch>0?'+':'')+_pitch;applyRate();}
+function adjTempo(d){_tempo=Math.max(-5,Math.min(5,_tempo+d));document.getElementById('tempo-val').textContent=(_tempo>0?'+':'')+_tempo;applyRate();}
+function adjSync(d) {_sync=Math.max(-500,Math.min(500,_sync+d));document.getElementById('sync-val').textContent=(_sync>0?'+':'')+_sync+' ms';cdgSyncOffset=_sync/1000;}
+
+function vol() { return parseFloat(document.getElementById('vol-slider').value); }
+function getPos() {
+  if(_audioBuf&&audioCtx) return isPlaying?Math.max(0,audioCtx.currentTime-_startAt):_pausedPos;
+  if(_videoEl) return _videoEl.currentTime||0;
+  return 0;
+}
+
+// ── Progress ──────────────────────────────────────────────────────────────────
+let _progTimer=null;
+function startProgress(){stopProgress();_progTimer=setInterval(updateProgress,250);}
+function stopProgress(){if(_progTimer){clearInterval(_progTimer);_progTimer=null;}}
+function updateProgress(){
+  const cur=getPos(), dur=_songDur||(_videoEl&&_videoEl.duration)||0;
+  document.getElementById('time-cur').textContent=fmt(cur);
+  document.getElementById('time-dur').textContent=fmt(dur);
+  if(dur>0) document.getElementById('progress-slider').value=(cur/dur)*100;
+  const cdgPos=cdgPlayer?cdgPlayer._position():0;
+  document.getElementById('sync-hud').textContent=
+    `audio ${cur.toFixed(2)}s | cdg ${cdgPos.toFixed(2)}s | Δ ${(cdgPos-cur).toFixed(2)}s`;
+}
+function fmt(s){if(!s||isNaN(s))return'0:00';return`${Math.floor(s/60)}:${Math.floor(s%60).toString().padStart(2,'0')}`;}
+function updateIcon(){document.getElementById('play-icon').className=isPlaying?'fa-solid fa-pause':'fa-solid fa-play';}
+
+// ── Canvas scaling ────────────────────────────────────────────────────────────
+function scaleCanvas(c){
+  const a=document.getElementById('player-area');
+  const s=Math.min(a.clientWidth/300,a.clientHeight/216);
+  c.style.width=`${300*s}px`;c.style.height=`${216*s}px`;
+}
+window.addEventListener('resize',()=>{const c=document.getElementById('cdg-canvas');if(!c.classList.contains('hidden'))scaleCanvas(c);});
+
+// ── Add Song Modal ────────────────────────────────────────────────────────────
+let _lastSongs=[], _mTimer;
+let _activeTab = 'local';
+
+function switchTab(tab) {
+  _activeTab = tab;
+  document.getElementById('tab-local-content').classList.toggle('hidden', tab !== 'local');
+  document.getElementById('tab-yt-content').classList.toggle('hidden', tab !== 'yt');
+  document.getElementById('tab-local').className = tab === 'local' ? 'btn btn-primary btn-sm' : 'btn btn-gray btn-sm';
+  document.getElementById('tab-yt').className    = tab === 'yt'    ? 'btn btn-primary btn-sm' : 'btn btn-gray btn-sm';
+  document.getElementById('tab-local').style.flex = '1';
+  document.getElementById('tab-yt').style.flex    = '1';
+  document.getElementById('tab-local').style.borderRadius = '6px';
+  document.getElementById('tab-yt').style.borderRadius    = '6px';
+  if (tab === 'yt') setTimeout(()=>document.getElementById('yt-query').focus(), 50);
+  else              setTimeout(()=>document.getElementById('modal-search').focus(), 50);
+}
+
+function openAddModal(){
+  show('add-modal');
+  document.getElementById('modal-search').value='';
+  document.getElementById('modal-results').innerHTML='';
+  document.getElementById('modal-selected').classList.add('hidden');
+  document.getElementById('modal-song-id').value='';
+  document.getElementById('modal-singer').value='';
+  document.getElementById('yt-query').value='';
+  document.getElementById('yt-results').innerHTML='';
+  document.getElementById('yt-status').textContent='';
+  document.getElementById('yt-selected').classList.add('hidden');
+  document.getElementById('yt-video-id').value='';
+  _lastSongs=[]; _ytSongs=[];
+  switchTab('local');
+}
+function closeAdd(){hide('add-modal');}
+
+function modalSearch(q){
+  clearTimeout(_mTimer);
+  _mTimer=setTimeout(async()=>{
+    if(!q.trim()){document.getElementById('modal-results').innerHTML='';_lastSongs=[];return;}
+    _lastSongs=await api.searchSongs(q,20);
+    document.getElementById('modal-results').innerHTML=_lastSongs.map((s,i)=>`
+      <div class="result-item" data-id="${s.id}" data-idx="${i}">
+        <span style="font-size:.875rem;color:#e5e7eb">${s.artist} <span style="color:#6b7280">—</span> ${s.title}</span>
+        <span style="font-size:.75rem;color:#6b7280;margin-left:8px">${s.file_format.toUpperCase()}</span>
+      </div>`).join('')||'<p style="padding:10px 12px;font-size:.875rem;color:#6b7280">No results</p>';
+    if(_lastSongs.length>0) selectSong(0);
+  },200);
+}
+
+function setSong(id,label){
+  document.getElementById('modal-song-id').value=id;
+  document.getElementById('modal-selected').textContent='✓ '+label;
+  document.getElementById('modal-selected').classList.remove('hidden');
+  document.getElementById('modal-results').querySelectorAll('.result-item').forEach(el=>{
+    const active=String(el.dataset.id)===String(id);
+    el.style.background=active?'rgba(124,58,237,.25)':'';
+    el.style.outline=active?'1px solid rgba(167,139,250,.5)':'';
+  });
+}
+function selectSong(idx){
+  clearTimeout(_mTimer);
+  const s=_lastSongs[idx];
+  if(!s) return;
+  setSong(s.id, s.artist+' — '+s.title);
+  document.getElementById('modal-singer').focus();
+}
+
+async function confirmAdd(){
+  const name=document.getElementById('modal-singer').value.trim();
+  if(!name){document.getElementById('modal-singer').focus();toast('Enter singer name','error');return;}
+
+  if (_activeTab === 'yt') {
+    const videoId    = document.getElementById('yt-video-id').value;
+    if (!videoId) { toast('Select a YouTube song first','error'); return; }
+    const title      = document.getElementById('yt-video-title').value;
+    const artist     = document.getElementById('yt-video-artist').value;
+    const duration   = parseFloat(document.getElementById('yt-video-duration').value) || 0;
+    // Import as a song entry so it goes through the normal queue
+    const result = await api.importSong({
+      title, artist,
+      file_path:   'yt:' + videoId,
+      file_format: 'youtube',
+      duration,
+    });
+    await api.addToQueue(result.id, name);
+    toast(`${name} added!`); closeAdd(); renderQueue();
+    return;
+  }
+
+  let id=document.getElementById('modal-song-id').value;
+  if(!id&&_lastSongs.length>0){id=_lastSongs[0].id;setSong(id,_lastSongs[0].artist+' — '+_lastSongs[0].title);}
+  if(!id){toast('Type a song name to search','error');return;}
+  await api.addToQueue(parseInt(id),name);
+  toast(`${name} added!`);closeAdd();renderQueue();
+}
+
+// ── YouTube search ────────────────────────────────────────────────────────────
+let _ytSongs = [], _ytReady = false;
+
+async function ytSearch() {
+  const q = document.getElementById('yt-query').value.trim();
+  if (!q) return;
+  const status = document.getElementById('yt-status');
+  const results = document.getElementById('yt-results');
+
+  if (!_ytReady) {
+    status.textContent = 'Downloading yt-dlp (~16 MB)…';
+    api.onYtProgress(p => {
+      if (p.stage === 'downloading') status.textContent = `Downloading yt-dlp… ${p.pct}%`;
+      else if (p.stage === 'ready')  { status.textContent = 'yt-dlp ready'; _ytReady = true; }
+    });
+    try { await api.youtubeEnsure(); _ytReady = true; } catch(e) { toast('yt-dlp error: '+e.message,'error'); return; }
+  }
+
+  status.textContent = 'Searching…';
+  results.innerHTML = '';
+  document.getElementById('yt-video-id').value = '';
+  document.getElementById('yt-selected').classList.add('hidden');
+  _ytSongs = [];
+
+  try {
+    _ytSongs = await api.youtubeSearch(q);
+  } catch(e) { status.textContent = 'Search failed: ' + e.message; return; }
+
+  if (!_ytSongs.length) { status.textContent = 'No results found.'; return; }
+  status.textContent = `${_ytSongs.length} results`;
+
+  results.innerHTML = _ytSongs.map((v, i) => {
+    const dur = v.duration ? Math.floor(v.duration/60)+':'+String(Math.floor(v.duration%60)).padStart(2,'0') : '';
+    return `<div class="result-item" data-idx="${i}" style="gap:10px">
+      <img src="${v.thumbnail}" style="width:64px;height:48px;object-fit:cover;border-radius:4px;flex-shrink:0" onerror="this.style.display='none'">
+      <div style="min-width:0;flex:1">
+        <div style="font-size:.82rem;color:#e5e7eb;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${v.title}</div>
+        <div style="font-size:.75rem;color:#6b7280">${v.uploader}${dur ? ' · '+dur : ''}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function selectYtSong(idx) {
+  const v = _ytSongs[idx];
+  if (!v) return;
+  document.getElementById('yt-video-id').value       = v.id;
+  document.getElementById('yt-video-title').value    = v.title;
+  document.getElementById('yt-video-artist').value   = v.uploader;
+  document.getElementById('yt-video-duration').value = v.duration;
+  document.getElementById('yt-selected').textContent = '✓ ' + v.title;
+  document.getElementById('yt-selected').classList.remove('hidden');
+  document.getElementById('yt-results').querySelectorAll('.result-item').forEach((el,i) => {
+    el.style.background = i === idx ? 'rgba(124,58,237,.25)' : '';
+    el.style.outline    = i === idx ? '1px solid rgba(167,139,250,.5)' : '';
+  });
+  document.getElementById('modal-singer').focus();
+}
+
+// ── Live search ───────────────────────────────────────────────────────────────
+let _sTimer, _liveSongs=[];
+function liveSearch(q){
+  clearTimeout(_sTimer);
+  const res=document.getElementById('live-results');
+  if(!q){res.classList.add('hidden');return;}
+  _sTimer=setTimeout(async()=>{
+    _liveSongs=await api.searchSongs(q,10);
+    if(!_liveSongs.length){res.classList.add('hidden');return;}
+    res.classList.remove('hidden');
+    res.innerHTML=_liveSongs.map((s,i)=>`
+      <div class="result-item" data-idx="${i}">
+        <span style="font-size:.875rem;color:#e5e7eb">${s.artist} — ${s.title}</span>
+        <span style="font-size:.75rem;color:#6b7280">${s.file_format.toUpperCase()}</span>
+      </div>`).join('');
+  },250);
+}
+function quickAdd(idx){
+  const s=_liveSongs[idx];
+  if(!s) return;
+  document.getElementById('live-results').classList.add('hidden');
+  document.getElementById('q-search').value='';
+  openAddModal();
+  setSong(s.id, s.artist+' — '+s.title);
+}
+
+// ── Settings ──────────────────────────────────────────────────────────────────
+async function openSettings(){
+  show('settings-modal');
+  const [settings, stats] = await Promise.all([api.getSettings(), api.getStats()]);
+  // Library dirs
+  let dirs = [];
+  try { dirs = JSON.parse(settings.music_dirs || '[]'); } catch {}
+  if (!dirs.length && settings.music_dir) dirs = [settings.music_dir];
+  if (!dirs.length) dirs = [''];
+  _renderLibraryRows(dirs);
+  // Transition settings
+  document.getElementById('set-thanks-time').value = settings.thanks_time   || '5';
+  document.getElementById('set-bg-time').value     = settings.bg_time       || '10';
+  document.getElementById('set-thanks').checked    = settings.show_thanks   === 'true';
+  const spd = settings.banner_speed || '4';
+  document.getElementById('set-banner-speed').value       = spd;
+  document.getElementById('banner-speed-val').textContent = spd;
+  document.getElementById('set-song-limit').value          = settings.request_song_limit  || '3';
+  const preventRecent = settings.prevent_recent === 'true';
+  document.getElementById('set-prevent-recent').checked    = preventRecent;
+  document.getElementById('set-recent-hours').value        = settings.recent_hours        || '2';
+  document.getElementById('set-recent-hours').disabled     = !preventRecent;
+  document.getElementById('set-venue-path').value  = settings.venue_image_path || '';
+  if (settings.venue_image_path) loadVenuePreview(settings.venue_image_path);
+  // Top songs
+  if (stats.top_songs.length) {
+    document.getElementById('top-songs-card').style.display = '';
+    document.getElementById('top-songs').innerHTML = stats.top_songs.map((s,i) => `
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <span style="color:#4b5563;font-size:.875rem;width:20px;text-align:right">${i+1}</span>
+        <span style="flex:1;font-size:.875rem;color:#d1d5db;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.artist} — ${s.title}</span>
+        <span style="color:#a78bfa;font-size:.8rem">${s.play_count}×</span>
+      </div>`).join('');
+  }
+}
+function closeSettings(){hide('settings-modal');}
+
+function _renderLibraryRows(dirs) {
+  document.getElementById('library-rows').innerHTML = '';
+  dirs.forEach(d => _addLibRow(d));
+  _updateAddLibBtn();
+}
+
+function _addLibRow(val = '') {
+  const container = document.getElementById('library-rows');
+  const row = document.createElement('div');
+  row.className = 'lib-row';
+  row.style.marginBottom = '8px';
+  row.innerHTML = `
+    <div style="display:flex;gap:8px;margin-bottom:4px">
+      <input type="text" class="lib-dir-input" placeholder="Music folder path" value="${val.replace(/&/g,'&amp;').replace(/"/g,'&quot;')}" style="flex:1">
+      <button class="btn btn-gray btn-sm" onclick="browseLibRow(this)"><i class="fa-solid fa-folder"></i> Browse</button>
+      <button class="btn btn-primary btn-sm" onclick="scanLibRow(this)"><i class="fa-solid fa-magnifying-glass"></i> Scan</button>
+      <button class="btn btn-red btn-sm btn-icon" onclick="removeLibRow(this)" title="Remove"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="lib-progress hidden">
+      <div style="display:flex;justify-content:space-between;font-size:.8rem;color:#9ca3af;margin-bottom:4px">
+        <span class="lib-status">Scanning…</span><span class="lib-counts"></span>
+      </div>
+      <div style="background:#374151;border-radius:4px;height:6px">
+        <div class="lib-bar" style="background:#7c3aed;height:6px;border-radius:4px;width:0%;transition:width .3s"></div>
+      </div>
+    </div>`;
+  container.appendChild(row);
+}
+
+function addLibraryRow() {
+  if (document.querySelectorAll('.lib-row').length >= 10) return;
+  _addLibRow('');
+  _updateAddLibBtn();
+}
+
+function removeLibRow(btn) {
+  const rows = document.querySelectorAll('.lib-row');
+  if (rows.length <= 1) { btn.closest('.lib-row').querySelector('.lib-dir-input').value = ''; return; }
+  btn.closest('.lib-row').remove();
+  _updateAddLibBtn();
+}
+
+function _updateAddLibBtn() {
+  const btn = document.getElementById('add-lib-btn');
+  btn.style.display = document.querySelectorAll('.lib-row').length >= 10 ? 'none' : '';
+}
+
+async function browseLibRow(btn) {
+  const dir = await api.openFolderDialog();
+  if (dir) btn.closest('.lib-row').querySelector('.lib-dir-input').value = dir;
+}
+
+async function _saveLibraryDirs() {
+  const dirs = [...document.querySelectorAll('.lib-dir-input')].map(i => i.value.trim()).filter(Boolean);
+  await api.setSetting('music_dirs', JSON.stringify(dirs));
+  if (dirs.length) await api.setSetting('music_dir', dirs[0]);
+}
+
+async function scanLibRow(btn) {
+  const row = btn.closest('.lib-row');
+  const dir = row.querySelector('.lib-dir-input').value.trim();
+  if (!dir) { toast('Choose a folder first', 'error'); return; }
+  await _saveLibraryDirs();
+  const progress = row.querySelector('.lib-progress');
+  const statusEl = row.querySelector('.lib-status');
+  const countsEl = row.querySelector('.lib-counts');
+  const barEl    = row.querySelector('.lib-bar');
+  progress.classList.remove('hidden');
+  statusEl.textContent = 'Scanning…';
+  barEl.style.width = '0%';
+  api.onScanProgress(p => {
+    const pct = p.total > 0 ? Math.round((p.done / p.total) * 100) : 0;
+    barEl.style.width = pct + '%';
+    countsEl.textContent = `${p.done}/${p.total} files, ${p.added} added`;
+    if (p.done === true) statusEl.textContent = `Done! ${p.added} songs added.`;
+  });
+  const r = await api.scanLibrary(dir);
+  statusEl.textContent = `Done! ${r.added} songs added.`;
+  toast(`Library scanned: ${r.added} new songs`);
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function show(id){document.getElementById(id).classList.remove('hidden');}
+function hide(id){document.getElementById(id).classList.add('hidden');}
+function toast(msg,type='success'){
+  const t=document.createElement('div');
+  t.className=`toast toast-${type==='error'?'error':type==='info'?'info':'success'}`;
+  t.textContent=msg;
+  document.getElementById('toast-container').appendChild(t);
+  setTimeout(()=>{t.style.opacity='0';setTimeout(()=>t.remove(),300);},3000);
+}
+
+// ── Venue image helpers ───────────────────────────────────────────────────────
+let _venueBlobUrl = null;
+
+async function loadVenuePreview(path) {
+  try {
+    const bytes = await api.readFile(path);
+    const blob  = new Blob([bytes]);
+    if (_venueBlobUrl) URL.revokeObjectURL(_venueBlobUrl);
+    _venueBlobUrl = URL.createObjectURL(blob);
+    const img = document.getElementById('set-venue-preview');
+    img.src = _venueBlobUrl; img.style.display = 'block';
+  } catch {}
+}
+
+async function browseVenueImage() {
+  const p = await api.openImageDialog();
+  if (!p) return;
+  document.getElementById('set-venue-path').value = p;
+  loadVenuePreview(p);
+}
+
+function clearVenueImage() {
+  document.getElementById('set-venue-path').value = '';
+  const img = document.getElementById('set-venue-preview');
+  img.src = ''; img.style.display = 'none';
+}
+
+async function saveTransitionSettings() {
+  const thanksTime   = String(parseInt(document.getElementById('set-thanks-time').value) || 5);
+  const bgTime       = String(parseInt(document.getElementById('set-bg-time').value) || 10);
+  const thanks       = String(document.getElementById('set-thanks').checked);
+  const venue        = document.getElementById('set-venue-path').value;
+  const bannerSpeed  = String(parseInt(document.getElementById('set-banner-speed').value) || 4);
+  const songLimit     = String(parseInt(document.getElementById('set-song-limit').value)   || 3);
+  const preventRecent = String(document.getElementById('set-prevent-recent').checked);
+  const recentHours   = String(Math.min(12, Math.max(1, parseInt(document.getElementById('set-recent-hours').value) || 2)));
+  await Promise.all([
+    api.setSetting('thanks_time',         thanksTime),
+    api.setSetting('bg_time',             bgTime),
+    api.setSetting('show_thanks',         thanks),
+    api.setSetting('venue_image_path',    venue),
+    api.setSetting('banner_speed',        bannerSpeed),
+    api.setSetting('request_song_limit',  songLimit),
+    api.setSetting('prevent_recent',      preventRecent),
+    api.setSetting('recent_hours',        recentHours),
+  ]);
+  toast('Settings saved');
+}
+
+// ── Between-song transition ───────────────────────────────────────────────────
+let _venueCachedPath = null, _venueCachedBlob = null;
+
+async function _getVenueBlobUrl(path) {
+  if (!path) return null;
+  if (path === _venueCachedPath && _venueCachedBlob) return _venueCachedBlob;
+  try {
+    const bytes = await api.readFile(path);
+    if (_venueCachedBlob) URL.revokeObjectURL(_venueCachedBlob);
+    _venueCachedBlob = URL.createObjectURL(new Blob([bytes]));
+    _venueCachedPath = path;
+    return _venueCachedBlob;
+  } catch { return null; }
+}
+
+function _buildBanner(nextEntry, pending, bgSec, transitionSec) {
+  const fmtWait = s => {
+    if (s < 60) return `≈ ${Math.round(s)}s`;
+    return `≈ ${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')} min`;
+  };
+  const parts = [];
+  if (nextEntry) {
+    parts.push(`▶  ${nextEntry.singer_name || '?'}  ·  ${nextEntry.artist} — ${nextEntry.title}  (${fmtWait(bgSec)})`);
+  }
+  let waitSec = bgSec + (nextEntry?.duration || 180);
+  for (const s of pending) {
+    waitSec += transitionSec;
+    parts.push(`◆  ${s.singer_name || '?'}  ·  ${s.artist} — ${s.title}  (${fmtWait(waitSec)})`);
+    waitSec += (s.duration || 180);
+  }
+  const text = parts.join('          ');
+  return text + '          ' + text;
+}
+
+async function doTransition(prevSinger, nextEntry) {
+  const cfg      = await api.getSettings();
+  const thanksMs = (parseInt(cfg.thanks_time || '5')  || 0) * 1000;
+  const bgMs     = (parseInt(cfg.bg_time     || '10') || 0) * 1000;
+  if (thanksMs <= 0 && bgMs <= 0) return;
+
+  _transitioning = true;
+  hide('player-idle'); hide('cdg-canvas'); hide('video-player'); hide('song-overlay');
+
+  const ov = document.getElementById('transition-overlay');
+  const p1 = document.getElementById('tr-p1');
+  const p2 = document.getElementById('tr-p2');
+  ov.style.display = 'block';
+  p1.style.display = 'none';
+  p2.style.display = 'none';
+
+  // ── Phase 1: Thank you ─────────────────────────────────────────────────
+  if (cfg.show_thanks === 'true' && prevSinger && thanksMs > 0) {
+    document.getElementById('tr-singer').textContent = prevSinger;
+    p1.style.display = 'flex';
+    broadcast({ type: 'tr_phase1', prevSinger, thanksMs });
+    await new Promise(r => setTimeout(r, thanksMs));
+    p1.style.display = 'none';
+  }
+
+  // ── Phase 2: Background + banner ───────────────────────────────────────
+  if (bgMs > 0) {
+    // Start timer immediately so async setup doesn't eat into display time
+    p2.style.display = 'flex';
+    const phaseEnd = Date.now() + bgMs;
+
+    const venuePath = cfg.venue_image_path || '';
+    const trVenue   = document.getElementById('tr-venue');
+    trVenue.style.display = 'none';
+    _getVenueBlobUrl(venuePath).then(url => {
+      if (url) { trVenue.src = url; trVenue.style.display = 'block'; }
+    });
+
+    const queue         = await api.getQueue();
+    const pending       = queue.filter(e => e.status === 'pending');
+    const transitionSec = (thanksMs + bgMs) / 1000;
+    const bannerText    = _buildBanner(nextEntry, pending, bgMs / 1000, transitionSec);
+    const speedLevel    = parseInt(cfg.banner_speed || '4') || 4;
+    const SPEED_MAP     = [0, 0.80, 0.60, 0.45, 0.32, 0.22, 0.15, 0.10, 0.07, 0.05, 0.03];
+    const speedMult     = SPEED_MAP[speedLevel] ?? 0.22; // 1=langsam(0.80) … 10=sehr schnell(0.03)
+    const animSec       = Math.max(4, bannerText.length * speedMult);
+    const ticker        = document.getElementById('tr-ticker');
+    ticker.textContent  = bannerText;
+    ticker.style.animationDuration = animSec + 's';
+
+    // Countdown timer
+    const fmtSec = s => s >= 60 ? `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}` : `${s}`;
+    let remaining = Math.ceil(bgMs / 1000);
+    const cntEl = document.getElementById('tr-countdown-num');
+    cntEl.textContent = fmtSec(remaining);
+    const cntTimer = setInterval(() => {
+      remaining = Math.max(0, remaining - 1);
+      cntEl.textContent = fmtSec(remaining);
+    }, 1000);
+
+    broadcast({ type: 'tr_phase2', venuePath, bannerText, animSec, bgMs });
+    await new Promise(r => setTimeout(r, Math.max(0, phaseEnd - Date.now())));
+    clearInterval(cntTimer);
+    p2.style.display = 'none';
+  }
+
+  ov.style.display = 'none';
+  _transitioning = false;
+  broadcast({ type: 'transition_end' });
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+document.getElementById('modal-results').addEventListener('click', e=>{
+  const item=e.target.closest('[data-idx]');
+  if(item) selectSong(parseInt(item.dataset.idx));
+});
+document.getElementById('yt-results').addEventListener('click', e=>{
+  const item=e.target.closest('[data-idx]');
+  if(item) selectYtSong(parseInt(item.dataset.idx));
+});
+document.getElementById('live-results').addEventListener('click', e=>{
+  const item=e.target.closest('[data-idx]');
+  if(item) quickAdd(parseInt(item.dataset.idx));
+});
+
+// ── Queue drag-and-drop ───────────────────────────────────────────────────────
+(function initQueueDnD() {
+  const list = document.getElementById('queue-list');
+  let _dragId = null, _dragEl = null, _dropRow = null, _dropBefore = true;
+
+  function clearIndicators() {
+    list.querySelectorAll('.drop-before,.drop-after').forEach(r => {
+      r.classList.remove('drop-before', 'drop-after');
+    });
+  }
+
+  list.addEventListener('dragstart', e => {
+    const row = e.target.closest('.queue-row[draggable]');
+    if (!row) { e.preventDefault(); return; }
+    _dragId = Number(row.dataset.id);
+    _dragEl = row;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', _dragId);
+    setTimeout(() => row.classList.add('dragging'), 0);
+  });
+
+  list.addEventListener('dragend', () => {
+    if (_dragEl) _dragEl.classList.remove('dragging');
+    clearIndicators();
+    _dragId = null; _dragEl = null; _dropRow = null;
+  });
+
+  list.addEventListener('dragover', e => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const row = e.target.closest('.queue-row[draggable]');
+    if (!row || row === _dragEl) { clearIndicators(); return; }
+    const rect = row.getBoundingClientRect();
+    _dropBefore = e.clientY < rect.top + rect.height / 2;
+    _dropRow = row;
+    clearIndicators();
+    row.classList.add(_dropBefore ? 'drop-before' : 'drop-after');
+  });
+
+  list.addEventListener('drop', async e => {
+    e.preventDefault();
+    clearIndicators();
+    // History → Queue drop
+    if (window._histDrag) {
+      const { songId, singer } = window._histDrag;
+      window._histDrag = null;
+      await api.addToQueue(songId, singer);
+      await renderQueue();
+      toast(`${singer || 'Song'} added to queue`);
+      return;
+    }
+    if (!_dragId || !_dropRow) return;
+    const pendingRows = [...list.querySelectorAll('.queue-row[draggable]')];
+    const fromIdx = pendingRows.indexOf(_dragEl);
+    let toIdx = pendingRows.indexOf(_dropRow);
+    if (toIdx < 0 || fromIdx < 0) return;
+    if (!_dropBefore) toIdx++;
+    // Adjust for the removed item
+    if (fromIdx < toIdx) toIdx--;
+    if (fromIdx === toIdx) return;
+    await api.moveToPosition(_dragId, toIdx);
+    renderQueue();
+  });
+})();
+
+// ── Wireless cast ─────────────────────────────────────────────────────────────
+let _castPollTimer = null;
+
+async function openCastModal() {
+  show('cast-modal');
+  const s = await api.networkStatus();
+  _updateCastUI(s);
+  if (s.running) _startCastPoll();
+}
+
+function closeCastModal() {
+  hide('cast-modal');
+  clearInterval(_castPollTimer);
+  _castPollTimer = null;
+}
+
+async function castStart() {
+  const url = await api.networkStart();
+  document.getElementById('cast-url').value = url;
+  _updateCastUI({ running: true, url, clients: 0 });
+  _startCastPoll();
+  toast('Wireless server started');
+}
+
+async function castStop() {
+  await api.networkStop();
+  _updateCastUI({ running: false });
+  clearInterval(_castPollTimer);
+  _castPollTimer = null;
+  toast('Wireless server stopped');
+}
+
+function castCopyUrl() {
+  const url = document.getElementById('cast-url').value;
+  navigator.clipboard.writeText(url).then(() => toast('URL copied'));
+}
+
+function _updateCastUI(s) {
+  document.getElementById('cast-stopped').classList.toggle('hidden',  s.running);
+  document.getElementById('cast-running').classList.toggle('hidden',  !s.running);
+  document.getElementById('cast-btn').classList.toggle('btn-primary', s.running);
+  document.getElementById('cast-btn').classList.toggle('btn-gray',    !s.running);
+  if (s.running) {
+    document.getElementById('cast-url').value = s.url || '';
+    document.getElementById('cast-clients').textContent = s.clients ?? 0;
+    document.getElementById('cast-audio').checked = !!s.audio;
+    // Show alternative IPs (all except the primary)
+    const primary = s.url;
+    const alts = (s.allUrls || []).filter(a => a.url !== primary);
+    const altBlock = document.getElementById('cast-alt-urls');
+    if (alts.length) {
+      document.getElementById('cast-alt-list').innerHTML = alts.map(a =>
+        `<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+          <span style="color:#6b7280;min-width:120px">${a.label}</span>
+          <code style="color:#a78bfa;cursor:pointer" onclick="navigator.clipboard.writeText('${a.url}').then(()=>toast('Copied'))">${a.url}</code>
+        </div>`
+      ).join('');
+      altBlock.classList.remove('hidden');
+    } else {
+      altBlock.classList.add('hidden');
+    }
+  }
+}
+
+function _startCastPoll() {
+  clearInterval(_castPollTimer);
+  _castPollTimer = setInterval(async () => {
+    const s = await api.networkStatus();
+    if (s.running) document.getElementById('cast-clients').textContent = s.clients ?? 0;
+  }, 3000);
+}
+
+// ── Singer Requests ───────────────────────────────────────────────────────────
+let _reqPollTimer = null;
+
+async function openRequestModal() {
+  show('requests-modal');
+  const s = await api.requestsStatus();
+  _updateReqUI(s);
+  if (s.running) _startReqPoll();
+}
+function closeRequestModal() {
+  hide('requests-modal');
+  clearInterval(_reqPollTimer); _reqPollTimer = null;
+}
+async function reqStart() {
+  const url = await api.requestsStart();
+  _updateReqUI({ running: true, url, clients: 0, allUrls: [] });
+  _startReqPoll();
+  toast('Request server started');
+}
+async function reqStop() {
+  await api.requestsStop();
+  _updateReqUI({ running: false });
+  clearInterval(_reqPollTimer); _reqPollTimer = null;
+  toast('Request server stopped');
+}
+function reqCopyUrl() {
+  navigator.clipboard.writeText(document.getElementById('req-url').value).then(() => toast('URL copied'));
+}
+function _updateReqUI(s) {
+  document.getElementById('req-stopped').classList.toggle('hidden',  s.running);
+  document.getElementById('req-running').classList.toggle('hidden',  !s.running);
+  document.getElementById('req-nav-btn').classList.toggle('active',  s.running);
+  if (s.running) {
+    document.getElementById('req-url').value = s.url || '';
+    document.getElementById('req-clients').textContent = s.clients ?? 0;
+    const alts = (s.allUrls || []).filter(a => a.url !== s.url);
+    const altBlock = document.getElementById('req-alt-urls');
+    if (alts.length) {
+      document.getElementById('req-alt-list').innerHTML = alts.map(a =>
+        `<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+          <span style="color:#6b7280;min-width:110px;font-size:.75rem">${a.label}</span>
+          <code style="color:#a78bfa;font-size:.75rem;cursor:pointer" onclick="navigator.clipboard.writeText('${a.url}').then(()=>toast('Copied'))">${a.url}</code>
+        </div>`).join('');
+      altBlock.classList.remove('hidden');
+    } else {
+      altBlock.classList.add('hidden');
+    }
+  }
+}
+function _startReqPoll() {
+  clearInterval(_reqPollTimer);
+  _reqPollTimer = setInterval(async () => {
+    const s = await api.requestsStatus();
+    if (s.running) document.getElementById('req-clients').textContent = s.clients ?? 0;
+  }, 3000);
+}
+
+// Instant notification when a singer adds a song from mobile
+api.onMobileRequest(singerName => {
+  renderQueue();
+  toast(`🎤 ${singerName} added a song request`, 'info');
+  const lastEl = document.getElementById('req-last-request');
+  if (lastEl) lastEl.textContent = `Last request: ${singerName}`;
+});
+
+// ── Player fullscreen ─────────────────────────────────────────────────────────
+let _playerFs = false;
+function togglePlayerFullscreen(force) {
+  _playerFs = force !== undefined ? force : !_playerFs;
+  document.getElementById('app').classList.toggle('player-fs', _playerFs);
+  document.body.classList.toggle('player-fs', _playerFs);
+  document.getElementById('fs-icon').className = _playerFs ? 'fa-solid fa-compress' : 'fa-solid fa-expand';
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'f' || e.key === 'F') {
+    // Don't trigger when typing in an input
+    if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') return;
+    togglePlayerFullscreen();
+  }
+  if (e.key === 'Escape' && _playerFs) togglePlayerFullscreen(false);
+});
+
+renderQueue();
+renderHistory();
+checkAndPlay();
+setInterval(()=>{renderQueue();renderHistory();checkAndPlay();},3000);
+</script>
+</body>
+</html>

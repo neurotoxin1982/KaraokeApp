@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Karaoke Player</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100%; height: 100%;
+      background: #000;
+      overflow: hidden;
+      font-family: system-ui, -apple-system, sans-serif;
+    }
+
+    /* CDG canvas — pixel-perfect, fills screen with letterbox */
+    #canvas-wrap {
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      background: #000;
+    }
+    #cdg-canvas {
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      display: block;
+    }
+
+    /* Video element (mp4 / avi / webm) */
+    #video-el {
+      position: absolute; inset: 0;
+      width: 100%; height: 100%;
+      object-fit: contain;
+      display: none;
+    }
+
+    /* Song info overlay (bottom) */
+    #info-bar {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      background: linear-gradient(transparent, rgba(0,0,0,0.85));
+      padding: 24px 32px 20px;
+      display: none;
+      transition: opacity 0.5s;
+    }
+    #song-title  { font-size: 2rem; font-weight: 700; color: #fff; line-height: 1.2; }
+    #song-artist { font-size: 1.2rem; color: #a78bfa; margin-top: 4px; }
+    #singer-name { font-size: 1rem; color: #9ca3af; margin-top: 4px; }
+
+    /* Idle screen */
+    #idle-screen {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      color: #4b5563;
+      gap: 16px;
+    }
+    #idle-screen .logo { font-size: 3rem; }
+    #idle-screen p { font-size: 1.1rem; }
+  </style>
+</head>
+<body>
+
+<div id="canvas-wrap">
+  <canvas id="cdg-canvas"></canvas>
+</div>
+<video id="video-el" autoplay muted></video>
+
+<div id="info-bar">
+  <div id="song-title"></div>
+  <div id="song-artist"></div>
+  <div id="singer-name"></div>
+</div>
+
+<div id="idle-screen">
+  <div class="logo">🎤</div>
+  <p>Waiting for next song…</p>
+</div>
+
+<!-- Between-song transition -->
+<style>@keyframes pop-ticker{from{transform:translateX(0)}to{transform:translateX(-50%)}}</style>
+<!-- Phase 1: Thank you -->
+<div id="pop-tr-thanks" style="display:none;position:absolute;inset:0;background:#000;z-index:60;flex-direction:column;align-items:center;justify-content:center;gap:16px;text-align:center">
+  <div style="font-size:8rem">👏</div>
+  <div style="font-size:3.5rem;font-weight:700;color:#fff">Thank You!</div>
+  <div id="pop-tr-singer" style="font-size:2.5rem;color:#a78bfa;margin-top:8px"></div>
+</div>
+<!-- Phase 2: Background + banner -->
+<div id="pop-tr-bg" style="display:none;position:absolute;inset:0;background:#000;z-index:60;flex-direction:column">
+  <div style="flex:1;display:flex;align-items:stretch;justify-content:center;overflow:hidden;min-height:0;position:relative">
+    <img id="pop-tr-venue" style="width:100%;height:100%;object-fit:contain;display:none">
+    <div id="pop-tr-countdown" style="position:absolute;top:14px;right:14px;background:rgba(0,0,0,0.72);border-radius:14px;padding:10px 18px;text-align:center;backdrop-filter:blur(4px)">
+      <div style="font-size:.65rem;color:#a78bfa;letter-spacing:.1em;font-weight:600;margin-bottom:4px">GET READY</div>
+      <div id="pop-tr-countdown-num" style="font-size:2.4rem;font-weight:700;color:#fff;font-variant-numeric:tabular-nums;line-height:1"></div>
+    </div>
+  </div>
+  <div id="pop-tr-ticker-wrap" style="background:rgba(124,58,237,0.92);padding:14px 0;overflow:hidden;flex-shrink:0">
+    <div id="pop-tr-ticker" style="white-space:nowrap;display:inline-block;animation:pop-ticker 18s linear infinite;font-size:1.4rem;font-weight:700;color:#fff"></div>
+  </div>
+</div>
+
+<script src="js/cdg-player.js"></script>
+<script>
+const canvas    = document.getElementById('cdg-canvas');
+const videoEl   = document.getElementById('video-el');
+const infoBar   = document.getElementById('info-bar');
+const idleScreen= document.getElementById('idle-screen');
+
+let cdgPlayer   = null;
+let _posOffset  = 0;
+let _startAt    = 0;
+let _elapsed    = 0;
+let _position   = 0;
+let _playing    = false;
+let _cntTimer   = null;
+
+// Fit canvas to window preserving 300:216 aspect ratio
+function resizeCanvas() {
+  const W = window.innerWidth, H = window.innerHeight;
+  const scale = Math.min(W / 300, H / 216);
+  canvas.style.width  = (300 * scale) + 'px';
+  canvas.style.height = (216 * scale) + 'px';
+}
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+// Position function for CDG follower mode
+function getPos() {
+  if (!_playing) return _position;
+  const elapsed = (performance.now() - _elapsed) / 1000;
+  return _position + elapsed;
+}
+
+// ── IPC broadcast (Electron) ──────────────────────────────────────────────────
+api.onBroadcast((msg) => {
+  switch (msg.type) {
+
+    case 'song_info': {
+      document.getElementById('song-title').textContent  = msg.title  || '';
+      document.getElementById('song-artist').textContent = msg.artist || '';
+      document.getElementById('singer-name').textContent = msg.singer_name ? '♪ ' + msg.singer_name : '';
+      infoBar.style.display = 'block';
+      idleScreen.style.display = 'none';
+
+      // Hide info after 8 seconds
+      clearTimeout(window._infoTimer);
+      window._infoTimer = setTimeout(() => { infoBar.style.display = 'none'; }, 8000);
+      break;
+    }
+
+    case 'cdg_path': {
+      if (cdgPlayer) { cdgPlayer.stop(); cdgPlayer = null; }
+      videoEl.style.display = 'none';
+      canvas.parentElement.style.display = 'flex';
+      idleScreen.style.display = 'none';
+      _position = msg.pos || 0;
+      _elapsed  = performance.now();
+      _playing  = true;
+      api.readFile(msg.path).then(bytes => {
+        const buf = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+        cdgPlayer = new CdgPlayer(canvas);
+        cdgPlayer.loadFromBuffer(buf);
+        cdgPlayer.startFollower(getPos);
+        if (_position > 0) cdgPlayer.seekTo(_position);
+      }).catch(err => console.error('CDG load error:', err));
+      break;
+    }
+
+    case 'video_path': {
+      if (cdgPlayer) { cdgPlayer.stop(); cdgPlayer = null; }
+      canvas.parentElement.style.display = 'none';
+      videoEl.style.display = 'block';
+      // Read file via IPC and create local Blob URL
+      api.readFile(msg.path).then(bytes => {
+        const mime = msg.mime || 'video/mp4';
+        const blob = new Blob([bytes], { type: mime });
+        if (window._popoutBlobUrl) URL.revokeObjectURL(window._popoutBlobUrl);
+        window._popoutBlobUrl = URL.createObjectURL(blob);
+        videoEl.src = window._popoutBlobUrl;
+        videoEl.currentTime = msg.pos || 0;
+        videoEl.play().catch(() => {});
+      });
+      _playing = true;
+      break;
+    }
+
+    case 'position': {
+      // Periodic sync from main window (every ~250 ms)
+      _position = msg.pos;
+      _elapsed  = performance.now();
+      _playing  = msg.playing;
+      if (cdgPlayer && msg.seek) {
+        cdgPlayer.seekTo(msg.pos);
+      }
+      break;
+    }
+
+    case 'pause': {
+      _playing = false;
+      if (cdgPlayer) cdgPlayer.pause();
+      videoEl.pause();
+      break;
+    }
+
+    case 'resume': {
+      _playing  = true;
+      _position = msg.pos || _position;
+      _elapsed  = performance.now();
+      if (cdgPlayer) cdgPlayer.resume(); // follower mode: no audioCtx needed
+      videoEl.play().catch(() => {});
+      break;
+    }
+
+    case 'tr_phase1': {
+      idleScreen.style.display = 'none';
+      canvas.parentElement.style.display = 'none';
+      videoEl.style.display = 'none';
+      document.getElementById('pop-tr-bg').style.display = 'none';
+      document.getElementById('pop-tr-singer').textContent = msg.prevSinger || '';
+      document.getElementById('pop-tr-thanks').style.display = 'flex';
+      _playing = false;
+      break;
+    }
+
+    case 'tr_phase2': {
+      document.getElementById('pop-tr-thanks').style.display = 'none';
+      idleScreen.style.display = 'none';
+      canvas.parentElement.style.display = 'none';
+      videoEl.style.display = 'none';
+      // Venue image
+      const ptv = document.getElementById('pop-tr-venue');
+      ptv.style.display = 'none';
+      if (msg.venuePath) {
+        api.readFile(msg.venuePath).then(bytes => {
+          ptv.src = URL.createObjectURL(new Blob([bytes]));
+          ptv.style.display = 'block';
+        }).catch(() => {});
+      }
+      // Banner
+      const pttk = document.getElementById('pop-tr-ticker');
+      pttk.textContent = msg.bannerText || '';
+      pttk.style.animationDuration = (msg.animSec || 18) + 's';
+      // Countdown
+      if (_cntTimer) { clearInterval(_cntTimer); _cntTimer = null; }
+      const cntEl = document.getElementById('pop-tr-countdown-num');
+      const fmtSec = s => s >= 60 ? `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}` : `${s}`;
+      if (msg.bgMs > 0) {
+        let remaining = Math.ceil(msg.bgMs / 1000);
+        cntEl.textContent = fmtSec(remaining);
+        _cntTimer = setInterval(() => {
+          remaining = Math.max(0, remaining - 1);
+          cntEl.textContent = fmtSec(remaining);
+        }, 1000);
+      } else {
+        cntEl.textContent = '';
+      }
+      document.getElementById('pop-tr-bg').style.display = 'flex';
+      _playing = false;
+      break;
+    }
+
+    case 'transition_end': {
+      if (_cntTimer) { clearInterval(_cntTimer); _cntTimer = null; }
+      document.getElementById('pop-tr-thanks').style.display = 'none';
+      document.getElementById('pop-tr-bg').style.display = 'none';
+      idleScreen.style.display = 'flex';
+      break;
+    }
+
+    case 'video_url': {
+      if (cdgPlayer) { cdgPlayer.stop(); cdgPlayer = null; }
+      document.getElementById('pop-tr-thanks').style.display = 'none';
+      document.getElementById('pop-tr-bg').style.display = 'none';
+      canvas.parentElement.style.display = 'none';
+      idleScreen.style.display = 'none';
+      videoEl.style.display = 'block';
+      videoEl.src = msg.url;
+      if (msg.pos) videoEl.currentTime = msg.pos;
+      videoEl.play().catch(() => {});
+      _playing = true;
+      break;
+    }
+
+    case 'stop': {
+      if (cdgPlayer) { cdgPlayer.stop(); cdgPlayer = null; }
+      videoEl.pause(); videoEl.src = '';
+      videoEl.style.display = 'none';
+      canvas.parentElement.style.display = 'flex';
+      infoBar.style.display = 'none';
+      idleScreen.style.display = 'flex';
+      _playing = false;
+      break;
+    }
+
+    case 'setting': {
+      if (msg.key === 'cdg_sync_offset' && typeof msg.value === 'number') {
+        cdgSyncOffset = msg.value;
+      }
+      break;
+    }
+
+  }
+});
+
+// Request current state from main window on open
+setTimeout(() => {
+  api.broadcast({ type: 'request_state' });
+}, 200);
+
+// Keep follower CDG in sync — resume properly handles paused state
+// The cdgPlayer _renderLoop already polls getPos() on every rAF frame,
+// so no extra timer needed for CDG. For video we do need periodic sync:
+setInterval(() => {
+  if (!_playing || !videoEl.src || videoEl.paused) return;
+  // Drift correction for video
+  const expected = getPos();
+  const drift = Math.abs(videoEl.currentTime - expected);
+  if (drift > 0.5) videoEl.currentTime = expected;
+}, 2000);
+</script>
+</body>
+</html>

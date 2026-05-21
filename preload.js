@@ -1,0 +1,64 @@
+const { contextBridge, ipcRenderer } = require('electron');
+
+contextBridge.exposeInMainWorld('api', {
+  // Songs
+  searchSongs:    (q, limit)      => ipcRenderer.invoke('songs:search', q, limit),
+  getSongs:       (opts)          => ipcRenderer.invoke('songs:getAll', opts),
+  importSong:     (meta)          => ipcRenderer.invoke('songs:import', meta),
+  editSong:       (id, data)      => ipcRenderer.invoke('songs:edit', id, data),
+  deleteSong:     (id)            => ipcRenderer.invoke('songs:delete', id),
+  rateSong:       (id, rating)    => ipcRenderer.invoke('songs:rate', id, rating),
+  toggleFavorite: (id)            => ipcRenderer.invoke('songs:favorite', id),
+
+  // Queue
+  getQueue:       ()              => ipcRenderer.invoke('queue:get'),
+  getHistory:     ()              => ipcRenderer.invoke('queue:history'),
+  getCurrentSong: ()              => ipcRenderer.invoke('queue:current'),
+  addToQueue:     (sid, name)     => ipcRenderer.invoke('queue:add', sid, name),
+  removeFromQueue:(id)            => ipcRenderer.invoke('queue:remove', id),
+  skipEntry:      (id)            => ipcRenderer.invoke('queue:skip', id),
+  moveEntry:      (id, dir)       => ipcRenderer.invoke('queue:move', id, dir),
+  moveToPosition: (id, idx)       => ipcRenderer.invoke('queue:moveto', id, idx),
+  nextSong:       ()              => ipcRenderer.invoke('queue:next'),
+
+  // Library
+  openFolderDialog: ()            => ipcRenderer.invoke('library:openDialog'),
+  scanLibrary:    (dir)           => ipcRenderer.invoke('library:scan', dir),
+  getStats:       ()              => ipcRenderer.invoke('library:stats'),
+  onScanProgress: (cb)            => ipcRenderer.on('scan:progress', (_, d) => cb(d)),
+
+  // Settings
+  getSettings:    ()              => ipcRenderer.invoke('settings:get'),
+  setSetting:     (k, v)          => ipcRenderer.invoke('settings:set', k, v),
+
+  // Player window
+  openPlayer:     ()              => ipcRenderer.invoke('player:open'),
+
+  // Singer request server
+  requestsStart:  ()              => ipcRenderer.invoke('requests:start'),
+  requestsStop:   ()              => ipcRenderer.invoke('requests:stop'),
+  requestsStatus: ()              => ipcRenderer.invoke('requests:status'),
+  onMobileRequest:(cb)            => ipcRenderer.on('mobile-request-added', (_, name) => cb(name)),
+
+  // Wireless network player
+  networkStart:    ()             => ipcRenderer.invoke('network:start'),
+  networkStop:     ()             => ipcRenderer.invoke('network:stop'),
+  networkSetAudio: (v)            => ipcRenderer.invoke('network:setAudio', v),
+  networkStatus:   ()             => ipcRenderer.invoke('network:status'),
+
+  // Broadcast (main↔popout sync)
+  broadcast:      (msg)           => ipcRenderer.send('broadcast', msg),
+  onBroadcast:    (cb)            => ipcRenderer.on('broadcast', (_, msg) => cb(msg)),
+
+  // Read a local file by path — returns Uint8Array (avoids URL encoding issues)
+  readFile: (filePath) => ipcRenderer.invoke('read:file', filePath),
+
+  // Dialogs
+  openImageDialog: () => ipcRenderer.invoke('dialog:openImage'),
+
+  // YouTube
+  youtubeEnsure:  ()        => ipcRenderer.invoke('youtube:ensure'),
+  youtubeSearch:  (q)       => ipcRenderer.invoke('youtube:search', q),
+  youtubeStream:  (id)      => ipcRenderer.invoke('youtube:stream', id),
+  onYtProgress:   (cb)      => ipcRenderer.on('youtube:progress', (_, p) => cb(p)),
+});

@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>🎤 Karaoke Request</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    html, body { min-height: 100%; background: #0f1117; color: #f3f4f6; font-family: system-ui, -apple-system, sans-serif; }
+
+    header {
+      background: linear-gradient(135deg, #1a0533 0%, #0f1117 100%);
+      border-bottom: 2px solid #7c3aed;
+      padding: 18px 16px 14px;
+      text-align: center;
+      position: sticky; top: 0; z-index: 10;
+    }
+    header h1 { font-size: 1.4rem; font-weight: 800; color: #a78bfa; }
+    header p  { font-size: .8rem; color: #6b7280; margin-top: 3px; }
+
+    .container { max-width: 520px; margin: 0 auto; padding: 14px; }
+
+    .card { background: #1f2937; border-radius: 14px; padding: 14px 16px; margin-bottom: 12px; }
+    .card-label { font-size: .7rem; color: #6b7280; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 10px; }
+
+    input[type=text], input[type=search] {
+      width: 100%; padding: 12px 14px; background: #374151;
+      border: 1.5px solid #4b5563; border-radius: 10px;
+      color: #f3f4f6; font-size: 1rem; outline: none;
+      -webkit-appearance: none; appearance: none;
+    }
+    input:focus { border-color: #7c3aed; background: #2d3748; }
+
+    /* Tabs */
+    .tabs { display: flex; background: #111827; border-radius: 10px; padding: 3px; margin-bottom: 12px; }
+    .tab-btn {
+      flex: 1; padding: 8px; border: none; border-radius: 8px;
+      font-size: .85rem; font-weight: 600; cursor: pointer;
+      background: none; color: #6b7280; transition: all .15s;
+    }
+    .tab-btn.active { background: #7c3aed; color: #fff; }
+
+    /* Results */
+    #results { margin-top: 10px; }
+    .result-item {
+      display: flex; align-items: center; gap: 11px;
+      padding: 10px 10px; border-radius: 10px; cursor: pointer;
+      transition: background .12s; border: 1px solid transparent;
+    }
+    .result-item:active { background: #374151; }
+    .result-icon {
+      width: 36px; height: 36px; border-radius: 8px;
+      background: #374151; display: flex; align-items: center;
+      justify-content: center; color: #6b7280; font-size: .85rem; flex-shrink: 0;
+    }
+    .yt-icon { background: #1a0a0a; color: #ef4444; }
+    .result-info { flex: 1; min-width: 0; }
+    .result-title  { font-size: .88rem; font-weight: 600; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .result-sub    { font-size: .75rem; color: #9ca3af; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+    .add-btn {
+      background: #7c3aed; color: #fff; border: none;
+      border-radius: 8px; padding: 8px 14px;
+      font-size: .83rem; font-weight: 600; cursor: pointer; flex-shrink: 0;
+    }
+    .add-btn:active { background: #6d28d9; }
+
+    /* Selected confirm panel */
+    #selected-confirm {
+      display: none; background: rgba(124,58,237,.15);
+      border: 1px solid rgba(124,58,237,.4);
+      border-radius: 10px; padding: 12px 14px; margin-top: 10px;
+    }
+    #selected-label { font-weight: 600; color: #a78bfa; font-size: .88rem; margin-bottom: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .confirm-btn {
+      width: 100%; padding: 13px; background: #7c3aed; color: #fff;
+      border: none; border-radius: 10px; font-size: 1rem; font-weight: 700; cursor: pointer;
+    }
+    .confirm-btn:active { background: #6d28d9; }
+    .cancel-link { display: block; text-align: center; color: #6b7280; font-size: .82rem; margin-top: 8px; cursor: pointer; }
+
+    /* Queue */
+    .q-item { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid rgba(55,65,81,.5); }
+    .q-item:last-child { border: none; }
+    .q-num { font-size: .8rem; color: #4b5563; width: 22px; text-align: center; flex-shrink: 0; }
+    .now-badge { font-size: .65rem; padding: 2px 7px; border-radius: 999px; background: #14532d; color: #86efac; flex-shrink: 0; }
+    .q-singer { font-size: .85rem; font-weight: 600; color: #e5e7eb; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .q-song   { font-size: .75rem; color: #6b7280; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 1px; }
+    .q-mine   { font-size: .65rem; padding: 1px 6px; border-radius: 999px; background: rgba(124,58,237,.3); color: #a78bfa; margin-left: 6px; vertical-align: middle; }
+    .q-empty  { text-align: center; color: #374151; padding: 16px; font-size: .85rem; }
+
+    /* Limit warning */
+    #limit-warning {
+      display: none; background: rgba(127,29,29,.4); border: 1px solid #991b1b;
+      border-radius: 10px; padding: 12px 14px; margin-top: 10px;
+      font-size: .85rem; color: #fca5a5; text-align: center;
+    }
+
+    /* Loader */
+    .loader { text-align: center; color: #4b5563; padding: 16px; font-size: .85rem; }
+
+    /* Toast */
+    #toast {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px);
+      background: #065f46; color: #fff; padding: 12px 28px;
+      border-radius: 999px; font-size: .93rem; font-weight: 600;
+      transition: transform .35s cubic-bezier(.34,1.56,.64,1); z-index: 100;
+      white-space: nowrap; pointer-events: none; max-width: 90vw; text-align: center;
+    }
+    #toast.show { transform: translateX(-50%) translateY(0); }
+    #toast.error { background: #7f1d1d; }
+
+    .conn-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #374151; margin-right: 5px; transition: background .3s; vertical-align: middle; }
+    .conn-dot.live { background: #22c55e; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>🎤 Song Request</h1>
+  <p><span class="conn-dot" id="conn-dot"></span><span id="conn-label">Connecting…</span></p>
+</header>
+
+<div class="container">
+
+  <!-- Name -->
+  <div class="card">
+    <div class="card-label">Your name</div>
+    <input type="text" id="singer-name" placeholder="Enter your name…" maxlength="40" autocomplete="off">
+  </div>
+
+  <!-- Search -->
+  <div class="card">
+    <div class="card-label">Search song</div>
+    <div class="tabs">
+      <button class="tab-btn active" id="tab-local" onclick="switchTab('local')">📁 Library</button>
+      <button class="tab-btn"        id="tab-yt"    onclick="switchTab('yt')">▶ YouTube</button>
+    </div>
+    <input type="search" id="search-input" placeholder="Search by title or artist…" autocomplete="off">
+    <div id="results"></div>
+    <div id="limit-warning">You already have 3 songs in the queue.<br>Wait for one to finish before adding more.</div>
+    <div id="selected-confirm">
+      <div id="selected-label"></div>
+      <button class="confirm-btn" onclick="submitRequest()">✓ Add to Queue</button>
+      <span class="cancel-link" onclick="clearSelection()">Cancel</span>
+    </div>
+  </div>
+
+  <!-- Queue -->
+  <div class="card">
+    <div class="card-label">Current queue</div>
+    <div id="queue-display"><div class="q-empty">Queue is empty</div></div>
+  </div>
+
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ── Device fingerprint (UUID, persisted) ──────────────────────────────────────
+function getDeviceId() {
+  let id = localStorage.getItem('kk_deviceId');
+  if (!id) {
+    id = typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
+          (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16));
+    localStorage.setItem('kk_deviceId', id);
+  }
+  return id;
+}
+const DEVICE_ID = getDeviceId();
+
+// ── Name ──────────────────────────────────────────────────────────────────────
+const nameInput = document.getElementById('singer-name');
+nameInput.value = localStorage.getItem('kk_singerName') || '';
+nameInput.addEventListener('input', () => localStorage.setItem('kk_singerName', nameInput.value.trim()));
+
+// ── Tabs ──────────────────────────────────────────────────────────────────────
+let _activeTab = 'local';
+function switchTab(tab) {
+  _activeTab = tab;
+  document.getElementById('tab-local').classList.toggle('active', tab === 'local');
+  document.getElementById('tab-yt').classList.toggle('active', tab === 'yt');
+  document.getElementById('search-input').value = '';
+  document.getElementById('results').innerHTML = '';
+  clearSelection();
+  document.getElementById('search-input').placeholder =
+    tab === 'yt' ? 'Search YouTube…' : 'Search by title or artist…';
+}
+
+// ── Search ────────────────────────────────────────────────────────────────────
+const searchInput = document.getElementById('search-input');
+const resultsEl   = document.getElementById('results');
+let _searchTimer  = null;
+let _selected     = null;
+let _resultCache  = []; // store objects, pass only index in onclick
+
+searchInput.addEventListener('input', () => {
+  clearTimeout(_searchTimer);
+  _searchTimer = setTimeout(() => doSearch(searchInput.value.trim()), _activeTab === 'yt' ? 600 : 300);
+});
+
+async function doSearch(q) {
+  clearSelection();
+  _resultCache = [];
+  if (!q) { resultsEl.innerHTML = ''; return; }
+  resultsEl.innerHTML = '<div class="loader">Searching…</div>';
+
+  if (_activeTab === 'local') {
+    const songs = await fetch(`/api/songs?q=${encodeURIComponent(q)}`).then(r => r.json()).catch(() => []);
+    if (!songs.length) { resultsEl.innerHTML = '<div class="q-empty">No songs found</div>'; return; }
+    _resultCache = songs.map(s => ({ type: 'local', songId: s.id, title: s.title, artist: s.artist }));
+    resultsEl.innerHTML = songs.map((s, i) => `
+      <div class="result-item" onclick="pickResult(${i})">
+        <div class="result-icon">♪</div>
+        <div class="result-info">
+          <div class="result-title">${escHtml(s.title)}</div>
+          <div class="result-sub">${escHtml(s.artist)}</div>
+        </div>
+        <button class="add-btn" onclick="event.stopPropagation();pickResult(${i})">Add</button>
+      </div>`).join('');
+
+  } else {
+    const vids = await fetch(`/api/youtube?q=${encodeURIComponent(q)}`).then(r => r.json()).catch(() => []);
+    if (!Array.isArray(vids) || !vids.length) { resultsEl.innerHTML = '<div class="q-empty">No results found</div>'; return; }
+    _resultCache = vids.map(v => ({
+      type: 'yt', youtubeId: v.id,
+      youtubeTitle: v.title, youtubeArtist: v.uploader || v.channel || 'YouTube',
+      youtubeDuration: v.duration || 0,
+    }));
+    resultsEl.innerHTML = vids.map((v, i) => `
+      <div class="result-item" onclick="pickResult(${i})">
+        <div class="result-icon yt-icon">▶</div>
+        <div class="result-info">
+          <div class="result-title">${escHtml(v.title)}</div>
+          <div class="result-sub">${escHtml(v.uploader||v.channel||'')}${v.duration ? ' · ' + fmtDur(v.duration) : ''}</div>
+        </div>
+        <button class="add-btn" onclick="event.stopPropagation();pickResult(${i})">Add</button>
+      </div>`).join('');
+  }
+}
+
+function pickResult(i) {
+  const r = _resultCache[i];
+  if (!r) return;
+  _selected = r;
+  const label = r.type === 'local'
+    ? `${r.title} — ${r.artist}`
+    : `▶ ${r.youtubeTitle}`;
+  showConfirm(label);
+}
+
+function escHtml(s) {
+  return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function fmtDur(s) {
+  const m = Math.floor(s/60), ss = Math.floor(s%60);
+  return `${m}:${String(ss).padStart(2,'0')}`;
+}
+function showConfirm(label) {
+  document.getElementById('selected-label').textContent = label;
+  document.getElementById('selected-confirm').style.display = 'block';
+  resultsEl.innerHTML = '';
+  searchInput.value = '';
+  document.getElementById('selected-confirm').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+function clearSelection() {
+  _selected = null;
+  document.getElementById('selected-confirm').style.display = 'none';
+  document.getElementById('limit-warning').style.display = 'none';
+}
+
+// ── Submit ────────────────────────────────────────────────────────────────────
+async function submitRequest() {
+  const singerName = nameInput.value.trim();
+  if (!singerName) { showToast('Please enter your name first!', true); nameInput.focus(); return; }
+  if (!_selected)  { showToast('No song selected', true); return; }
+
+  const body = { singerName, deviceId: DEVICE_ID };
+  if (_selected.type === 'local') {
+    body.songId = _selected.songId;
+  } else {
+    body.youtubeId       = _selected.youtubeId;
+    body.youtubeTitle    = _selected.youtubeTitle;
+    body.youtubeArtist   = _selected.youtubeArtist;
+    body.youtubeDuration = _selected.youtubeDuration;
+  }
+  const label = _selected.label || _selected.youtubeTitle || _selected.title || 'Song';
+
+  const res = await fetch('/api/queue', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  }).catch(() => null);
+
+  if (!res) { showToast('Network error — try again', true); return; }
+
+  if (res.status === 429) {
+    const data = await res.json().catch(() => ({}));
+    const limit = data.limit || 3;
+    const warnEl = document.getElementById('limit-warning');
+    warnEl.innerHTML = `You already have ${limit} song${limit===1?'':'s'} in the queue.<br>Wait for one to finish before adding more.`;
+    warnEl.style.display = 'block';
+    clearSelection();
+    showToast(`Queue limit reached (max ${limit} songs)`, true);
+    return;
+  }
+
+  if (res.status === 409) {
+    const data = await res.json().catch(() => ({}));
+    const warnEl = document.getElementById('limit-warning');
+    warnEl.innerHTML = `This song was played recently.<br>Try again in <b style="color:#fca5a5">${data.waitStr || (data.hours + 'h')}</b>.`;
+    warnEl.style.display = 'block';
+    clearSelection();
+    showToast(`Try again in ${data.waitStr || data.hours + 'h'}`, true);
+    return;
+  }
+
+  if (res.ok) {
+    clearSelection();
+    showToast(`✓ "${label}" added!`);
+    _selected = null;
+  } else {
+    showToast('Failed to add — try again', true);
+  }
+}
+
+// ── Queue display ─────────────────────────────────────────────────────────────
+function renderQueue(queue) {
+  const el = document.getElementById('queue-display');
+  if (!queue.length) { el.innerHTML = '<div class="q-empty">Queue is empty</div>'; return; }
+  let pending = 0;
+  el.innerHTML = queue.map(e => {
+    const playing = e.status === 'playing';
+    const mine = e.device_id === DEVICE_ID;
+    if (!playing) pending++;
+    return `
+      <div class="q-item">
+        ${playing ? `<span class="now-badge">♪ Now</span>` : `<span class="q-num">${pending}</span>`}
+        <div style="flex:1;min-width:0">
+          <div class="q-singer">${escHtml(e.singer_name||'—')}${mine ? '<span class="q-mine">you</span>' : ''}</div>
+          <div class="q-song">${escHtml(e.title)} · ${escHtml(e.artist)}</div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────────────
+function showToast(msg, error = false) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = error ? 'error show' : 'show';
+  clearTimeout(window._toastTimer);
+  window._toastTimer = setTimeout(() => t.classList.remove('show'), 3500);
+}
+
+// ── WebSocket ─────────────────────────────────────────────────────────────────
+function connect() {
+  const dot   = document.getElementById('conn-dot');
+  const label = document.getElementById('conn-label');
+  const ws = new WebSocket(`ws://${location.host}`);
+  ws.onopen  = () => { dot.classList.add('live'); label.textContent = 'Live'; };
+  ws.onmessage = e => { try { const m = JSON.parse(e.data); if (m.type === 'queue') renderQueue(m.queue); } catch {} };
+  ws.onclose = () => { dot.classList.remove('live'); label.textContent = 'Reconnecting…'; setTimeout(connect, 2000); };
+  ws.onerror = () => ws.close();
+}
+connect();
+
+fetch('/api/queue').then(r => r.json()).then(renderQueue).catch(() => {});
+</script>
+</body>
+</html>
