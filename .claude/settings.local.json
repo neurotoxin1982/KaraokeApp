@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install *)",
+      "PowerShell(cd \"C:\\\\Users\\\\nilss\\\\OneDrive\\\\Desktop\\\\coolify-karaoke-test\"; $proc = Start-Process -FilePath \"npx\" -ArgumentList \"electron\",\".\" -PassThru -WindowStyle Normal; Start-Sleep -Seconds 3; Write-Host \"App PID: $\\($proc.Id\\)\"; Write-Host \"Running: $\\(-not $proc.HasExited\\)\")"
+    ]
+  }
+}

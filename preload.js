@@ -11,8 +11,19 @@ contextBridge.exposeInMainWorld('api', {
   toggleFavorite: (id)            => ipcRenderer.invoke('songs:favorite', id),
 
   // Queue
-  getQueue:       ()              => ipcRenderer.invoke('queue:get'),
-  getHistory:     ()              => ipcRenderer.invoke('queue:history'),
+  getQueueRestoreInfo: ()          => ipcRenderer.invoke('queue:restoreInfo'),
+  restoreQueue:        ()          => ipcRenderer.invoke('queue:restore'),
+  clearPendingQueue:   ()          => ipcRenderer.invoke('queue:clearPending'),
+  getQueue:            ()          => ipcRenderer.invoke('queue:get'),
+  getHistory:         ()           => ipcRenderer.invoke('queue:history'),
+
+  // Queue algorithm
+  algoGet:            ()           => ipcRenderer.invoke('queue:algo:get'),
+  algoSetPreset:      (p)          => ipcRenderer.invoke('queue:algo:setPreset', p),
+  algoSetCooldown:    (sec)        => ipcRenderer.invoke('queue:algo:setCooldown', sec),
+  algoValidate:       (name)       => ipcRenderer.invoke('queue:algo:validate', name),
+  onQueueReordered:   (cb)         => ipcRenderer.on('queue-reordered', cb),
+  setPinned:          (id, pinned) => ipcRenderer.invoke('queue:setPinned', id, pinned),
   getCurrentSong: ()              => ipcRenderer.invoke('queue:current'),
   addToQueue:     (sid, name)     => ipcRenderer.invoke('queue:add', sid, name),
   removeFromQueue:(id)            => ipcRenderer.invoke('queue:remove', id),

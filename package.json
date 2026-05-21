@@ -10,6 +10,7 @@
   "dependencies": {
     "better-sqlite3": "^9.6.0",
     "music-metadata": "^10.7.0",
+    "qrcode": "^1.5.4",
     "sql.js": "^1.14.1",
     "ws": "^8.20.1"
   },

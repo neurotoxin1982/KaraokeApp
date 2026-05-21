@@ -11,6 +11,8 @@ let db = null;
 let scanner = null;
 let networkPlayer = null;
 let requestServer = null;
+let queueManager  = null;
+let _qrDataUrl    = null;
 
 // ── Protocol: serve local files as localfile:// ───────────────────────────────
 const MIME_TYPES = {
@@ -73,12 +75,46 @@ app.whenReady().then(async () => {
   networkPlayer = require('./src/network-player');
   requestServer = require('./src/request-server');
   await db.initialize();
+  const QueueManager = require('./src/QueueManager');
+  queueManager = new QueueManager(db);
+
+  // Sort queue immediately on startup so the UI is correct from the first render
+  queueManager.recalculateQueue();
+
+  // Periodic maintenance every 10 s: purge cooldowns + re-sort.
+  // If the order changed, push an instant update to the renderer.
+  setInterval(() => {
+    queueManager.purgeCooldowns();
+    const changed = queueManager.recalculateQueue();
+    if (changed) _notifyQueueChanged();
+  }, 10_000);
 
   createMainWindow();
   setupIPC();
 });
 
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
+
+function _notifyQueueChanged() {
+  if (mainWindow && !mainWindow.isDestroyed())
+    mainWindow.webContents.send('queue-reordered');
+}
+
+function _broadcastToAll(msg) {
+  BrowserWindow.getAllWindows().forEach(w => {
+    if (!w.isDestroyed()) w.webContents.send('broadcast', msg);
+  });
+}
+
+async function _updateQr(url) {
+  if (!url) { _qrDataUrl = null; _broadcastToAll({ type: 'qr_url', dataUrl: null }); return; }
+  try {
+    const QRCode = require('qrcode');
+    const svg = await QRCode.toString(url, { type: 'svg', margin: 1 });
+    _qrDataUrl = 'data:image/svg+xml;base64,' + Buffer.from(svg).toString('base64');
+  } catch { _qrDataUrl = null; }
+  _broadcastToAll({ type: 'qr_url', dataUrl: _qrDataUrl });
+}
 
 // ── Windows ───────────────────────────────────────────────────────────────────
 function createMainWindow() {
@@ -123,15 +159,75 @@ function setupIPC() {
   ipcMain.handle('songs:favorite',(_, id)         => db.toggleFavorite(id));
 
   // Queue
-  ipcMain.handle('queue:get',     ()              => db.getQueue());
+  ipcMain.handle('queue:restoreInfo',   ()  => db.getQueueRestoreInfo());
+  ipcMain.handle('queue:restore',       ()  => db.restoreQueue());
+  ipcMain.handle('queue:clearPending',  ()  => db.clearPendingQueue());
+  ipcMain.handle('queue:get',           ()  => db.getQueue());
   ipcMain.handle('queue:history', ()              => db.getHistory());
   ipcMain.handle('queue:current', ()              => db.getCurrentSong());
-  ipcMain.handle('queue:add',     (_, sid, name)  => db.addToQueue(sid, name));
-  ipcMain.handle('queue:remove',  (_, id)         => db.removeFromQueue(id));
-  ipcMain.handle('queue:skip',    (_, id)         => db.skipEntry(id));
-  ipcMain.handle('queue:move',    (_, id, dir)    => db.moveEntry(id, dir));
-  ipcMain.handle('queue:moveto',  (_, id, idx)    => db.moveToPosition(id, idx));
-  ipcMain.handle('queue:next',    ()              => db.nextSong());
+
+  const _addRecalc = () => { if (queueManager.recalculateQueue()) _notifyQueueChanged(); };
+
+  ipcMain.handle('queue:add', (_, sid, name) => {
+    const admission = queueManager.validateAdmission(name);
+    if (!admission.allowed) return { error: admission.reason, ...admission };
+    const result = db.addToQueue(sid, name);
+    _addRecalc();
+    return result;
+  });
+
+  ipcMain.handle('queue:remove', (_, id) => {
+    const r = db.removeFromQueue(id);
+    _addRecalc();
+    return r;
+  });
+
+  ipcMain.handle('queue:skip', (_, id) => {
+    const r = db.skipEntry(id);
+    _addRecalc();
+    return r;
+  });
+
+  ipcMain.handle('queue:move', (_, id, dir) => {
+    db.setPinned(id, true);
+    return db.moveEntry(id, dir);
+  });
+
+  ipcMain.handle('queue:moveto', (_, id, idx) => {
+    db.setPinned(id, true);
+    return db.moveToPosition(id, idx);
+  });
+
+  ipcMain.handle('queue:setPinned', (_, id, pinned) => {
+    db.setPinned(id, pinned);
+    if (!pinned) queueManager.recalculateQueue();
+    _notifyQueueChanged();
+    return { ok: true };
+  });
+
+  ipcMain.handle('queue:next', () => {
+    const current = db.getCurrentSong();
+    const result  = db.nextSong();
+    if (current?.singer_name) queueManager.applyCooldown(current.singer_name);
+    _addRecalc();
+    return result;
+  });
+
+  // QueueManager – algorithm controls
+  ipcMain.handle('queue:algo:get',       ()        => queueManager.status());
+  ipcMain.handle('queue:algo:validate',  (_, name) => queueManager.validateAdmission(name));
+
+  ipcMain.handle('queue:algo:setPreset', (_, p) => {
+    db.setSetting('queue_preset', p);
+    queueManager.recalculateQueue();
+    _notifyQueueChanged();          // instant push to renderer
+    return { ok: true };
+  });
+
+  ipcMain.handle('queue:algo:setCooldown', (_, sec) => {
+    db.setSetting('queue_cooldown_sec', String(sec));
+    return { ok: true };
+  });
 
   // Library
   ipcMain.handle('library:openDialog', async () => {
@@ -179,13 +275,16 @@ function setupIPC() {
   ipcMain.handle('player:open', () => openPlayerWindow());
 
   // Singer request server
-  ipcMain.handle('requests:start', async () =>
-    requestServer.start(db, (singerName) => {
+  ipcMain.handle('requests:start', async () => {
+    const url = await requestServer.start(db, queueManager, (singerName) => {
       if (mainWindow && !mainWindow.isDestroyed())
         mainWindow.webContents.send('mobile-request-added', singerName);
-    })
-  );
-  ipcMain.handle('requests:stop',   ()      => requestServer.stop());
+    });
+    _updateQr(url);
+    return url;
+  });
+  ipcMain.handle('requests:stop', () => { requestServer.stop(); _updateQr(null); });
+  ipcMain.handle('requests:qr',   () => _qrDataUrl);
   ipcMain.handle('requests:status', ()      => ({
     running: requestServer.isRunning(),
     url:     requestServer.isRunning() ? requestServer.getUrl() : null,

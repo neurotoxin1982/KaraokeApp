@@ -76,8 +76,9 @@ async function initialize() {
     finished_at TEXT
   )`);
 
-  // Migration: add device_id if not present (safe to run repeatedly)
-  try { db.run(`ALTER TABLE queue_entries ADD COLUMN device_id TEXT DEFAULT ''`); } catch {}
+  // Migrations (safe to run repeatedly)
+  try { db.run(`ALTER TABLE queue_entries ADD COLUMN device_id TEXT    DEFAULT ''`); } catch {}
+  try { db.run(`ALTER TABLE queue_entries ADD COLUMN pinned    INTEGER DEFAULT 0`);  } catch {}
 
   db.run(`CREATE TABLE IF NOT EXISTS play_history (
     id        INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -162,6 +163,40 @@ function toggleFavorite(id) {
   run('UPDATE songs SET is_favorite=? WHERE id=?', [v, id]);
   save();
   return { is_favorite: !!v };
+}
+
+// ── Queue restore ─────────────────────────────────────────────────────────────
+
+// Returns how many pending/playing entries exist and a short preview list
+function getQueueRestoreInfo() {
+  const total = (get(
+    `SELECT COUNT(*) AS n FROM queue_entries WHERE status IN ('pending','playing')`
+  ) || {n:0}).n;
+  const entries = all(`
+    SELECT q.status, s.title, sg.name AS singer_name
+    FROM queue_entries q
+    JOIN songs s ON q.song_id = s.id
+    LEFT JOIN singers sg ON q.singer_id = sg.id
+    WHERE q.status IN ('pending','playing')
+    ORDER BY CASE WHEN q.status='playing' THEN 0 ELSE 1 END, q.position
+    LIMIT 6
+  `);
+  return { total, entries };
+}
+
+// Keep the queue — reset any crashed 'playing' song back to 'pending'
+function restoreQueue() {
+  run(`UPDATE queue_entries SET status='pending', started_at=NULL WHERE status='playing'`);
+  save();
+  return { ok: true };
+}
+
+// Discard the queue — mark all pending/playing entries as done
+function clearPendingQueue() {
+  run(`UPDATE queue_entries SET status='done', finished_at=datetime('now')
+       WHERE status IN ('pending','playing')`);
+  save();
+  return { ok: true };
 }
 
 // ── Queue ─────────────────────────────────────────────────────────────────────
@@ -322,6 +357,65 @@ function getStats() {
   };
 }
 
+// ── QueueManager helpers ──────────────────────────────────────────────────────
+
+// Pending entries with wait time in seconds
+function getQueueWithTiming() {
+  // Use COALESCE for pinned in case the column migration hasn't run yet
+  return all(`
+    SELECT q.id, q.position, q.song_id, q.added_at,
+           COALESCE(q.pinned, 0) AS pinned,
+           CAST((strftime('%s','now') - strftime('%s', q.added_at)) AS INTEGER) AS wait_sec,
+           s.title, s.artist, s.duration,
+           sg.name AS singer_name
+    FROM queue_entries q
+    JOIN songs s ON q.song_id = s.id
+    LEFT JOIN singers sg ON q.singer_id = sg.id
+    WHERE q.status = 'pending'
+    ORDER BY q.position
+  `);
+}
+
+function setPinned(id, pinned) {
+  run('UPDATE queue_entries SET pinned=? WHERE id=?', [pinned ? 1 : 0, id]);
+  save();
+}
+
+// How many pending songs a named singer has
+function getUserQueueCount(singerName) {
+  const row = get(`
+    SELECT COUNT(*) AS n FROM queue_entries q
+    LEFT JOIN singers sg ON q.singer_id = sg.id
+    WHERE sg.name = ? AND q.status = 'pending'
+  `, [singerName]);
+  return row?.n || 0;
+}
+
+// How many distinct singers (not singerName) have 0 pending songs
+// (used by Inclusive Jam to decide if others are waiting)
+function singersWithFewerSongs(singerName, threshold) {
+  const row = get(`
+    SELECT COUNT(DISTINCT sg.name) AS n
+    FROM singers sg
+    WHERE sg.name != ?
+      AND (
+        SELECT COUNT(*) FROM queue_entries q2
+        WHERE q2.singer_id = sg.id AND q2.status = 'pending'
+      ) < ?
+  `, [singerName, threshold]);
+  return row?.n || 0;
+}
+
+// Apply new ordering to pending entries (array of {id} in desired order)
+function reorderQueue(orderedIds) {
+  orderedIds.forEach((id, idx) => {
+    run('UPDATE queue_entries SET position=? WHERE id=?', [idx, id]);
+  });
+  save();
+}
+
+function saveDb() { save(); }
+
 // ── Settings ──────────────────────────────────────────────────────────────────
 function getSettings() {
   return Object.fromEntries(all('SELECT key,value FROM settings').map(r => [r.key, r.value]));
@@ -336,6 +430,8 @@ function setSetting(key, value) {
 module.exports = {
   initialize,
   searchSongs, getSongs, importSong, editSong, deleteSong, rateSong, toggleFavorite,
+  getQueueRestoreInfo, restoreQueue, clearPendingQueue,
   getQueue, getHistory, getCurrentSong, addToQueue, getDeviceQueueCount, songPlayedRecently, removeFromQueue, skipEntry, moveEntry, moveToPosition, nextSong,
+  getQueueWithTiming, getUserQueueCount, singersWithFewerSongs, reorderQueue, saveDb, setPinned,
   getStats, getSettings, setSetting,
 };

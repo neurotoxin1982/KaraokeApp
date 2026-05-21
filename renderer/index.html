@@ -89,9 +89,11 @@
         <div id="tr-p2" style="display:none;position:absolute;inset:0;background:#000;flex-direction:column">
           <div style="flex:1;display:flex;align-items:stretch;justify-content:center;overflow:hidden;min-height:0;position:relative">
             <img id="tr-venue" style="width:100%;height:100%;object-fit:contain;display:none">
-            <div id="tr-countdown" style="position:absolute;top:14px;right:14px;background:rgba(0,0,0,0.72);border-radius:14px;padding:10px 18px;text-align:center;backdrop-filter:blur(4px)">
-              <div style="font-size:.65rem;color:#a78bfa;letter-spacing:.1em;font-weight:600;margin-bottom:4px">GET READY</div>
-              <div id="tr-countdown-num" style="font-size:2.4rem;font-weight:700;color:#fff;font-variant-numeric:tabular-nums;line-height:1"></div>
+            <div id="tr-countdown" style="position:absolute;top:14px;right:14px;background:rgba(0,0,0,0.72);border-radius:14px;padding:12px 20px;text-align:center;backdrop-filter:blur(4px);min-width:140px">
+              <div style="font-size:.6rem;color:#a78bfa;letter-spacing:.1em;font-weight:600;margin-bottom:4px">NEXT SINGER</div>
+              <div id="tr-next-singer" style="font-size:1.3rem;font-weight:700;color:#fff;margin-bottom:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px"></div>
+              <div style="font-size:.55rem;color:#6b7280;letter-spacing:.08em;margin-bottom:3px">GET READY IN</div>
+              <div id="tr-countdown-num" style="font-size:2.2rem;font-weight:700;color:#fff;font-variant-numeric:tabular-nums;line-height:1"></div>
             </div>
           </div>
           <div id="tr-ticker-wrap" style="background:rgba(124,58,237,0.92);padding:10px 0;overflow:hidden;flex-shrink:0">
@@ -309,6 +311,61 @@
         </button>
       </div>
 
+      <!-- Queue Algorithm -->
+      <div class="card">
+        <h4 style="font-size:.95rem;font-weight:600;margin-bottom:14px"><i class="fa-solid fa-sliders" style="color:#a78bfa;margin-right:6px"></i>Queue Algorithm</h4>
+
+        <!-- Preset buttons -->
+        <div style="font-size:.75rem;color:#6b7280;margin-bottom:8px">Preset</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:14px" id="algo-presets">
+          <button class="btn btn-gray btn-sm algo-preset-btn" data-preset="fifo"
+            onclick="setAlgoPreset('fifo')"
+            title="Songs play in the exact order they were added. One singer may have multiple songs in a row.">
+            📋 First-In-First-Out
+          </button>
+          <button class="btn btn-gray btn-sm algo-preset-btn" data-preset="smart_queue"
+            onclick="setAlgoPreset('smart_queue')"
+            title="Fair turn order. New singers are pushed up so no one sings twice in a row while others are waiting.">
+            ✨ Smart Queue
+          </button>
+        </div>
+
+        <!-- Cooldown -->
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+          <label style="font-size:.85rem;color:#d1d5db;flex:1">Singer cooldown after performing</label>
+          <input type="number" id="algo-cooldown" min="0" max="3600" value="0"
+            style="width:65px;text-align:center;padding:5px"
+            onchange="api.algoSetCooldown(parseInt(this.value)||0)">
+          <span style="font-size:.8rem;color:#6b7280">sec</span>
+        </div>
+        <div style="font-size:.73rem;color:#4b5563">0 = disabled. Prevents a singer from jumping to the front immediately after their song.</div>
+      </div>
+
+      <!-- QR Code overlay -->
+      <div class="card">
+        <h4 style="font-size:.95rem;font-weight:600;margin-bottom:14px"><i class="fa-solid fa-qrcode" style="color:#a78bfa;margin-right:6px"></i>QR Code Overlay</h4>
+        <p style="font-size:.8rem;color:#6b7280;margin-bottom:12px">Show a QR code on the player screen so guests can scan it to request songs.</p>
+
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+          <input type="checkbox" id="set-qr-enabled" style="width:16px;height:16px;accent-color:#7c3aed;cursor:pointer">
+          <label for="set-qr-enabled" style="font-size:.85rem;color:#d1d5db;cursor:pointer;flex:1">Show QR code (visible during songs too)</label>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+          <label style="font-size:.85rem;color:#d1d5db;white-space:nowrap">Position</label>
+          <select id="set-qr-position" style="margin-left:auto;background:#1f2937;color:#d1d5db;border:1px solid #374151;border-radius:6px;padding:5px 10px;font-size:.85rem">
+            <option value="bottom-right">Bottom right</option>
+            <option value="bottom-left">Bottom left</option>
+            <option value="top-right">Top right</option>
+            <option value="top-left">Top left</option>
+          </select>
+        </div>
+
+        <button class="btn btn-primary btn-sm" onclick="saveQrSettings()">
+          <i class="fa-solid fa-floppy-disk"></i> Save
+        </button>
+      </div>
+
       <!-- Top songs -->
       <div class="card" id="top-songs-card" style="display:none">
         <h4 style="font-size:.95rem;font-weight:600;margin-bottom:10px"><i class="fa-solid fa-trophy" style="color:#facc15;margin-right:6px"></i>Most Played</h4>
@@ -380,6 +437,61 @@
   </div>
 </div>
 
+<!-- ── Session Restore Modal (no close btn — user must choose) ──────── -->
+<div id="restore-modal" class="modal-overlay hidden" style="z-index:200;backdrop-filter:blur(6px)">
+  <div class="modal" style="max-width:460px">
+    <div class="modal-header" style="border-bottom:none;padding-bottom:4px">
+      <h3 style="font-size:1.1rem;font-weight:700">
+        <i class="fa-solid fa-clock-rotate-left" style="color:#a78bfa;margin-right:8px"></i>Previous Session Found
+      </h3>
+    </div>
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:16px">
+      <p id="restore-msg" style="font-size:.875rem;color:#9ca3af;line-height:1.6"></p>
+      <div id="restore-preview" style="background:#111827;border-radius:8px;padding:10px 14px;display:none">
+        <div id="restore-preview-list" style="font-size:.78rem;color:#6b7280"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:4px">
+        <button class="btn btn-primary" onclick="onRestoreQueue()" style="padding:12px">
+          <i class="fa-solid fa-rotate-right"></i><br>
+          <span style="font-size:.9rem;font-weight:700;display:block;margin-top:4px">Restore Queue</span>
+          <span style="font-size:.72rem;color:rgba(255,255,255,.6)">Continue where you left off</span>
+        </button>
+        <button class="btn btn-gray" onclick="onClearQueue()" style="padding:12px">
+          <i class="fa-solid fa-trash"></i><br>
+          <span style="font-size:.9rem;font-weight:700;display:block;margin-top:4px">Start Fresh</span>
+          <span style="font-size:.72rem;color:#4b5563">Clear the previous queue</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Re-queue Modal ─────────────────────────────────────────────── -->
+<div id="requeue-modal" class="modal-overlay hidden">
+  <div class="modal" style="max-width:380px">
+    <div class="modal-header">
+      <h3 style="font-size:1rem;font-weight:600">
+        <i class="fa-solid fa-microphone" style="color:#a78bfa;margin-right:8px"></i>Who's singing?
+      </h3>
+      <button class="btn btn-gray btn-sm" onclick="hide('requeue-modal')"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:12px">
+      <div id="rq-song" style="font-size:.8rem;color:#6b7280;font-style:italic;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>
+      <button id="rq-same-btn" class="btn btn-primary w-full" onclick="requeueConfirm()"></button>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div style="flex:1;height:1px;background:#374151"></div>
+        <span style="font-size:.75rem;color:#4b5563">or different name</span>
+        <div style="flex:1;height:1px;background:#374151"></div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <input id="rq-name" type="text" placeholder="Singer name…" style="flex:1"
+               onkeydown="if(event.key==='Enter')requeueWithName()">
+        <button class="btn btn-gray" onclick="requeueWithName()"><i class="fa-solid fa-plus"></i></button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ── Requests Modal ──────────────────────────────────────────────── -->
 <div id="requests-modal" class="modal-overlay hidden">
   <div class="modal" style="max-width:440px">
@@ -434,6 +546,7 @@ const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 // ── State ─────────────────────────────────────────────────────────────────────
 let currentSong = null, cdgPlayer = null, isPlaying = false;
 let _transitioning = false; // blocks checkAndPlay during the gap
+let _qrDataUrl = null, _qrEnabled = false, _qrPosition = 'bottom-right';
 let _gainNode = null, _audioSrc = null, _audioBuf = null;
 let _startAt = 0, _pausedPos = 0, _songDur = 0;
 let _videoEl = null, _videoBlobUrl = null, _ytStreamUrl = null;
@@ -444,17 +557,26 @@ let _pitch = 0, _tempo = 0, _sync = 0;
 function broadcast(msg) { api.broadcast(msg); }
 
 api.onBroadcast((msg) => {
+  if (msg.type === 'qr_url') {
+    _qrDataUrl = msg.dataUrl || null;
+  }
+
   if (msg.type === 'request_state') {
-    if (!currentSong) { broadcast({ type: 'stop' }); return; }
-    broadcast({ type: 'song_info', title: currentSong.title, artist: currentSong.artist, singer_name: currentSong.singer_name });
-    broadcast({ type: 'position', pos: getPos(), playing: isPlaying });
-    if (_cdgBuf) {
-      broadcast({ type: 'cdg_path', path: currentSong.file_path, pos: getPos() });
-    } else if (currentSong.file_format === 'youtube' && _ytStreamUrl) {
-      broadcast({ type: 'video_url', url: _ytStreamUrl, pos: getPos() });
-    } else if (_videoEl && currentSong.file_path) {
-      broadcast({ type: 'video_path', path: currentSong.file_path, mime: MIME_MAP[currentSong.file_format] || 'video/mp4', pos: getPos() });
+    if (!currentSong) { broadcast({ type: 'stop' }); }
+    else {
+      broadcast({ type: 'song_info', title: currentSong.title, artist: currentSong.artist, singer_name: currentSong.singer_name });
+      broadcast({ type: 'position', pos: getPos(), playing: isPlaying });
+      if (_cdgBuf) {
+        broadcast({ type: 'cdg_path', path: currentSong.file_path, pos: getPos() });
+      } else if (currentSong.file_format === 'youtube' && _ytStreamUrl) {
+        broadcast({ type: 'video_url', url: _ytStreamUrl, pos: getPos() });
+      } else if (_videoEl && currentSong.file_path) {
+        broadcast({ type: 'video_path', path: currentSong.file_path, mime: MIME_MAP[currentSong.file_format] || 'video/mp4', pos: getPos() });
+      }
     }
+    // Always send QR state so the player window is in sync
+    broadcast({ type: 'qr_url',      dataUrl: _qrDataUrl });
+    broadcast({ type: 'qr_settings', enabled: _qrEnabled, position: _qrPosition });
   }
 });
 
@@ -475,13 +597,18 @@ async function renderQueue() {
   el.innerHTML = queue.map(entry => {
     const dur = Math.round((entry.duration || 180) / 60);
     const isPlaying = entry.status === 'playing';
+    const isPinned  = !!entry.pinned;
     const timeLabel = (!isPlaying && !firstPending) ? `<span style="font-size:.8rem;color:#6b7280">${mins}min</span>` : '';
     const badge = isPlaying
       ? `<span class="badge badge-green">Now playing</span>`
       : (firstPending ? `<span class="badge badge-gray">Coming up next</span>` : '');
     if (entry.status === 'pending') { mins += dur; firstPending = false; }
+    const pinIcon = isPinned
+      ? `<i class="fa-solid fa-lock" title="Pinned — click to release" onclick="unpin(${entry.id});event.stopPropagation()"
+           style="font-size:.75rem;color:#a78bfa;cursor:pointer;padding:4px;flex-shrink:0"></i>`
+      : '';
     return `
-      <div class="queue-row ${isPlaying ? 'playing' : ''}" id="qrow-${entry.id}" ${!isPlaying ? `draggable="true" data-id="${entry.id}" onmouseleave="closeMenu(${entry.id})"` : ''}>
+      <div class="queue-row ${isPlaying ? 'playing' : ''} ${isPinned ? 'pinned' : ''}" id="qrow-${entry.id}" ${!isPlaying ? `draggable="true" data-id="${entry.id}" onmouseleave="closeMenu(${entry.id})"` : ''}>
         <div class="queue-row-main">
           ${!isPlaying ? `<i class="fa-solid fa-grip-vertical drag-handle" onclick="openMenu(${entry.id});event.stopPropagation()"></i>` : ''}
           <div class="cover">
@@ -499,7 +626,7 @@ async function renderQueue() {
           </div>
           <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
             ${timeLabel}
-            <i class="fa-solid fa-chevron-right" style="color:#374151;font-size:.75rem"></i>
+            ${pinIcon}
           </div>
         </div>
         <div class="queue-row-actions" id="menu-${entry.id}">
@@ -514,14 +641,17 @@ async function renderQueue() {
 }
 
 // ── History rendering ─────────────────────────────────────────────────────────
+let _historyCache = [];
+
 async function renderHistory() {
   const history = await api.getHistory();
+  _historyCache = history;
   const el = document.getElementById('history-list');
   if (!history.length) {
     el.innerHTML = '<div style="text-align:center;padding:16px;color:#1f2937;font-size:.8rem">No songs played yet</div>';
     return;
   }
-  el.innerHTML = history.map(entry => `
+  el.innerHTML = history.map((entry, i) => `
     <div class="history-row" draggable="true"
          data-song-id="${entry.song_id}"
          data-singer="${(entry.singer_name || '').replace(/"/g,'&quot;')}">
@@ -534,7 +664,7 @@ async function renderHistory() {
         <div style="font-size:.73rem;color:#6b7280;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${entry.title} · <span style="color:#4b5563">${entry.artist}</span></div>
       </div>
       <button class="btn btn-gray btn-sm" style="padding:3px 8px;font-size:.7rem;flex-shrink:0"
-              onclick="requeueEntry(${entry.song_id},'${(entry.singer_name||'').replace(/'/g,"\\'")}')">
+              onclick="openRequeueModal(${i})">
         <i class="fa-solid fa-plus"></i>
       </button>
     </div>`).join('');
@@ -554,10 +684,55 @@ async function renderHistory() {
   });
 }
 
-async function requeueEntry(songId, singerName) {
-  await api.addToQueue(songId, singerName);
+// Shared wrapper — checks the QueueManager error returned by queue:add
+async function _addToQueue(songId, singerName) {
+  const r = await api.addToQueue(songId, singerName);
+  if (r && r.error) {
+    const msgs = {
+      limit:        `${singerName} already has the max songs in the queue`,
+      cooldown:     `${singerName} is in cooldown — ${r.remainSec ? Math.ceil(r.remainSec/60)+'min left' : 'wait a moment'}`,
+      smart_queue:  `Let others take a turn first`,
+      no_name:      'Enter a singer name first',
+    };
+    toast(msgs[r.error] || `Could not add song (${r.error})`, 'error');
+    return false;
+  }
+  return true;
+}
+
+let _requeuePending = null;
+
+function openRequeueModal(idx) {
+  const entry = _historyCache[idx];
+  if (!entry) return;
+  _requeuePending = entry;
+  document.getElementById('rq-song').textContent = `${entry.title} · ${entry.artist}`;
+  document.getElementById('rq-same-btn').textContent = `Add as "${entry.singer_name || '?'}"`;
+  document.getElementById('rq-name').value = '';
+  show('requeue-modal');
+  setTimeout(() => document.getElementById('rq-name').focus(), 100);
+}
+
+async function requeueConfirm() {
+  if (!_requeuePending) return;
+  hide('requeue-modal');
+  const { song_id, singer_name } = _requeuePending;
+  _requeuePending = null;
+  if (!await _addToQueue(song_id, singer_name)) return;
   await renderQueue();
-  toast(`${singerName || 'Song'} added to queue`);
+  toast(`${singer_name} added to queue`);
+}
+
+async function requeueWithName() {
+  if (!_requeuePending) return;
+  const name = document.getElementById('rq-name').value.trim();
+  if (!name) { toast('Enter a singer name', 'error'); return; }
+  hide('requeue-modal');
+  const { song_id } = _requeuePending;
+  _requeuePending = null;
+  if (!await _addToQueue(song_id, name)) return;
+  await renderQueue();
+  toast(`${name} added to queue`);
 }
 
 async function historyDrop(e) {
@@ -565,7 +740,7 @@ async function historyDrop(e) {
   if (!window._histDrag) return;
   const { songId, singer } = window._histDrag;
   window._histDrag = null;
-  await api.addToQueue(songId, singer);
+  if (!await _addToQueue(songId, singer)) return;
   await renderQueue();
   toast(`${singer || 'Song'} added to queue`);
 }
@@ -588,13 +763,33 @@ function closeMenu(id) {
 async function mv(id, dir) { await api.moveEntry(id, dir); renderQueue(); }
 async function sk(id) { await api.skipEntry(id); renderQueue(); toast('Song skipped'); }
 async function rm(id) { await api.removeFromQueue(id); renderQueue(); toast('Removed'); }
+async function unpin(id) { await api.setPinned(id, false); renderQueue(); toast('Released from pin'); }
 
 // ── Player ────────────────────────────────────────────────────────────────────
+let _hadFirstSong = false; // tracks whether the intro background was shown/skipped
+
 async function checkAndPlay() {
   if (_transitioning) return;
   let song = await api.getCurrentSong();
+
+  if (song) {
+    // A song is already in "playing" state in the DB (e.g. app restarted mid-song)
+    _hadFirstSong = true;
+  }
+
   if (!song) {
-    // Auto-advance: start the first pending song if the queue is idle
+    // Peek at the queue before marking anything as playing
+    const queue = await api.getQueue();
+    const nextPending = queue.find(e => e.status === 'pending');
+    if (!nextPending) { if (currentSong) showIdle(); return; }
+
+    // Show intro background before the very first song
+    if (!_hadFirstSong) {
+      _hadFirstSong = true;
+      await doTransition(null, nextPending); // no "Thank You", just background
+      if (_transitioning) return; // doTransition may have been interrupted
+    }
+
     song = await api.nextSong();
     if (song) await renderQueue();
   }
@@ -938,7 +1133,7 @@ async function confirmAdd(){
       file_format: 'youtube',
       duration,
     });
-    await api.addToQueue(result.id, name);
+    if (!await _addToQueue(result.id, name)) return;
     toast(`${name} added!`); closeAdd(); renderQueue();
     return;
   }
@@ -946,7 +1141,7 @@ async function confirmAdd(){
   let id=document.getElementById('modal-song-id').value;
   if(!id&&_lastSongs.length>0){id=_lastSongs[0].id;setSong(id,_lastSongs[0].artist+' — '+_lastSongs[0].title);}
   if(!id){toast('Type a song name to search','error');return;}
-  await api.addToQueue(parseInt(id),name);
+  if (!await _addToQueue(parseInt(id), name)) return;
   toast(`${name} added!`);closeAdd();renderQueue();
 }
 
@@ -1059,6 +1254,14 @@ async function openSettings(){
   document.getElementById('set-recent-hours').disabled     = !preventRecent;
   document.getElementById('set-venue-path').value  = settings.venue_image_path || '';
   if (settings.venue_image_path) loadVenuePreview(settings.venue_image_path);
+  // QR overlay
+  document.getElementById('set-qr-enabled').checked = settings.qr_overlay_enabled === 'true';
+  document.getElementById('set-qr-position').value  = settings.qr_overlay_position || 'bottom-right';
+
+  // Queue algorithm
+  const algo = await api.algoGet();
+  _renderAlgoUI(algo);
+
   // Top songs
   if (stats.top_songs.length) {
     document.getElementById('top-songs-card').style.display = '';
@@ -1071,6 +1274,19 @@ async function openSettings(){
   }
 }
 function closeSettings(){hide('settings-modal');}
+
+async function saveQrSettings() {
+  const enabled  = document.getElementById('set-qr-enabled').checked;
+  const position = document.getElementById('set-qr-position').value;
+  await Promise.all([
+    api.setSetting('qr_overlay_enabled',  String(enabled)),
+    api.setSetting('qr_overlay_position', position),
+  ]);
+  _qrEnabled  = enabled;
+  _qrPosition = position;
+  broadcast({ type: 'qr_settings', enabled, position });
+  toast('QR settings saved');
+}
 
 function _renderLibraryRows(dirs) {
   document.getElementById('library-rows').innerHTML = '';
@@ -1297,6 +1513,10 @@ async function doTransition(prevSinger, nextEntry) {
     ticker.textContent  = bannerText;
     ticker.style.animationDuration = animSec + 's';
 
+    // Next singer name
+    const nextSinger = nextEntry?.singer_name || '';
+    document.getElementById('tr-next-singer').textContent = nextSinger;
+
     // Countdown timer
     const fmtSec = s => s >= 60 ? `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}` : `${s}`;
     let remaining = Math.ceil(bgMs / 1000);
@@ -1307,7 +1527,7 @@ async function doTransition(prevSinger, nextEntry) {
       cntEl.textContent = fmtSec(remaining);
     }, 1000);
 
-    broadcast({ type: 'tr_phase2', venuePath, bannerText, animSec, bgMs });
+    broadcast({ type: 'tr_phase2', venuePath, bannerText, animSec, bgMs, nextSinger });
     await new Promise(r => setTimeout(r, Math.max(0, phaseEnd - Date.now())));
     clearInterval(cntTimer);
     p2.style.display = 'none';
@@ -1378,7 +1598,7 @@ document.getElementById('live-results').addEventListener('click', e=>{
     if (window._histDrag) {
       const { songId, singer } = window._histDrag;
       window._histDrag = null;
-      await api.addToQueue(songId, singer);
+      if (!await _addToQueue(songId, singer)) return;
       await renderQueue();
       toast(`${singer || 'Song'} added to queue`);
       return;
@@ -1396,6 +1616,21 @@ document.getElementById('live-results').addEventListener('click', e=>{
     renderQueue();
   });
 })();
+
+// ── Queue Algorithm UI ────────────────────────────────────────────────────────
+function _renderAlgoUI(algo) {
+  document.querySelectorAll('.algo-preset-btn').forEach(btn => {
+    btn.classList.toggle('btn-primary', btn.dataset.preset === algo.preset);
+    btn.classList.toggle('btn-gray',    btn.dataset.preset !== algo.preset);
+  });
+  document.getElementById('algo-cooldown').value = algo.cooldownSec || 0;
+}
+
+async function setAlgoPreset(preset) {
+  await api.algoSetPreset(preset);
+  _renderAlgoUI(await api.algoGet());
+  renderQueue();
+}
 
 // ── Wireless cast ─────────────────────────────────────────────────────────────
 let _castPollTimer = null;
@@ -1527,6 +1762,9 @@ function _startReqPoll() {
 }
 
 // Instant notification when a singer adds a song from mobile
+// Queue was reordered by a settings change — refresh immediately
+api.onQueueReordered(() => renderQueue());
+
 api.onMobileRequest(singerName => {
   renderQueue();
   toast(`🎤 ${singerName} added a song request`, 'info');
@@ -1552,10 +1790,60 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && _playerFs) togglePlayerFullscreen(false);
 });
 
-renderQueue();
-renderHistory();
-checkAndPlay();
-setInterval(()=>{renderQueue();renderHistory();checkAndPlay();},3000);
+// ── Session restore ───────────────────────────────────────────────────────────
+async function startApp() {
+  renderQueue();
+  renderHistory();
+  checkAndPlay();
+  setInterval(() => { renderQueue(); renderHistory(); checkAndPlay(); }, 3000);
+  // Load QR settings into module state so player windows syncing via request_state get them
+  const s = await api.getSettings();
+  _qrEnabled  = s.qr_overlay_enabled  === 'true';
+  _qrPosition = s.qr_overlay_position || 'bottom-right';
+}
+
+async function onRestoreQueue() {
+  hide('restore-modal');
+  await api.restoreQueue();
+  startApp();
+}
+
+async function onClearQueue() {
+  hide('restore-modal');
+  await api.clearPendingQueue();
+  startApp();
+}
+
+async function checkSessionRestore() {
+  const info = await api.getQueueRestoreInfo();
+  if (!info.total) { startApp(); return; }
+
+  // Build message
+  const n       = info.total;
+  const singers = [...new Set(info.entries.map(e => e.singer_name).filter(Boolean))];
+  const wasPlaying = info.entries.find(e => e.status === 'playing');
+  let msg = `There ${n === 1 ? 'was' : 'were'} <b style="color:#fff">${n} song${n !== 1 ? 's' : ''}</b> in the queue`;
+  if (singers.length) msg += ` for <b style="color:#a78bfa">${singers.slice(0,3).join(', ')}${singers.length > 3 ? ' …' : ''}</b>`;
+  msg += '.';
+  if (wasPlaying) msg += ` <span style="color:#facc15">A song was playing when the app closed.</span>`;
+  document.getElementById('restore-msg').innerHTML = msg;
+
+  // Preview list
+  if (info.entries.length) {
+    const previewDiv = document.getElementById('restore-preview');
+    document.getElementById('restore-preview-list').innerHTML = info.entries.map(e =>
+      `<div style="padding:3px 0;${e.status==='playing'?'color:#a78bfa;':''}">`
+      + `${e.status === 'playing' ? '▶ ' : '· '}`
+      + `<b>${e.singer_name || '?'}</b> — ${e.title}`
+      + `</div>`
+    ).join('') + (info.total > info.entries.length ? `<div style="color:#374151;margin-top:4px">… and ${info.total - info.entries.length} more</div>` : '');
+    previewDiv.style.display = 'block';
+  }
+
+  show('restore-modal');
+}
+
+checkSessionRestore();
 </script>
 </body>
 </html>

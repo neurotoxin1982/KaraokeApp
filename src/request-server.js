@@ -8,6 +8,7 @@ const PORT = 8766;
 let httpServer     = null;
 let wss            = null;
 let _db            = null;
+let _qm            = null;   // QueueManager instance
 let _onNewRequest  = null;
 let _activeIP      = null;
 const clients      = new Set();
@@ -39,9 +40,10 @@ async function resolveIP() {
 }
 
 // ── Server ────────────────────────────────────────────────────────────────────
-async function start(db, onNewRequest) {
+async function start(db, queueManager, onNewRequest) {
   if (httpServer) return getUrl();
   _db           = db;
+  _qm           = queueManager;
   _onNewRequest = onNewRequest;
   _activeIP     = null;
   _activeIP     = await resolveIP();
@@ -148,6 +150,17 @@ async function handleRequest(req, res) {
           return;
         }
 
+        // QueueManager admission (per-singer limit / cooldown / inclusive-jam rules)
+        if (_qm) {
+          const admission = _qm.validateAdmission(singer);
+          if (!admission.allowed) {
+            const status = admission.reason === 'cooldown' ? 429 : 429;
+            res.writeHead(status, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: admission.reason, message: admission.message || `Cannot add song: ${admission.reason}`, ...admission }));
+            return;
+          }
+        }
+
         // Recently-played block
         const cfg = _db.getSettings();
         if (cfg.prevent_recent === 'true') {
@@ -165,6 +178,7 @@ async function handleRequest(req, res) {
         }
 
         const result = _db.addToQueue(finalSongId, singer, deviceId || '');
+        if (_qm) _qm.recalculateQueue();
         broadcastQueue();
         if (_onNewRequest) _onNewRequest(singer);
         res.writeHead(200, { 'Content-Type': 'application/json' });

@@ -109,6 +109,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
 .queue-row { border-bottom: 1px solid rgba(55,65,81,0.6); transition: background 0.1s; }
 .queue-row:hover { background: rgba(31,41,55,0.5); }
 .queue-row.playing { background: rgba(124,58,237,0.1); border-left: 3px solid #7c3aed; }
+.queue-row.pinned  { border-left: 3px solid #a78bfa; }
 .queue-row.dragging { opacity: 0.35; }
 .queue-row.drop-before { box-shadow: inset 0 2px 0 #7c3aed; }
 .queue-row.drop-after  { box-shadow: inset 0 -2px 0 #7c3aed; }

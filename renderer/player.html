@@ -85,14 +85,22 @@
 <div id="pop-tr-bg" style="display:none;position:absolute;inset:0;background:#000;z-index:60;flex-direction:column">
   <div style="flex:1;display:flex;align-items:stretch;justify-content:center;overflow:hidden;min-height:0;position:relative">
     <img id="pop-tr-venue" style="width:100%;height:100%;object-fit:contain;display:none">
-    <div id="pop-tr-countdown" style="position:absolute;top:14px;right:14px;background:rgba(0,0,0,0.72);border-radius:14px;padding:10px 18px;text-align:center;backdrop-filter:blur(4px)">
-      <div style="font-size:.65rem;color:#a78bfa;letter-spacing:.1em;font-weight:600;margin-bottom:4px">GET READY</div>
-      <div id="pop-tr-countdown-num" style="font-size:2.4rem;font-weight:700;color:#fff;font-variant-numeric:tabular-nums;line-height:1"></div>
+    <div id="pop-tr-countdown" style="position:absolute;top:14px;right:14px;background:rgba(0,0,0,0.72);border-radius:14px;padding:12px 20px;text-align:center;backdrop-filter:blur(4px);min-width:140px">
+      <div style="font-size:.6rem;color:#a78bfa;letter-spacing:.1em;font-weight:600;margin-bottom:4px">NEXT SINGER</div>
+      <div id="pop-tr-next-singer" style="font-size:1.3rem;font-weight:700;color:#fff;margin-bottom:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px"></div>
+      <div style="font-size:.55rem;color:#6b7280;letter-spacing:.08em;margin-bottom:3px">GET READY IN</div>
+      <div id="pop-tr-countdown-num" style="font-size:2.2rem;font-weight:700;color:#fff;font-variant-numeric:tabular-nums;line-height:1"></div>
     </div>
   </div>
   <div id="pop-tr-ticker-wrap" style="background:rgba(124,58,237,0.92);padding:14px 0;overflow:hidden;flex-shrink:0">
     <div id="pop-tr-ticker" style="white-space:nowrap;display:inline-block;animation:pop-ticker 18s linear infinite;font-size:1.4rem;font-weight:700;color:#fff"></div>
   </div>
+</div>
+
+<!-- QR overlay -->
+<div id="qr-overlay" style="display:none;position:absolute;z-index:70;padding:10px;background:rgba(255,255,255,0.93);border-radius:12px;box-shadow:0 4px 18px rgba(0,0,0,0.5);text-align:center;pointer-events:none">
+  <img id="qr-img" style="width:110px;height:110px;display:block">
+  <div style="font-size:10px;font-weight:700;color:#111;margin-top:5px;letter-spacing:.03em">SCAN TO REQUEST</div>
 </div>
 
 <script src="js/cdg-player.js"></script>
@@ -101,6 +109,31 @@ const canvas    = document.getElementById('cdg-canvas');
 const videoEl   = document.getElementById('video-el');
 const infoBar   = document.getElementById('info-bar');
 const idleScreen= document.getElementById('idle-screen');
+const qrOverlay = document.getElementById('qr-overlay');
+const qrImg     = document.getElementById('qr-img');
+
+let _qrEnabled  = false;
+let _qrDataUrl  = null;
+let _qrPosition = 'bottom-right';
+
+function _applyQrPosition(pos) {
+  qrOverlay.style.top = qrOverlay.style.bottom = qrOverlay.style.left = qrOverlay.style.right = '';
+  const margin = '16px';
+  if (pos === 'bottom-right') { qrOverlay.style.bottom = margin; qrOverlay.style.right = margin; }
+  else if (pos === 'bottom-left') { qrOverlay.style.bottom = margin; qrOverlay.style.left = margin; }
+  else if (pos === 'top-right')   { qrOverlay.style.top = margin;    qrOverlay.style.right = margin; }
+  else if (pos === 'top-left')    { qrOverlay.style.top = margin;    qrOverlay.style.left = margin; }
+}
+
+function _refreshQrOverlay() {
+  if (_qrEnabled && _qrDataUrl) {
+    qrImg.src = _qrDataUrl;
+    _applyQrPosition(_qrPosition);
+    qrOverlay.style.display = 'block';
+  } else {
+    qrOverlay.style.display = 'none';
+  }
+}
 
 let cdgPlayer   = null;
 let _posOffset  = 0;
@@ -236,6 +269,8 @@ api.onBroadcast((msg) => {
       const pttk = document.getElementById('pop-tr-ticker');
       pttk.textContent = msg.bannerText || '';
       pttk.style.animationDuration = (msg.animSec || 18) + 's';
+      // Next singer name
+      document.getElementById('pop-tr-next-singer').textContent = msg.nextSinger || '';
       // Countdown
       if (_cntTimer) { clearInterval(_cntTimer); _cntTimer = null; }
       const cntEl = document.getElementById('pop-tr-countdown-num');
@@ -292,6 +327,19 @@ api.onBroadcast((msg) => {
       if (msg.key === 'cdg_sync_offset' && typeof msg.value === 'number') {
         cdgSyncOffset = msg.value;
       }
+      break;
+    }
+
+    case 'qr_url': {
+      _qrDataUrl = msg.dataUrl || null;
+      _refreshQrOverlay();
+      break;
+    }
+
+    case 'qr_settings': {
+      _qrEnabled  = !!msg.enabled;
+      _qrPosition = msg.position || 'bottom-right';
+      _refreshQrOverlay();
       break;
     }
 
