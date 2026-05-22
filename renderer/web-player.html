@@ -127,40 +127,11 @@
 </div>
 
 <script src="/js/cdg-player.js"></script>
-<!-- QR overlay -->
-<div id="qr-overlay" style="display:none;position:absolute;z-index:70;padding:10px;background:rgba(255,255,255,0.93);border-radius:12px;box-shadow:0 4px 18px rgba(0,0,0,0.5);text-align:center;pointer-events:none">
-  <img id="qr-img" style="width:110px;height:110px;display:block">
-  <div style="font-size:10px;font-weight:700;color:#111;margin-top:5px;letter-spacing:.03em">SCAN TO REQUEST</div>
-</div>
 
 <script>
 const canvas     = document.getElementById('cdg-canvas');
 const videoEl    = document.getElementById('video-el');
 const infoBar    = document.getElementById('info-bar');
-const qrOverlay  = document.getElementById('qr-overlay');
-const qrImg      = document.getElementById('qr-img');
-
-let _wqrEnabled  = false;
-let _wqrDataUrl  = null;
-let _wqrPosition = 'bottom-right';
-
-function _applyQrPos(pos) {
-  qrOverlay.style.top = qrOverlay.style.bottom = qrOverlay.style.left = qrOverlay.style.right = '';
-  const m = '16px';
-  if (pos === 'bottom-right') { qrOverlay.style.bottom = m; qrOverlay.style.right = m; }
-  else if (pos === 'bottom-left') { qrOverlay.style.bottom = m; qrOverlay.style.left = m; }
-  else if (pos === 'top-right')   { qrOverlay.style.top = m;    qrOverlay.style.right = m; }
-  else if (pos === 'top-left')    { qrOverlay.style.top = m;    qrOverlay.style.left = m; }
-}
-function _refreshQr() {
-  if (_wqrEnabled && _wqrDataUrl) {
-    qrImg.src = _wqrDataUrl;
-    _applyQrPos(_wqrPosition);
-    qrOverlay.style.display = 'block';
-  } else {
-    qrOverlay.style.display = 'none';
-  }
-}
 const idleScreen = document.getElementById('idle-screen');
 const noSignal   = document.getElementById('no-signal');
 
@@ -389,18 +360,6 @@ function handleMsg(msg) {
       break;
     }
 
-    case 'qr_url': {
-      _wqrDataUrl = msg.dataUrl || null;
-      _refreshQr();
-      break;
-    }
-
-    case 'qr_settings': {
-      _wqrEnabled  = !!msg.enabled;
-      _wqrPosition = msg.position || 'bottom-right';
-      _refreshQr();
-      break;
-    }
   }
 }
 </script>

@@ -12,7 +12,6 @@ let scanner = null;
 let networkPlayer = null;
 let requestServer = null;
 let queueManager  = null;
-let _qrDataUrl    = null;
 
 // ── Protocol: serve local files as localfile:// ───────────────────────────────
 const MIME_TYPES = {
@@ -104,24 +103,6 @@ function _broadcastToAll(msg) {
   BrowserWindow.getAllWindows().forEach(w => {
     if (!w.isDestroyed()) w.webContents.send('broadcast', msg);
   });
-}
-
-async function _updateQr(url) {
-  if (!url) { _qrDataUrl = null; }
-  else {
-    try {
-      const QRCode = require('qrcode');
-      const svg = await QRCode.toString(url, { type: 'svg', margin: 1 });
-      _qrDataUrl = 'data:image/svg+xml;base64,' + Buffer.from(svg).toString('base64');
-      console.log('[QR] generated for', url);
-    } catch (e) {
-      console.error('[QR] generation failed:', e);
-      _qrDataUrl = null;
-    }
-  }
-  const msg = { type: 'qr_url', dataUrl: _qrDataUrl };
-  _broadcastToAll(msg);
-  networkPlayer.broadcast(msg);
 }
 
 // ── Windows ───────────────────────────────────────────────────────────────────
@@ -288,11 +269,9 @@ function setupIPC() {
       if (mainWindow && !mainWindow.isDestroyed())
         mainWindow.webContents.send('mobile-request-added', singerName);
     });
-    await _updateQr(url);
     return url;
   });
-  ipcMain.handle('requests:stop', () => { requestServer.stop(); _updateQr(null); });
-  ipcMain.handle('requests:qr',   () => _qrDataUrl);
+  ipcMain.handle('requests:stop', () => { requestServer.stop(); });
   ipcMain.handle('requests:status', ()      => ({
     running: requestServer.isRunning(),
     url:     requestServer.isRunning() ? requestServer.getUrl() : null,

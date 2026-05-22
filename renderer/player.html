@@ -97,43 +97,12 @@
   </div>
 </div>
 
-<!-- QR overlay -->
-<div id="qr-overlay" style="display:none;position:absolute;z-index:70;padding:10px;background:rgba(255,255,255,0.93);border-radius:12px;box-shadow:0 4px 18px rgba(0,0,0,0.5);text-align:center;pointer-events:none">
-  <img id="qr-img" style="width:110px;height:110px;display:block">
-  <div style="font-size:10px;font-weight:700;color:#111;margin-top:5px;letter-spacing:.03em">SCAN TO REQUEST</div>
-</div>
-
 <script src="js/cdg-player.js"></script>
 <script>
 const canvas    = document.getElementById('cdg-canvas');
 const videoEl   = document.getElementById('video-el');
 const infoBar   = document.getElementById('info-bar');
 const idleScreen= document.getElementById('idle-screen');
-const qrOverlay = document.getElementById('qr-overlay');
-const qrImg     = document.getElementById('qr-img');
-
-let _qrEnabled  = false;
-let _qrDataUrl  = null;
-let _qrPosition = 'bottom-right';
-
-function _applyQrPosition(pos) {
-  qrOverlay.style.top = qrOverlay.style.bottom = qrOverlay.style.left = qrOverlay.style.right = '';
-  const margin = '16px';
-  if (pos === 'bottom-right') { qrOverlay.style.bottom = margin; qrOverlay.style.right = margin; }
-  else if (pos === 'bottom-left') { qrOverlay.style.bottom = margin; qrOverlay.style.left = margin; }
-  else if (pos === 'top-right')   { qrOverlay.style.top = margin;    qrOverlay.style.right = margin; }
-  else if (pos === 'top-left')    { qrOverlay.style.top = margin;    qrOverlay.style.left = margin; }
-}
-
-function _refreshQrOverlay() {
-  if (_qrEnabled && _qrDataUrl) {
-    qrImg.src = _qrDataUrl;
-    _applyQrPosition(_qrPosition);
-    qrOverlay.style.display = 'block';
-  } else {
-    qrOverlay.style.display = 'none';
-  }
-}
 
 let cdgPlayer   = null;
 let _posOffset  = 0;
@@ -327,19 +296,6 @@ api.onBroadcast((msg) => {
       if (msg.key === 'cdg_sync_offset' && typeof msg.value === 'number') {
         cdgSyncOffset = msg.value;
       }
-      break;
-    }
-
-    case 'qr_url': {
-      _qrDataUrl = msg.dataUrl || null;
-      _refreshQrOverlay();
-      break;
-    }
-
-    case 'qr_settings': {
-      _qrEnabled  = !!msg.enabled;
-      _qrPosition = msg.position || 'bottom-right';
-      _refreshQrOverlay();
       break;
     }
 

@@ -14,8 +14,6 @@ const state = {
   media:       null,
   position:    null,
   transition:  null,
-  qr_url:      null,
-  qr_settings: null,
 };
 
 const MIMES = {
@@ -142,8 +140,6 @@ function _send(ws, msg) {
 
 function _sendState(ws) {
   _send(ws, { type: 'setting', key: 'audio', value: _audioEnabled });
-  if (state.qr_url)      _send(ws, state.qr_url);
-  if (state.qr_settings) _send(ws, state.qr_settings);
   if (state.song_info)   _send(ws, state.song_info);
   if (state.transition) {
     _send(ws, state.transition);
@@ -164,8 +160,6 @@ function broadcast(msg) {
     case 'position':                                    state.position   = msg; break;
     case 'tr_phase1': case 'tr_phase2':                 state.transition = msg; break;
     case 'transition_end':                              state.transition = null; break;
-    case 'qr_url':                                      state.qr_url      = msg; break;
-    case 'qr_settings':                                 state.qr_settings = msg; break;
     case 'stop':
       state.song_info = null; state.media = null;
       state.position  = null; state.transition = null;  break;
