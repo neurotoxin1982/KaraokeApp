@@ -107,13 +107,21 @@ function _broadcastToAll(msg) {
 }
 
 async function _updateQr(url) {
-  if (!url) { _qrDataUrl = null; _broadcastToAll({ type: 'qr_url', dataUrl: null }); return; }
-  try {
-    const QRCode = require('qrcode');
-    const svg = await QRCode.toString(url, { type: 'svg', margin: 1 });
-    _qrDataUrl = 'data:image/svg+xml;base64,' + Buffer.from(svg).toString('base64');
-  } catch { _qrDataUrl = null; }
-  _broadcastToAll({ type: 'qr_url', dataUrl: _qrDataUrl });
+  if (!url) { _qrDataUrl = null; }
+  else {
+    try {
+      const QRCode = require('qrcode');
+      const svg = await QRCode.toString(url, { type: 'svg', margin: 1 });
+      _qrDataUrl = 'data:image/svg+xml;base64,' + Buffer.from(svg).toString('base64');
+      console.log('[QR] generated for', url);
+    } catch (e) {
+      console.error('[QR] generation failed:', e);
+      _qrDataUrl = null;
+    }
+  }
+  const msg = { type: 'qr_url', dataUrl: _qrDataUrl };
+  _broadcastToAll(msg);
+  networkPlayer.broadcast(msg);
 }
 
 // ── Windows ───────────────────────────────────────────────────────────────────
@@ -280,7 +288,7 @@ function setupIPC() {
       if (mainWindow && !mainWindow.isDestroyed())
         mainWindow.webContents.send('mobile-request-added', singerName);
     });
-    _updateQr(url);
+    await _updateQr(url);
     return url;
   });
   ipcMain.handle('requests:stop', () => { requestServer.stop(); _updateQr(null); });

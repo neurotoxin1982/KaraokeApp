@@ -10,10 +10,12 @@ const clients  = new Set();
 
 // Cached state — sent to every new client that connects mid-session
 const state = {
-  song_info:  null,   // last song_info message
-  media:      null,   // last cdg_path / video_path / video_url
-  position:   null,   // last position message
-  transition: null,   // last tr_phase1 / tr_phase2 (cleared on transition_end / new media)
+  song_info:   null,
+  media:       null,
+  position:    null,
+  transition:  null,
+  qr_url:      null,
+  qr_settings: null,
 };
 
 const MIMES = {
@@ -140,11 +142,12 @@ function _send(ws, msg) {
 
 function _sendState(ws) {
   _send(ws, { type: 'setting', key: 'audio', value: _audioEnabled });
-  if (state.song_info)  _send(ws, state.song_info);
+  if (state.qr_url)      _send(ws, state.qr_url);
+  if (state.qr_settings) _send(ws, state.qr_settings);
+  if (state.song_info)   _send(ws, state.song_info);
   if (state.transition) {
     _send(ws, state.transition);
   } else if (state.media) {
-    // Inject latest known position so the client seeks to the right place
     const mediaMsg = { ...state.media };
     if (state.position) mediaMsg.pos = state.position.pos;
     _send(ws, mediaMsg);
@@ -161,6 +164,8 @@ function broadcast(msg) {
     case 'position':                                    state.position   = msg; break;
     case 'tr_phase1': case 'tr_phase2':                 state.transition = msg; break;
     case 'transition_end':                              state.transition = null; break;
+    case 'qr_url':                                      state.qr_url      = msg; break;
+    case 'qr_settings':                                 state.qr_settings = msg; break;
     case 'stop':
       state.song_info = null; state.media = null;
       state.position  = null; state.transition = null;  break;

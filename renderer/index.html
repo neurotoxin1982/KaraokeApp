@@ -513,10 +513,16 @@
       </div>
 
       <div id="req-running" class="hidden">
-        <p style="font-size:.75rem;color:#9ca3af;margin-bottom:6px">Singers open this URL on their phone:</p>
-        <div style="display:flex;gap:8px;margin-bottom:14px">
-          <input id="req-url" type="text" readonly style="flex:1;font-size:.95rem;font-weight:600;color:#a78bfa;background:#111827;border-color:#7c3aed">
-          <button class="btn btn-gray btn-sm" onclick="reqCopyUrl()" title="Copy"><i class="fa-solid fa-copy"></i></button>
+        <div style="display:flex;gap:16px;align-items:flex-start;margin-bottom:14px">
+          <img id="req-qr-img" style="width:120px;height:120px;flex-shrink:0;background:#fff;border-radius:8px;padding:6px;display:block">
+          <div style="flex:1;min-width:0">
+            <p style="font-size:.7rem;color:#6b7280;margin-bottom:6px">Singers open this URL on their phone:</p>
+            <div style="display:flex;gap:6px;margin-bottom:8px">
+              <input id="req-url" type="text" readonly style="flex:1;font-size:.85rem;font-weight:600;color:#a78bfa;background:#111827;border-color:#7c3aed;min-width:0">
+              <button class="btn btn-gray btn-sm" onclick="reqCopyUrl()" title="Copy"><i class="fa-solid fa-copy"></i></button>
+            </div>
+            <p style="font-size:.7rem;color:#4b5563">Scan the QR code or share the URL</p>
+          </div>
         </div>
         <div style="background:#111827;border-radius:10px;padding:12px 16px;margin-bottom:14px">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
@@ -556,9 +562,15 @@ let _pitch = 0, _tempo = 0, _sync = 0;
 // ── Broadcast to popout ───────────────────────────────────────────────────────
 function broadcast(msg) { api.broadcast(msg); }
 
+function _updateQrInModal() {
+  const img = document.getElementById('req-qr-img');
+  if (img) img.src = _qrDataUrl || '';
+}
+
 api.onBroadcast((msg) => {
   if (msg.type === 'qr_url') {
     _qrDataUrl = msg.dataUrl || null;
+    _updateQrInModal();
   }
 
   if (msg.type === 'request_state') {
@@ -1739,6 +1751,7 @@ function _updateReqUI(s) {
   if (s.running) {
     document.getElementById('req-url').value = s.url || '';
     document.getElementById('req-clients').textContent = s.clients ?? 0;
+    _updateQrInModal();
     const alts = (s.allUrls || []).filter(a => a.url !== s.url);
     const altBlock = document.getElementById('req-alt-urls');
     if (alts.length) {
