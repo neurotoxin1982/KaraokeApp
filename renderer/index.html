@@ -1240,19 +1240,6 @@ async function openSettings(){
 }
 function closeSettings(){hide('settings-modal');}
 
-async function saveQrSettings() {
-  const enabled  = document.getElementById('set-qr-enabled').checked;
-  const position = document.getElementById('set-qr-position').value;
-  await Promise.all([
-    api.setSetting('qr_overlay_enabled',  String(enabled)),
-    api.setSetting('qr_overlay_position', position),
-  ]);
-  _qrEnabled  = enabled;
-  _qrPosition = position;
-  broadcast({ type: 'qr_settings', enabled, position });
-  toast('QR settings saved');
-}
-
 function _renderLibraryRows(dirs) {
   document.getElementById('library-rows').innerHTML = '';
   dirs.forEach(d => _addLibRow(d));
@@ -1762,10 +1749,6 @@ async function startApp() {
   renderHistory();
   checkAndPlay();
   setInterval(() => { renderQueue(); renderHistory(); checkAndPlay(); }, 3000);
-  // Load QR settings into module state so player windows syncing via request_state get them
-  const s = await api.getSettings();
-  _qrEnabled  = s.qr_overlay_enabled  === 'true';
-  _qrPosition = s.qr_overlay_position || 'bottom-right';
 }
 
 async function onRestoreQueue() {
