@@ -10,10 +10,12 @@ const clients  = new Set();
 
 // Cached state — sent to every new client that connects mid-session
 const state = {
-  song_info:   null,
-  media:       null,
-  position:    null,
-  transition:  null,
+  song_info:        null,
+  media:            null,
+  position:         null,
+  transition:       null,
+  transitionPhaseEnd: 0,
+  venue_path:       null,
 };
 
 const MIMES = {
@@ -140,9 +142,15 @@ function _send(ws, msg) {
 
 function _sendState(ws) {
   _send(ws, { type: 'setting', key: 'audio', value: _audioEnabled });
+  if (state.venue_path)  _send(ws, state.venue_path);
   if (state.song_info)   _send(ws, state.song_info);
   if (state.transition) {
-    _send(ws, state.transition);
+    const t = state.transition;
+    if (t.type === 'tr_phase2' && state.transitionPhaseEnd > 0) {
+      _send(ws, { ...t, bgMs: Math.max(0, state.transitionPhaseEnd - Date.now()) });
+    } else {
+      _send(ws, t);
+    }
   } else if (state.media) {
     const mediaMsg = { ...state.media };
     if (state.position) mediaMsg.pos = state.position.pos;
@@ -158,8 +166,10 @@ function broadcast(msg) {
     case 'cdg_path': case 'video_path': case 'video_url':
       state.media = msg; state.transition = null;       break;
     case 'position':                                    state.position   = msg; break;
-    case 'tr_phase1': case 'tr_phase2':                 state.transition = msg; break;
-    case 'transition_end':                              state.transition = null; break;
+    case 'tr_phase1':  state.transition = msg; break;
+    case 'tr_phase2':  state.transition = msg; state.transitionPhaseEnd = Date.now() + (msg.bgMs || 0); break;
+    case 'transition_end': state.transition = null; state.transitionPhaseEnd = 0; break;
+    case 'venue_path':                                  state.venue_path = msg; break;
     case 'stop':
       state.song_info = null; state.media = null;
       state.position  = null; state.transition = null;  break;

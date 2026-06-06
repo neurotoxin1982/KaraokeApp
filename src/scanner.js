@@ -5,6 +5,7 @@ const CDG_EXT   = new Set(['.cdg']);
 const AUDIO_EXT = new Set(['.mp3', '.ogg', '.m4a', '.flac', '.wav']);
 const VIDEO_EXT = new Set(['.mp4', '.avi', '.webm', '.mkv', '.m4v', '.mpeg', '.mpg']);
 const KAR_EXT   = new Set(['.kar', '.mid']);
+const IMAGE_EXT = new Set(['.jpg', '.jpeg', '.png', '.webp']);
 
 function walkDir(dir) {
   const results = [];
@@ -52,12 +53,14 @@ async function scan(dir, db, onProgress) {
   // Build lookup maps
   const cdgMap   = new Map();
   const audioMap = new Map();
+  const imageMap = new Map();
 
   for (const f of allFiles) {
     const ext  = path.extname(f).toLowerCase();
     const stem = f.slice(0, -ext.length).toLowerCase();
     if (CDG_EXT.has(ext))   cdgMap.set(stem, f);
     if (AUDIO_EXT.has(ext)) audioMap.set(stem, f);
+    if (IMAGE_EXT.has(ext)) imageMap.set(stem, f);
   }
 
   // CDG + MP3 pairs
@@ -79,6 +82,7 @@ async function scan(dir, db, onProgress) {
       genre:      audioMeta.genre,
       year:       audioMeta.year,
       decade:     guessDecade(audioMeta.year),
+      cover_path: imageMap.get(stem) || '',
     });
     if (result.status === 'created') added++;
     done++;
@@ -91,7 +95,8 @@ async function scan(dir, db, onProgress) {
     if (!VIDEO_EXT.has(ext)) { continue; }
     const base = path.basename(f, ext);
     const { artist, title } = parseName(base);
-    const result = db.importSong({ title, artist, file_path: f, file_format: ext.slice(1) });
+    const vStem = f.slice(0, -ext.length).toLowerCase();
+    const result = db.importSong({ title, artist, file_path: f, file_format: ext.slice(1), cover_path: imageMap.get(vStem) || '' });
     if (result.status === 'created') added++;
     done++;
     onProgress?.({ done, total, added });
@@ -124,6 +129,7 @@ async function scan(dir, db, onProgress) {
       genre:       audioMeta.genre,
       year:        audioMeta.year,
       decade:      guessDecade(audioMeta.year),
+      cover_path:  imageMap.get(stem) || '',
     });
     if (result.status === 'created') added++;
     done++;

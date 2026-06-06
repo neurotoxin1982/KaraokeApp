@@ -64,8 +64,22 @@ contextBridge.exposeInMainWorld('api', {
   // Read a local file by path — returns Uint8Array (avoids URL encoding issues)
   readFile: (filePath) => ipcRenderer.invoke('read:file', filePath),
 
+  // Background music
+  bgmusicList: (dir) => ipcRenderer.invoke('bgmusic:list', dir),
+
   // Dialogs
   openImageDialog: () => ipcRenderer.invoke('dialog:openImage'),
+
+  // Spotify OAuth
+  spotifyStatus:         ()            => ipcRenderer.invoke('spotify:status'),
+  spotifyConfigure:      (clientId)    => ipcRenderer.invoke('spotify:configure', clientId),
+  spotifyAuth:           ()            => ipcRenderer.invoke('spotify:auth'),
+  spotifyToken:          ()            => ipcRenderer.invoke('spotify:token'),
+  spotifyDisconnect:     ()            => ipcRenderer.invoke('spotify:disconnect'),
+  // Spotify Connect API (controls playback on any active Spotify device)
+  spotifyPlay:           (uri)         => ipcRenderer.invoke('spotify:connect-play', uri),
+  spotifyPause:          ()            => ipcRenderer.invoke('spotify:connect-pause'),
+  spotifyCurrentTrack:   ()            => ipcRenderer.invoke('spotify:connect-current'),
 
   // YouTube
   youtubeEnsure:  ()        => ipcRenderer.invoke('youtube:ensure'),

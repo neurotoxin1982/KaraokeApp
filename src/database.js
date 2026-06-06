@@ -79,6 +79,7 @@ async function initialize() {
   // Migrations (safe to run repeatedly)
   try { db.run(`ALTER TABLE queue_entries ADD COLUMN device_id TEXT    DEFAULT ''`); } catch {}
   try { db.run(`ALTER TABLE queue_entries ADD COLUMN pinned    INTEGER DEFAULT 0`);  } catch {}
+  try { db.run(`ALTER TABLE songs ADD COLUMN cover_path TEXT DEFAULT ''`);           } catch {}
 
   db.run(`CREATE TABLE IF NOT EXISTS play_history (
     id        INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -136,12 +137,19 @@ function getSongs({ q='', genre='', language='', decade='', fmt='', rating=0,
 
 function importSong(meta) {
   const existing = get('SELECT id FROM songs WHERE file_path=?', [meta.file_path]);
-  if (existing) return { id: existing.id, status: 'exists' };
+  if (existing) {
+    if (meta.cover_path && !existing.cover_path) {
+      run('UPDATE songs SET cover_path=? WHERE id=?', [meta.cover_path, existing.id]);
+      save();
+    }
+    return { id: existing.id, status: 'exists' };
+  }
   const r = run(
-    `INSERT INTO songs (title,artist,file_path,audio_path,file_format,duration,genre,language,decade,year)
-     VALUES (?,?,?,?,?,?,?,?,?,?)`,
+    `INSERT INTO songs (title,artist,file_path,audio_path,file_format,duration,genre,language,decade,year,cover_path)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
     [meta.title, meta.artist, meta.file_path, meta.audio_path||null, meta.file_format,
-     meta.duration||0, meta.genre||'', meta.language||'', meta.decade||'', meta.year||null]
+     meta.duration||0, meta.genre||'', meta.language||'', meta.decade||'', meta.year||null,
+     meta.cover_path||'']
   );
   save();
   return { id: r.lastInsertRowid, status: 'created' };
@@ -203,7 +211,7 @@ function clearPendingQueue() {
 function getQueue() {
   return all(`
     SELECT q.*, s.title, s.artist, s.file_path, s.audio_path, s.file_format, s.duration,
-           sg.name AS singer_name
+           s.cover_path, sg.name AS singer_name
     FROM queue_entries q
     JOIN songs s ON q.song_id = s.id
     LEFT JOIN singers sg ON q.singer_id = sg.id
@@ -421,6 +429,11 @@ function getSettings() {
   return Object.fromEntries(all('SELECT key,value FROM settings').map(r => [r.key, r.value]));
 }
 
+function getSetting(key) {
+  const row = get('SELECT value FROM settings WHERE key=?', [key]);
+  return row ? row.value : null;
+}
+
 function setSetting(key, value) {
   run('INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)', [key, value]);
   save();
@@ -433,5 +446,5 @@ module.exports = {
   getQueueRestoreInfo, restoreQueue, clearPendingQueue,
   getQueue, getHistory, getCurrentSong, addToQueue, getDeviceQueueCount, songPlayedRecently, removeFromQueue, skipEntry, moveEntry, moveToPosition, nextSong,
   getQueueWithTiming, getUserQueueCount, singersWithFewerSongs, reorderQueue, saveDb, setPinned,
-  getStats, getSettings, setSetting,
+  getStats, getSettings, getSetting, setSetting,
 };

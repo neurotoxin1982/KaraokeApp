@@ -50,9 +50,10 @@
       display: flex; flex-direction: column; align-items: center; justify-content: center;
       color: #4b5563;
       gap: 16px;
+      overflow: hidden;
     }
-    #idle-screen .logo { font-size: 3rem; }
-    #idle-screen p { font-size: 1.1rem; }
+    #idle-screen .logo { font-size: 3rem; position: relative; }
+    #idle-screen p { font-size: 1.1rem; position: relative; text-shadow: 0 1px 6px #000; }
   </style>
 </head>
 <body>
@@ -69,32 +70,48 @@
 </div>
 
 <div id="idle-screen">
-  <div class="logo">🎤</div>
-  <p>Waiting for next song…</p>
+  <img id="idle-bg" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:none;z-index:0">
+  <div id="idle-icon" class="logo">🎤</div>
+  <p id="idle-text">Waiting for next song…</p>
 </div>
 
 <!-- Between-song transition -->
-<style>@keyframes pop-ticker{from{transform:translateX(0)}to{transform:translateX(-50%)}}</style>
+<style>
+  @keyframes pop-ticker  { from{transform:translateX(0)} to{transform:translateX(-50%)} }
+  @keyframes th-bounce   { 0%,100%{transform:translateY(0) scale(1)} 50%{transform:translateY(-15px) scale(1.12)} }
+  @keyframes th-pulse    { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(.88);opacity:.75} }
+  @keyframes th-float-up { 0%{transform:translateY(0);opacity:1} 100%{transform:translateY(-160px);opacity:0} }
+  @keyframes th-fall     { 0%{transform:translateY(0) rotate(0deg)} 100%{transform:translateY(110vh) rotate(720deg)} }
+  @keyframes th-spin     { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+  @keyframes th-radiate  { 0%{transform:translate(-50%,-50%) rotate(var(--a,0deg)) translateY(0);opacity:1} 100%{transform:translate(-50%,-50%) rotate(var(--a,0deg)) translateY(-140px);opacity:0} }
+  @keyframes th-flame    { 0%{transform:scaleY(1) rotate(-4deg)} 100%{transform:scaleY(1.1) translateY(-12px) rotate(4deg)} }
+  @keyframes th-flame-big{ 0%{transform:scale(1) rotate(-8deg)} 100%{transform:scale(1.12) rotate(8deg)} }
+  @keyframes th-glow-fire{ 0%{text-shadow:0 0 20px #f60,0 0 40px #f40} 100%{text-shadow:0 0 50px #f60,0 0 90px #f00} }
+  @keyframes th-twinkle  { 0%,100%{opacity:.15} 50%{opacity:1} }
+  @keyframes th-rocket   { 0%,100%{transform:translateY(0) rotate(5deg)} 50%{transform:translateY(-20px) rotate(-5deg)} }
+  @keyframes th-rainbow  { 0%{color:#f44} 16%{color:#f80} 33%{color:#fd0} 50%{color:#4f8} 66%{color:#48f} 83%{color:#c4f} 100%{color:#f44} }
+  @keyframes th-shimmer  { from{background-position:0% 50%} to{background-position:200% 50%} }
+</style>
 <!-- Phase 1: Thank you -->
-<div id="pop-tr-thanks" style="display:none;position:absolute;inset:0;background:#000;z-index:60;flex-direction:column;align-items:center;justify-content:center;gap:16px;text-align:center">
-  <div style="font-size:8rem">👏</div>
-  <div style="font-size:3.5rem;font-weight:700;color:#fff">Thank You!</div>
-  <div id="pop-tr-singer" style="font-size:2.5rem;color:#a78bfa;margin-top:8px"></div>
-</div>
+<div id="pop-tr-thanks" style="display:none;position:absolute;inset:0;background:#000;z-index:60;flex-direction:column;align-items:center;justify-content:center;overflow:hidden"></div>
 <!-- Phase 2: Background + banner -->
 <div id="pop-tr-bg" style="display:none;position:absolute;inset:0;background:#000;z-index:60;flex-direction:column">
   <div style="flex:1;display:flex;align-items:stretch;justify-content:center;overflow:hidden;min-height:0;position:relative">
     <img id="pop-tr-venue" style="width:100%;height:100%;object-fit:contain;display:none">
-    <div id="pop-tr-countdown" style="position:absolute;top:14px;right:14px;background:rgba(0,0,0,0.72);border-radius:14px;padding:12px 20px;text-align:center;backdrop-filter:blur(4px);min-width:140px">
-      <div style="font-size:.6rem;color:#a78bfa;letter-spacing:.1em;font-weight:600;margin-bottom:4px">NEXT SINGER</div>
-      <div id="pop-tr-next-singer" style="font-size:1.3rem;font-weight:700;color:#fff;margin-bottom:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px"></div>
-      <div style="font-size:.55rem;color:#6b7280;letter-spacing:.08em;margin-bottom:3px">GET READY IN</div>
+    <div id="pop-tr-next-up" style="display:none;position:absolute;left:14px;top:14px;background:rgba(0,0,0,0.72);border-radius:14px;padding:14px 16px;backdrop-filter:blur(4px);min-width:200px;max-width:min(300px,38vw);z-index:5"></div>
+    <div id="pop-tr-countdown" style="position:absolute;top:14px;right:14px;background:rgba(0,0,0,0.72);border-radius:14px;padding:10px 18px;text-align:center;backdrop-filter:blur(4px)">
+      <div style="font-size:.5rem;color:#6b7280;letter-spacing:.08em;margin-bottom:3px">GET READY IN</div>
       <div id="pop-tr-countdown-num" style="font-size:2.2rem;font-weight:700;color:#fff;font-variant-numeric:tabular-nums;line-height:1"></div>
     </div>
   </div>
-  <div id="pop-tr-ticker-wrap" style="background:rgba(124,58,237,0.92);padding:14px 0;overflow:hidden;flex-shrink:0">
-    <div id="pop-tr-ticker" style="white-space:nowrap;display:inline-block;animation:pop-ticker 18s linear infinite;font-size:1.4rem;font-weight:700;color:#fff"></div>
+  <div id="pop-tr-ticker-wrap" style="background:rgba(124,58,237,0.92);padding:28px 0;overflow:hidden;flex-shrink:0">
+    <div id="pop-tr-ticker" style="white-space:nowrap;display:inline-block;animation:pop-ticker 18s linear infinite;font-size:2.8rem;font-weight:700;color:#fff"></div>
   </div>
+</div>
+
+<!-- Playback banner -->
+<div id="playback-banner-wrap" style="display:none;position:absolute;bottom:0;left:0;right:0;z-index:19;background:rgba(124,58,237,0.92);overflow:hidden">
+  <div id="playback-banner-ticker" style="white-space:nowrap;display:inline-block;animation:pop-ticker 18s linear infinite;font-size:2.0rem;font-weight:600;color:#fff"></div>
 </div>
 
 <script src="js/cdg-player.js"></script>
@@ -103,6 +120,67 @@ const canvas    = document.getElementById('cdg-canvas');
 const videoEl   = document.getElementById('video-el');
 const infoBar   = document.getElementById('info-bar');
 const idleScreen= document.getElementById('idle-screen');
+
+function _renderNextUp(list, el, scale = 1) {
+  if (!el) return;
+  if (!list || !list.length) { el.style.display = 'none'; return; }
+  const esc = s => (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const fmtW = s => {
+    if (s < 60) return `≈ ${Math.round(s)}s`;
+    return `≈ ${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,'0')}`;
+  };
+  const r  = base => (base * scale).toFixed(2) + 'rem';
+  const px = base => Math.round(base * scale) + 'px';
+  el.style.minWidth = px(200);
+  el.style.padding  = `${px(14)} ${px(16)}`;
+  el.innerHTML =
+    `<div style="font-size:${r(0.55)};color:#a78bfa;letter-spacing:.12em;font-weight:700;margin-bottom:${px(10)};text-transform:uppercase">🎤 Up Next</div>` +
+    list.map((e, i) =>
+      `<div style="margin-bottom:${i < list.length-1 ? px(9) : '0'};${e.isNext ? `border-left:${px(3)} solid #a78bfa;padding-left:${px(8)};` : `padding-left:${px(11)};`}">` +
+        `<div style="display:flex;align-items:baseline;gap:${px(5)}">` +
+          `<span style="font-size:${r(0.65)};font-weight:700;color:${e.isNext ? '#a78bfa' : '#6b7280'};min-width:${px(14)}">${e.isNext ? '▶' : `${i+1}`}</span>` +
+          `<span style="font-size:${e.isNext ? r(0.88) : r(0.78)};font-weight:700;color:#fff;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(e.singer)}</span>` +
+          `<span style="font-size:${r(0.6)};color:#9ca3af;white-space:nowrap;margin-left:${px(6)}">${fmtW(e.waitSec)}</span>` +
+        `</div>` +
+        `<div style="font-size:${r(0.68)};color:#9ca3af;word-break:break-word;margin-top:${px(1)};padding-left:${px(19)}">${esc(e.title)}</div>` +
+      `</div>`
+    ).join('');
+  el.style.display = 'block';
+}
+
+function _getThanksHTML(singer, v) {
+  const esc = s => (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const r = (a,b) => (a + Math.random()*(b-a)).toFixed(2);
+  const nm = singer ? `<div style="font-size:clamp(1.5rem,3.5vw,2.8rem);color:#a78bfa;font-weight:700;margin-top:4px;max-width:82%;text-overflow:ellipsis;white-space:nowrap;overflow:hidden">${esc(singer)}</div>` : '';
+  const C = [
+    { bg:'', icon:`<div style="font-size:clamp(5rem,12vw,9rem);animation:th-bounce .6s ease-in-out infinite">👏</div>`, title:`<div style="font-size:clamp(2rem,5vw,3.5rem);font-weight:800;color:#fff;animation:th-bounce .7s .1s ease-in-out infinite">Thank You!</div>`, ptcl:Array.from({length:8},(_,i)=>`<div style="position:absolute;left:50%;top:50%;font-size:2.5rem;--a:${i*45}deg;animation:th-radiate 1.2s ${(i*.08).toFixed(2)}s ease-out infinite">👏</div>`).join('') },
+    { bg:'', icon:`<div style="font-size:clamp(5rem,12vw,9rem);animation:th-bounce .75s ease-in-out infinite">🎉</div>`, title:`<div style="font-size:clamp(2rem,5vw,3.5rem);font-weight:800;color:#fff">Thank You!</div>`, ptcl:Array.from({length:28},(_,i)=>{const c=['#f55','#f90','#fd2','#4d4','#48f','#b4f','#f5c','#fff'][i%8];return`<div style="position:absolute;top:-4%;left:${r(1,99)}%;width:${r(8,15)}px;height:${r(8,15)}px;background:${c};border-radius:${i%3?'50%':'3px'};animation:th-fall ${r(1.5,2.8)}s ${r(0,1.8)}s linear infinite"></div>`}).join('') },
+    { bg:'', icon:`<div style="font-size:clamp(5rem,12vw,9rem);animation:th-spin 3s linear infinite">⭐</div>`, title:`<div style="font-size:clamp(2rem,5vw,3.5rem);font-weight:800;background:linear-gradient(90deg,#ffd700,#fff,#ffd700);background-size:200%;-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;animation:th-shimmer 2s linear infinite">Thank You!</div>`, ptcl:Array.from({length:12},(_,i)=>{const e=['⭐','🌟','✨','💫'][i%4];return`<div style="position:absolute;left:50%;top:50%;font-size:2rem;--a:${i*30}deg;animation:th-radiate 1.6s ${(i*.1).toFixed(1)}s ease-out infinite">${e}</div>`}).join('') },
+    { bg:`<div style="position:absolute;inset:0;background:radial-gradient(circle at 50% 100%,rgba(255,70,0,.4),transparent 65%);pointer-events:none"></div>`, icon:`<div style="font-size:clamp(5rem,12vw,9rem);animation:th-flame-big .4s ease-in-out infinite alternate">🔥</div>`, title:`<div style="font-size:clamp(2rem,5vw,3.5rem);font-weight:800;color:#ff6600;animation:th-glow-fire .9s ease-in-out infinite alternate">Thank You!</div>`, ptcl:Array.from({length:12},(_,i)=>`<div style="position:absolute;bottom:0;left:${(i*8.5+parseFloat(r(0,4))).toFixed(1)}%;font-size:${r(2,4)}rem;animation:th-flame ${r(.4,.8)}s ${r(0,.4)}s ease-in-out infinite alternate">🔥</div>`).join('') },
+    { bg:'', icon:`<div style="font-size:clamp(5rem,12vw,9rem);animation:th-bounce .8s ease-in-out infinite">🎵</div>`, title:`<div style="font-size:clamp(2rem,5vw,3.5rem);font-weight:800;color:#a78bfa">Thank You!</div>`, ptcl:Array.from({length:14},(_,i)=>{const e=['🎵','🎶','🎸','🎹','🎺','🎻','🎼'][i%7];return`<div style="position:absolute;left:${r(3,97)}%;bottom:${r(5,30)}%;font-size:${r(1.5,3)}rem;animation:th-float-up ${r(1.5,3)}s ${r(0,2)}s ease-out infinite">${e}</div>`}).join('') },
+    { bg:'', icon:`<div style="font-size:clamp(5rem,12vw,9rem);animation:th-bounce .6s ease-in-out infinite">🥳</div>`, title:`<div style="font-size:clamp(2rem,5vw,3.5rem);font-weight:800;color:#fff">Thank You!</div>`, ptcl:Array.from({length:12},(_,i)=>`<div style="position:absolute;bottom:-8%;left:${r(3,97)}%;font-size:${r(2.5,5)}rem;animation:th-float-up ${r(2,4)}s ${r(0,2.5)}s ease-in infinite">🎈</div>`).join('') },
+    { bg:`<div style="position:absolute;inset:0;background:radial-gradient(circle at center,rgba(255,215,0,.13),transparent 70%);pointer-events:none"></div>`, icon:`<div style="font-size:clamp(5rem,12vw,9rem);animation:th-bounce 1.1s ease-in-out infinite;position:relative;z-index:2">👑</div>`, title:`<div style="font-size:clamp(2rem,5vw,3.5rem);font-weight:800;background:linear-gradient(90deg,#ffd700,#fff8dc,#ffd700);background-size:200%;-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;animation:th-shimmer 2s linear infinite">Thank You!</div>`, ptcl:Array.from({length:10},(_,i)=>`<div style="position:absolute;left:50%;top:45%;font-size:1.8rem;transform:translate(-50%,-50%) rotate(${i*36}deg) translateY(-${r(80,140)}px);animation:th-pulse ${r(.8,1.2)}s ${(i*.1).toFixed(1)}s ease-in-out infinite">✨</div>`).join('') },
+    { bg:`<div style="position:absolute;inset:0;background:radial-gradient(circle at center,rgba(190,0,80,.25),transparent);pointer-events:none"></div>`, icon:`<div style="font-size:clamp(5rem,12vw,9rem);animation:th-pulse .6s ease-in-out infinite">❤️</div>`, title:`<div style="font-size:clamp(2rem,5vw,3.5rem);font-weight:800;color:#ff6899">Thank You!</div>`, ptcl:Array.from({length:16},(_,i)=>{const e=['❤️','💜','💙','💚','💛','🧡','🩷','🤍'][i%8];return`<div style="position:absolute;top:-8%;left:${r(1,99)}%;font-size:${r(1.5,3)}rem;animation:th-fall ${r(1.8,3.5)}s ${r(0,2.5)}s ease-in infinite">${e}</div>`}).join('') },
+    { bg:`<div style="position:absolute;inset:0;background:radial-gradient(circle at center,rgba(0,20,80,.7),#000 80%);pointer-events:none"></div>`, icon:`<div style="font-size:clamp(5rem,12vw,9rem);animation:th-rocket 1.5s ease-in-out infinite">🚀</div>`, title:`<div style="font-size:clamp(2rem,5vw,3.5rem);font-weight:800;color:#88ccff;text-shadow:0 0 20px #4488ff">Thank You!</div>`, ptcl:Array.from({length:35},(_,i)=>`<div style="position:absolute;left:${r(0,100)}%;top:${r(0,100)}%;width:${r(2,4)}px;height:${r(2,4)}px;background:#fff;border-radius:50%;animation:th-twinkle ${r(1,3)}s ${r(0,2)}s ease-in-out infinite"></div>`).join('') },
+    { bg:`<div style="position:absolute;inset:0;background:radial-gradient(circle at center,rgba(50,0,100,.85),#000 80%);pointer-events:none"></div>`, icon:`<div style="font-size:clamp(5rem,12vw,9rem);animation:th-spin 4s linear infinite">💿</div>`, title:`<div style="font-size:clamp(2rem,5vw,3.5rem);font-weight:800;animation:th-rainbow 1.5s linear infinite">Thank You!</div>`, ptcl:Array.from({length:6},(_,i)=>{const c=['#f04','#f80','#fd0','#0f8','#08f','#c0f'][i];return`<div style="position:absolute;left:50%;top:50%;width:3px;height:48%;transform-origin:0 0;transform:rotate(${i*60}deg);background:linear-gradient(${c},transparent);animation:th-spin 4s ${(i*.6).toFixed(1)}s linear infinite;opacity:.55"></div>`}).join('') },
+  ];
+  const cfg = C[v % 10];
+  return `${cfg.bg}<div style="position:absolute;inset:0;overflow:hidden;pointer-events:none">${cfg.ptcl}</div><div style="position:relative;z-index:2;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;padding:16px;width:100%">${cfg.icon}${cfg.title}${nm}</div>`;
+}
+
+function _setupScrollTicker(el, text, singleAnimSec) {
+  const gap = '     ';
+  el.textContent = text + gap;
+  const singleW    = el.scrollWidth;
+  const containerW = el.parentElement ? el.parentElement.offsetWidth : window.innerWidth;
+  const effectiveW = containerW > 0 ? containerW : window.innerWidth;
+  const halfReps   = singleW > 0
+    ? Math.min(20, Math.max(1, Math.ceil(effectiveW / singleW) + 1))
+    : 4;
+  const half       = Array(halfReps).fill(text).join(gap);
+  el.textContent   = half + gap + half;
+  el.style.animationDuration = (singleAnimSec * halfReps) + 's';
+}
 
 let cdgPlayer   = null;
 let _posOffset  = 0;
@@ -214,8 +292,9 @@ api.onBroadcast((msg) => {
       canvas.parentElement.style.display = 'none';
       videoEl.style.display = 'none';
       document.getElementById('pop-tr-bg').style.display = 'none';
-      document.getElementById('pop-tr-singer').textContent = msg.prevSinger || '';
-      document.getElementById('pop-tr-thanks').style.display = 'flex';
+      const thanks = document.getElementById('pop-tr-thanks');
+      thanks.innerHTML = _getThanksHTML(msg.prevSinger || '', msg.thanksVariant || 0);
+      thanks.style.display = 'flex';
       _playing = false;
       break;
     }
@@ -234,12 +313,6 @@ api.onBroadcast((msg) => {
           ptv.style.display = 'block';
         }).catch(() => {});
       }
-      // Banner
-      const pttk = document.getElementById('pop-tr-ticker');
-      pttk.textContent = msg.bannerText || '';
-      pttk.style.animationDuration = (msg.animSec || 18) + 's';
-      // Next singer name
-      document.getElementById('pop-tr-next-singer').textContent = msg.nextSinger || '';
       // Countdown
       if (_cntTimer) { clearInterval(_cntTimer); _cntTimer = null; }
       const cntEl = document.getElementById('pop-tr-countdown-num');
@@ -254,7 +327,16 @@ api.onBroadcast((msg) => {
       } else {
         cntEl.textContent = '';
       }
+      // Show container first so ticker can measure its width
       document.getElementById('pop-tr-bg').style.display = 'flex';
+      // Banner (after container is visible so scrollWidth is correct)
+      const pttk = document.getElementById('pop-tr-ticker');
+      const bsc  = msg.bannerScale || 1;
+      pttk.style.fontSize = (2.8 * bsc).toFixed(2) + 'rem';
+      pttk.parentElement.style.padding = Math.round(28 * bsc) + 'px 0';
+      _setupScrollTicker(pttk, msg.bannerText || '', msg.animSec || 18);
+      // Next-up list
+      _renderNextUp(msg.nextUpList || [], document.getElementById('pop-tr-next-up'), msg.nextUpScale || 1);
       _playing = false;
       break;
     }
@@ -263,7 +345,22 @@ api.onBroadcast((msg) => {
       if (_cntTimer) { clearInterval(_cntTimer); _cntTimer = null; }
       document.getElementById('pop-tr-thanks').style.display = 'none';
       document.getElementById('pop-tr-bg').style.display = 'none';
+      const nuEl = document.getElementById('pop-tr-next-up');
+      if (nuEl) nuEl.style.display = 'none';
       idleScreen.style.display = 'flex';
+      break;
+    }
+
+    case 'playback_banner': {
+      const pbWrap   = document.getElementById('playback-banner-wrap');
+      const pbTicker = document.getElementById('playback-banner-ticker');
+      if (!pbWrap || !pbTicker) break;
+      if (!msg.visible) { pbWrap.style.display = 'none'; break; }
+      const bsc = msg.bannerScale || 1;
+      pbTicker.style.fontSize   = (2.0 * bsc).toFixed(2) + 'rem';
+      pbWrap.style.padding      = Math.round(14 * bsc) + 'px 0';
+      pbWrap.style.display      = 'block';
+      _setupScrollTicker(pbTicker, msg.text || '', msg.animSec || 18);
       break;
     }
 
@@ -289,6 +386,28 @@ api.onBroadcast((msg) => {
       infoBar.style.display = 'none';
       idleScreen.style.display = 'flex';
       _playing = false;
+      break;
+    }
+
+    case 'venue_path': {
+      const idleBg   = document.getElementById('idle-bg');
+      const idleIcon = document.getElementById('idle-icon');
+      const idleText = document.getElementById('idle-text');
+      if (msg.path) {
+        api.readFile(msg.path).then(bytes => {
+          if (idleBg._blobUrl) URL.revokeObjectURL(idleBg._blobUrl);
+          idleBg._blobUrl = URL.createObjectURL(new Blob([bytes]));
+          idleBg.src = idleBg._blobUrl;
+          idleBg.style.display = 'block';
+          if (idleIcon) idleIcon.style.display = 'none';
+          if (idleText) idleText.style.display = 'none';
+        }).catch(() => { idleBg.style.display = 'none'; });
+      } else {
+        idleBg.src = '';
+        idleBg.style.display = 'none';
+        if (idleIcon) idleIcon.style.display = '';
+        if (idleText) idleText.style.display = '';
+      }
       break;
     }
 
