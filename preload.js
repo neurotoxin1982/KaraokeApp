@@ -70,16 +70,10 @@ contextBridge.exposeInMainWorld('api', {
   // Dialogs
   openImageDialog: () => ipcRenderer.invoke('dialog:openImage'),
 
-  // Spotify OAuth
-  spotifyStatus:         ()            => ipcRenderer.invoke('spotify:status'),
-  spotifyConfigure:      (clientId)    => ipcRenderer.invoke('spotify:configure', clientId),
-  spotifyAuth:           ()            => ipcRenderer.invoke('spotify:auth'),
-  spotifyToken:          ()            => ipcRenderer.invoke('spotify:token'),
-  spotifyDisconnect:     ()            => ipcRenderer.invoke('spotify:disconnect'),
-  // Spotify Connect API (controls playback on any active Spotify device)
-  spotifyPlay:           (uri)         => ipcRenderer.invoke('spotify:connect-play', uri),
-  spotifyPause:          ()            => ipcRenderer.invoke('spotify:connect-pause'),
-  spotifyCurrentTrack:   ()            => ipcRenderer.invoke('spotify:connect-current'),
+  // Spotify native app — mute/unmute via Windows audio session API + SMTC track query
+  spotifyMute:       () => ipcRenderer.invoke('spotify:mute'),
+  spotifyUnmute:     () => ipcRenderer.invoke('spotify:unmute'),
+  spotifyNowPlaying: () => ipcRenderer.invoke('spotify:now-playing'),
 
   // YouTube
   youtubeEnsure:  ()        => ipcRenderer.invoke('youtube:ensure'),

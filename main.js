@@ -75,11 +75,6 @@ app.whenReady().then(async () => {
   networkPlayer = require('./src/network-player');
   requestServer = require('./src/request-server');
   await db.initialize();
-  // Restore Spotify auth state from DB
-  const spotify = require('./src/spotify');
-  const spClientId = db.getSetting('spotify_client_id');
-  const spRefresh  = db.getSetting('spotify_refresh_token');
-  if (spClientId) spotify.configure(spClientId, spRefresh || null);
   const QueueManager = require('./src/QueueManager');
   queueManager = new QueueManager(db);
 
@@ -125,21 +120,6 @@ function createMainWindow() {
   });
   mainWindow.loadFile('renderer/index.html');
   mainWindow.on('closed', () => { mainWindow = null; app.quit(); });
-
-  // Allow Spotify embed login popups to open in a real browser window
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.includes('spotify.com') || url.includes('accounts.spotify.com')) {
-      return {
-        action: 'allow',
-        overrideBrowserWindowOptions: {
-          width: 500, height: 700,
-          title: 'Spotify Login',
-          webPreferences: { nodeIntegration: false, contextIsolation: true },
-        },
-      };
-    }
-    return { action: 'deny' };
-  });
 }
 
 function openPlayerWindow() {
@@ -323,191 +303,11 @@ function setupIPC() {
     } catch { return []; }
   });
 
-  // ── Spotify ────────────────────────────────────────────────────────────────
-
-  // Opens a login window. After login navigates to open.spotify.com and fetches
-  // the access token directly from within that page's browser context
-  // (same-origin fetch → no 403, all cookies included automatically).
-  ipcMain.handle('spotify:openLogin', () => {
-    return new Promise((resolve) => {
-      const win = new BrowserWindow({
-        width: 500, height: 720,
-        title: 'Spotify – Einloggen',
-        webPreferences: { nodeIntegration: false, contextIsolation: true },
-      });
-      win.loadURL('https://accounts.spotify.com/en/login');
-      win.setMenuBarVisibility(false);
-
-      let tokenFetched = false;
-      const tryFetchToken = async (url) => {
-        if (tokenFetched) return;
-        if (!url.startsWith('https://open.spotify.com/')) return;
-        tokenFetched = true;
-        console.log('[Spotify] on open.spotify.com, fetching token from page context…');
-
-        try {
-          // Run a same-origin fetch inside the page — Chromium adds all the
-          // right headers/cookies automatically, so Spotify won't 403 it.
-          const result = await win.webContents.executeJavaScript(`
-            fetch('/get_access_token?reason=transport&productType=web_player')
-              .then(r => r.json())
-              .then(d => JSON.stringify(d))
-              .catch(e => JSON.stringify({ error: e.message }))
-          `);
-          const data = JSON.parse(result);
-          console.log('[Spotify] token result:', JSON.stringify(data).slice(0, 120));
-          if (data.accessToken && !data.isAnonymous) {
-            resolve({ token: data.accessToken });
-          } else {
-            resolve({ error: 'not_logged_in' });
-          }
-        } catch (e) {
-          console.error('[Spotify] executeJavaScript error:', e);
-          resolve({ error: e.message });
-        }
-        if (!win.isDestroyed()) win.close();
-      };
-
-      win.webContents.on('did-navigate', (_, url) => {
-        console.log('[Spotify login] navigated to:', url);
-        // After login, force navigation to open.spotify.com (ensures sp_dc is set)
-        if (!url.includes('accounts.spotify.com') && !url.startsWith('https://open.spotify.com/')) {
-          win.loadURL('https://open.spotify.com/');
-        } else {
-          tryFetchToken(url);
-        }
-      });
-
-      // User closed window manually without completing login
-      win.on('closed', () => { if (!tokenFetched) resolve({ error: 'window_closed' }); });
-    });
-  });
-
-  // ── Spotify Connect API helpers ────────────────────────────────────────────
-  // Makes an authenticated call to api.spotify.com using the stored OAuth token.
-  // Throws with err.code === 'TOKEN_REFRESH_FAILED' when the refresh token is bad.
-  async function _spAPI(path, method = 'GET', body = null) {
-    const spotify = require('./src/spotify');
-    const https   = require('https');
-    let token;
-    try {
-      token = await spotify.getToken();
-    } catch(e) {
-      if (e.code === 'TOKEN_REFRESH_FAILED') {
-        // Wipe from DB so the bad token isn't loaded on next restart
-        db.setSetting('spotify_refresh_token', '');
-      }
-      throw e;
-    }
-    return new Promise((resolve, reject) => {
-      const data = body ? Buffer.from(JSON.stringify(body)) : null;
-      const req  = https.request({
-        hostname: 'api.spotify.com',
-        path,
-        method,
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          ...(data ? { 'Content-Length': data.length } : {}),
-        },
-      }, (res) => {
-        let raw = '';
-        res.on('data', c => raw += c);
-        res.on('end', () => {
-          if (res.statusCode === 204) return resolve({ ok: true });
-          try { resolve({ status: res.statusCode, data: JSON.parse(raw) }); }
-          catch { resolve({ status: res.statusCode, data: raw }); }
-        });
-      });
-      req.on('error', reject);
-      if (data) req.write(data);
-      req.end();
-    });
-  }
-
-  ipcMain.handle('spotify:connect-play', async (_, playlistUri) => {
-    try {
-      const body = playlistUri ? { context_uri: playlistUri } : undefined;
-      let r = await _spAPI('/v1/me/player/play', 'PUT', body);
-
-      // 404 = no active device. Try to find one and transfer playback to it, then retry.
-      if (r.status === 404) {
-        const devRes = await _spAPI('/v1/me/player/devices', 'GET');
-        const devices = devRes?.data?.devices || [];
-        if (!devices.length) return { error: 'No Spotify device found — open Spotify on your phone or laptop first.' };
-        const device = devices.find(d => !d.is_restricted) || devices[0];
-        await _spAPI('/v1/me/player', 'PUT', { device_ids: [device.id], play: false });
-        await new Promise(res => setTimeout(res, 600)); // give Spotify a moment to transfer
-        r = await _spAPI('/v1/me/player/play', 'PUT', body);
-      }
-
-      if (r.status === 404) return { error: 'No active Spotify device — open Spotify on your phone or laptop.' };
-      if (r.status === 403) return { error: 'Spotify Premium required.' };
-      return { ok: true };
-    } catch(e) {
-      if (e.code === 'TOKEN_REFRESH_FAILED') return { error: e.message, needsReconnect: true };
-      return { error: e.message };
-    }
-  });
-
-  ipcMain.handle('spotify:connect-pause', async () => {
-    try { await _spAPI('/v1/me/player/pause', 'PUT'); return { ok: true }; }
-    catch(e) { return { error: e.message }; }
-  });
-
-  ipcMain.handle('spotify:connect-current', async () => {
-    try {
-      const r = await _spAPI('/v1/me/player/currently-playing');
-      if (!r || r.status === 204 || !r.data) return { playing: false };
-      const item = r.data.item;
-      return {
-        playing: true,
-        isPlaying: r.data.is_playing,
-        trackName: item?.name || '',
-        artist: item?.artists?.map(a => a.name).join(', ') || '',
-        albumArt: item?.album?.images?.[2]?.url || item?.album?.images?.[0]?.url || null,
-      };
-    } catch(e) {
-      if (e.code === 'TOKEN_REFRESH_FAILED') return { error: e.message, needsReconnect: true };
-      return { error: e.message };
-    }
-  });
-
-  ipcMain.handle('spotify:status', () => {
-    const spotify = require('./src/spotify');
-    return { authenticated: spotify.isAuthenticated() };
-  });
-
-  ipcMain.handle('spotify:configure', (_, clientId) => {
-    const spotify = require('./src/spotify');
-    const refresh = db.getSetting('spotify_refresh_token') || null;
-    spotify.configure(clientId, refresh);
-    return { ok: true };
-  });
-
-  ipcMain.handle('spotify:auth', async () => {
-    try {
-      const spotify = require('./src/spotify');
-      const tokens  = await spotify.authorize();
-      db.setSetting('spotify_refresh_token', tokens.refresh);
-      return { ok: true, access: tokens.access };
-    } catch(e) { return { error: e.message }; }
-  });
-
-  ipcMain.handle('spotify:token', async () => {
-    try {
-      const spotify = require('./src/spotify');
-      const token   = await spotify.getToken();
-      return { token };
-    } catch(e) { return { error: e.message }; }
-  });
-
-  ipcMain.handle('spotify:disconnect', () => {
-    const spotify = require('./src/spotify');
-    spotify.disconnect();
-    db.setSetting('spotify_refresh_token', '');
-    return { ok: true };
-  });
+  // ── Spotify native mute/unmute + SMTC track query ────────────────────────────
+  const spotifyVol = require('./src/spotify-volume');
+  ipcMain.handle('spotify:mute',       () => spotifyVol.mute());
+  ipcMain.handle('spotify:unmute',     () => spotifyVol.unmute());
+  ipcMain.handle('spotify:now-playing',() => spotifyVol.getCurrentTrack());
 
   // Broadcast to all windows (for popout sync) + relay to network clients
   ipcMain.on('broadcast', (event, msg) => {

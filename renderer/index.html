@@ -191,34 +191,36 @@
     </div>
 
     <!-- ── Background Music mini-player ─────────────────────────────── -->
-    <div id="bgmusic-player" style="display:none;border-top:1px solid #1f2937;background:#0d1117;flex-shrink:0">
-      <!-- Local file controls -->
-      <div id="bgmusic-local-row" style="display:flex;align-items:center;gap:8px;padding:7px 12px">
-        <i class="fa-solid fa-music" id="bgmusic-icon" style="color:#6b7280;font-size:.8rem;flex-shrink:0"></i>
-        <div style="flex:1;min-width:0">
-          <div id="bgmusic-track" style="font-size:.72rem;color:#9ca3af;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%">—</div>
+    <div id="bgmusic-player" style="display:none;border-top:1px solid #1f2937;background:#0d1117;flex-shrink:0;height:64px">
+      <!-- Row 1: source icon + track + artist (always visible, fixed height) -->
+      <div style="display:flex;align-items:center;gap:8px;padding:5px 14px 0;height:28px">
+        <div style="flex-shrink:0;width:16px;text-align:center">
+          <i id="bgmusic-icon" class="fa-solid fa-music" style="color:#6b7280;font-size:.8rem"></i>
         </div>
-        <button id="bgmusic-playpause" class="btn btn-gray btn-icon" style="width:26px;height:26px;flex-shrink:0" onclick="_bgToggle()" title="Play/Pause">
-          <i class="fa-solid fa-play" id="bgmusic-play-icon" style="font-size:.75rem"></i>
-        </button>
-        <button class="btn btn-gray btn-icon" style="width:26px;height:26px;flex-shrink:0" onclick="_bgSkip()" title="Skip">
-          <i class="fa-solid fa-forward-step" style="font-size:.75rem"></i>
-        </button>
-        <i class="fa-solid fa-volume-low" style="color:#4b5563;font-size:.72rem;flex-shrink:0"></i>
-        <input type="range" id="bgmusic-vol-slider" min="0" max="1" step="0.02" value="0.5"
-               oninput="_bgSetVol(this.value)" style="width:64px;flex-shrink:0">
-        <i class="fa-solid fa-volume-high" style="color:#4b5563;font-size:.72rem;flex-shrink:0"></i>
+        <div style="flex:1;min-width:0;overflow:hidden;display:flex;align-items:baseline;gap:5px">
+          <span id="bgmusic-track" style="font-size:.72rem;color:#d1d5db;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:60%">—</span>
+          <span id="bgmusic-artist" style="font-size:.65rem;color:#6b7280;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1"></span>
+        </div>
       </div>
-      <!-- Spotify Connect player (shown instead of local controls when source=spotify) -->
-      <div id="bgmusic-spotify-row" style="display:none;align-items:center;gap:8px;padding:7px 12px">
-        <img id="sp-album-art" src="" style="width:32px;height:32px;border-radius:4px;object-fit:cover;flex-shrink:0;display:none">
-        <i id="sp-idle-icon" class="fa-brands fa-spotify" style="color:#1db954;font-size:1.1rem;flex-shrink:0"></i>
-        <div style="flex:1;min-width:0">
-          <div id="sp-track-name" style="font-size:.72rem;color:#d1d5db;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Bereit</div>
-          <div id="sp-track-artist" style="font-size:.65rem;color:#6b7280;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Spotify Connect</div>
+      <!-- Row 2: transport controls (local) or Spotify label — same height always -->
+      <div id="bgmusic-local-controls" style="display:flex;align-items:center;justify-content:center;gap:10px;height:36px;position:relative">
+        <!-- Volume — right-pinned -->
+        <div style="position:absolute;right:14px;display:flex;align-items:center;gap:5px">
+          <i class="fa-solid fa-volume-low" style="color:#4b5563;font-size:.65rem;flex-shrink:0"></i>
+          <input type="range" id="bgmusic-vol-slider" min="0" max="1" step="0.02" value="0.5"
+                 oninput="_bgSetVol(this.value)" style="width:60px;flex-shrink:0">
+          <i class="fa-solid fa-volume-high" style="color:#4b5563;font-size:.65rem;flex-shrink:0"></i>
         </div>
-        <button id="sp-playpause-btn" class="btn btn-gray btn-icon" style="width:26px;height:26px;flex-shrink:0" onclick="_spToggle()" title="Play/Pause">
-          <i class="fa-solid fa-play" id="sp-play-icon" style="font-size:.75rem"></i>
+        <!-- Prev / Play / Next -->
+        <button class="btn btn-gray btn-icon" style="width:26px;height:26px" onclick="_bgSkipPrev()" title="Previous">
+          <i class="fa-solid fa-backward-step" style="font-size:.7rem"></i>
+        </button>
+        <button id="bgmusic-playpause" onclick="_bgToggle()" title="Play/Pause"
+                style="width:34px;height:34px;border-radius:50%;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;background:radial-gradient(circle at 38% 32%,#93c5fd,#2563eb);box-shadow:0 0 0 2px #1e3a5f,0 2px 8px rgba(37,99,235,0.55)">
+          <i id="bgmusic-play-icon" class="fa-solid fa-play" style="font-size:.75rem;color:#fff;margin-left:2px"></i>
+        </button>
+        <button class="btn btn-gray btn-icon" style="width:26px;height:26px" onclick="_bgSkip()" title="Next">
+          <i class="fa-solid fa-forward-step" style="font-size:.7rem"></i>
         </button>
       </div>
     </div>
@@ -281,103 +283,128 @@
 
 <!-- ── Settings Modal ────────────────────────────────────────────────── -->
 <div id="settings-modal" class="modal-overlay hidden">
-  <div class="modal" style="max-width:600px;max-height:85vh;overflow-y:auto">
-    <div class="modal-header">
+  <div class="modal" style="max-width:600px;max-height:85vh;display:flex;flex-direction:column;overflow:hidden">
+
+    <!-- Header -->
+    <div class="modal-header" style="flex-shrink:0">
       <h3 style="font-size:1.1rem;font-weight:600">Settings</h3>
       <button class="btn btn-gray btn-sm" onclick="closeSettings()"><i class="fa-solid fa-xmark"></i></button>
     </div>
-    <div class="modal-body" style="display:flex;flex-direction:column;gap:20px">
-      <!-- Library scan -->
-      <div class="card">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-          <h4 style="font-size:.95rem;font-weight:600"><i class="fa-solid fa-folder-open" style="color:#a78bfa;margin-right:6px"></i>Local Library</h4>
-          <button class="btn btn-gray btn-sm" id="add-lib-btn" onclick="addLibraryRow()"><i class="fa-solid fa-plus"></i> Add Library</button>
+
+    <!-- Tab bar -->
+    <div style="display:flex;background:#111827;border-bottom:1px solid #374151;flex-shrink:0">
+      <button id="stab-library" onclick="switchSettingsTab('library')"
+        style="background:none;border:none;border-bottom:2px solid #7c3aed;color:#fff;padding:9px 18px;cursor:pointer;font-size:.82rem;white-space:nowrap">
+        <i class="fa-solid fa-folder-open" style="margin-right:5px"></i>Library
+      </button>
+      <button id="stab-display" onclick="switchSettingsTab('display')"
+        style="background:none;border:none;border-bottom:2px solid transparent;color:#9ca3af;padding:9px 18px;cursor:pointer;font-size:.82rem;white-space:nowrap">
+        <i class="fa-solid fa-display" style="margin-right:5px"></i>Display
+      </button>
+      <button id="stab-music" onclick="switchSettingsTab('music')"
+        style="background:none;border:none;border-bottom:2px solid transparent;color:#9ca3af;padding:9px 18px;cursor:pointer;font-size:.82rem;white-space:nowrap">
+        <i class="fa-solid fa-music" style="margin-right:5px"></i>Music
+      </button>
+      <button id="stab-queue" onclick="switchSettingsTab('queue')"
+        style="background:none;border:none;border-bottom:2px solid transparent;color:#9ca3af;padding:9px 18px;cursor:pointer;font-size:.82rem;white-space:nowrap">
+        <i class="fa-solid fa-list-ol" style="margin-right:5px"></i>Queue
+      </button>
+    </div>
+
+    <!-- Tab content (scrollable) -->
+    <div style="overflow-y:auto;flex:1;padding:16px;display:flex;flex-direction:column;gap:16px">
+
+      <!-- ── Library tab ──────────────────────────────────────────────── -->
+      <div id="stab-library-content">
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+            <h4 style="font-size:.95rem;font-weight:600"><i class="fa-solid fa-folder-open" style="color:#a78bfa;margin-right:6px"></i>Local Library</h4>
+            <button class="btn btn-gray btn-sm" id="add-lib-btn" onclick="addLibraryRow()"><i class="fa-solid fa-plus"></i> Add Library</button>
+          </div>
+          <div id="library-rows"></div>
         </div>
-        <div id="library-rows"></div>
+        <div class="card" id="top-songs-card" style="display:none">
+          <h4 style="font-size:.95rem;font-weight:600;margin-bottom:10px"><i class="fa-solid fa-trophy" style="color:#facc15;margin-right:6px"></i>Most Played</h4>
+          <div id="top-songs"></div>
+        </div>
       </div>
-      <!-- Between songs -->
-      <div class="card">
-        <h4 style="font-size:.95rem;font-weight:600;margin-bottom:14px"><i class="fa-solid fa-clock" style="color:#a78bfa;margin-right:6px"></i>Between Songs</h4>
 
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
-          <input type="checkbox" id="set-thanks" style="width:16px;height:16px;accent-color:#7c3aed;cursor:pointer">
-          <label for="set-thanks" style="font-size:.85rem;color:#d1d5db;cursor:pointer">Show "Thank You [Singer]" screen</label>
-          <input type="number" id="set-thanks-time" min="1" max="60" value="5"
-            style="width:60px;text-align:center;padding:5px;margin-left:auto">
-          <span style="font-size:.8rem;color:#6b7280">sec</span>
-        </div>
+      <!-- ── Display tab ──────────────────────────────────────────────── -->
+      <div id="stab-display-content" style="display:none">
+        <div class="card" style="display:flex;flex-direction:column;gap:12px">
+          <h4 style="font-size:.95rem;font-weight:600"><i class="fa-solid fa-clock" style="color:#a78bfa;margin-right:6px"></i>Between Songs</h4>
 
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
-          <label style="font-size:.85rem;color:#d1d5db;white-space:nowrap">Background screen duration</label>
-          <input type="number" id="set-bg-time" min="0" max="120" value="10"
-            style="width:60px;text-align:center;padding:5px;margin-left:auto">
-          <span style="font-size:.8rem;color:#6b7280">sec</span>
-        </div>
-
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
-          <label style="font-size:.85rem;color:#d1d5db;white-space:nowrap">Banner speed</label>
-          <input type="range" id="set-banner-speed" min="1" max="10" step="1" value="4"
-            style="flex:1;margin-left:auto" oninput="document.getElementById('banner-speed-val').textContent=this.value">
-          <span id="banner-speed-val" style="font-size:.8rem;color:#a78bfa;min-width:16px;text-align:center">4</span>
-          <span style="font-size:.8rem;color:#6b7280">/ 10</span>
-        </div>
-
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
-          <label style="font-size:.85rem;color:#d1d5db;white-space:nowrap">Banner size</label>
-          <input type="range" id="set-banner-size" min="1" max="5" step="1" value="3"
-            style="flex:1;margin-left:auto" oninput="document.getElementById('banner-size-val').textContent=['XS','S','M','L','XL'][this.value-1]">
-          <span id="banner-size-val" style="font-size:.8rem;color:#a78bfa;min-width:22px;text-align:center">M</span>
-        </div>
-
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
-          <input type="checkbox" id="set-show-playback-banner" style="width:16px;height:16px;accent-color:#7c3aed;cursor:pointer">
-          <label for="set-show-playback-banner" style="font-size:.85rem;color:#d1d5db;cursor:pointer">Show banner while songs are playing</label>
-        </div>
-
-        <div style="margin-bottom:12px">
-          <label class="field-label">Venue image (displayed between songs)</label>
-          <div style="display:flex;gap:8px;margin-top:4px">
-            <input id="set-venue-path" type="text" readonly placeholder="No image selected" style="flex:1;font-size:.8rem">
-            <button class="btn btn-gray btn-sm" onclick="browseVenueImage()"><i class="fa-solid fa-folder"></i></button>
-            <button class="btn btn-red btn-sm" onclick="clearVenueImage()"><i class="fa-solid fa-xmark"></i></button>
+          <div style="display:flex;align-items:center;gap:10px">
+            <input type="checkbox" id="set-thanks" style="width:16px;height:16px;accent-color:#7c3aed;cursor:pointer"
+              onchange="autoSave('show_thanks', this.checked.toString())">
+            <label for="set-thanks" style="font-size:.85rem;color:#d1d5db;cursor:pointer;flex:1">Show "Thank You [Singer]" screen</label>
+            <input type="number" id="set-thanks-time" min="1" max="60" value="5"
+              style="width:60px;text-align:center;padding:5px"
+              onchange="autoSave('thanks_time', String(parseInt(this.value)||5))">
+            <span style="font-size:.8rem;color:#6b7280">sec</span>
           </div>
-          <img id="set-venue-preview" style="display:none;margin-top:8px;max-height:80px;border-radius:6px;object-fit:cover">
-        </div>
 
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
-          <input type="checkbox" id="set-show-next-up" style="width:16px;height:16px;accent-color:#7c3aed;cursor:pointer">
-          <label for="set-show-next-up" style="font-size:.85rem;color:#d1d5db;cursor:pointer">Show "Next Up" singer list</label>
-          <label style="font-size:.8rem;color:#6b7280;margin-left:auto;white-space:nowrap">Size</label>
-          <input type="range" id="set-next-up-size" min="1" max="5" step="1" value="3" style="width:72px"
-            oninput="document.getElementById('next-up-size-val').textContent=['XS','S','M','L','XL'][this.value-1]">
-          <span id="next-up-size-val" style="font-size:.8rem;color:#a78bfa;min-width:22px;text-align:center">M</span>
-        </div>
-
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
-          <label style="font-size:.85rem;color:#d1d5db;white-space:nowrap">Max songs per user (request)</label>
-          <input type="number" id="set-song-limit" min="1" max="20" value="3"
-            style="width:60px;text-align:center;padding:5px;margin-left:auto">
-          <span style="font-size:.8rem;color:#6b7280">songs</span>
-        </div>
-
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
-          <input type="checkbox" id="set-prevent-recent" style="width:16px;height:16px;accent-color:#7c3aed;cursor:pointer"
-            onchange="document.getElementById('set-recent-hours').disabled=!this.checked">
-          <label for="set-prevent-recent" style="font-size:.85rem;color:#d1d5db;cursor:pointer;flex:1">Block recently played songs</label>
-          <input type="number" id="set-recent-hours" min="1" max="12" value="2" disabled
-            style="width:55px;text-align:center;padding:5px">
-          <span style="font-size:.8rem;color:#6b7280">h</span>
-        </div>
-
-        <!-- Background Music -->
-        <div style="border-top:1px solid #374151;margin-top:4px;padding-top:14px;margin-bottom:14px">
-          <div style="font-size:.75rem;font-weight:600;color:#9ca3af;letter-spacing:.07em;text-transform:uppercase;margin-bottom:10px">
-            <i class="fa-solid fa-music" style="margin-right:5px;color:#a78bfa"></i>Background Music (between songs)
+          <div style="display:flex;align-items:center;gap:10px">
+            <label style="font-size:.85rem;color:#d1d5db;white-space:nowrap;flex:1">Background screen duration</label>
+            <input type="number" id="set-bg-time" min="0" max="120" value="10"
+              style="width:60px;text-align:center;padding:5px"
+              onchange="autoSave('bg_time', String(parseInt(this.value)||10))">
+            <span style="font-size:.8rem;color:#6b7280">sec</span>
           </div>
+
+          <div style="border-top:1px solid #374151;padding-top:12px">
+            <h4 style="font-size:.85rem;font-weight:600;color:#9ca3af;margin-bottom:10px">Venue Image</h4>
+            <div style="display:flex;gap:8px">
+              <input id="set-venue-path" type="text" readonly placeholder="No image selected" style="flex:1;font-size:.8rem">
+              <button class="btn btn-gray btn-sm" onclick="browseVenueImage()"><i class="fa-solid fa-folder"></i></button>
+              <button class="btn btn-red btn-sm" onclick="clearVenueImage()"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <img id="set-venue-preview" style="display:none;margin-top:8px;max-height:80px;border-radius:6px;object-fit:cover">
+          </div>
+
+          <div style="border-top:1px solid #374151;padding-top:12px">
+            <h4 style="font-size:.85rem;font-weight:600;color:#9ca3af;margin-bottom:10px">Banner</h4>
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+              <input type="checkbox" id="set-show-playback-banner" style="width:16px;height:16px;accent-color:#7c3aed;cursor:pointer"
+                onchange="autoSave('show_playback_banner', this.checked.toString())">
+              <label for="set-show-playback-banner" style="font-size:.85rem;color:#d1d5db;cursor:pointer">Show banner while songs are playing</label>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+              <label style="font-size:.85rem;color:#d1d5db;white-space:nowrap;width:80px">Speed</label>
+              <input type="range" id="set-banner-speed" min="1" max="10" step="1" value="4" style="flex:1"
+                oninput="document.getElementById('banner-speed-val').textContent=this.value;autoSave('banner_speed',this.value,300)">
+              <span id="banner-speed-val" style="font-size:.8rem;color:#a78bfa;min-width:20px;text-align:center">4</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px">
+              <label style="font-size:.85rem;color:#d1d5db;white-space:nowrap;width:80px">Size</label>
+              <input type="range" id="set-banner-size" min="1" max="5" step="1" value="3" style="flex:1"
+                oninput="document.getElementById('banner-size-val').textContent=['XS','S','M','L','XL'][this.value-1];autoSave('banner_size',this.value,300)">
+              <span id="banner-size-val" style="font-size:.8rem;color:#a78bfa;min-width:22px;text-align:center">M</span>
+            </div>
+          </div>
+
+          <div style="border-top:1px solid #374151;padding-top:12px">
+            <h4 style="font-size:.85rem;font-weight:600;color:#9ca3af;margin-bottom:10px">Next Up</h4>
+            <div style="display:flex;align-items:center;gap:10px">
+              <input type="checkbox" id="set-show-next-up" style="width:16px;height:16px;accent-color:#7c3aed;cursor:pointer"
+                onchange="autoSave('show_next_up', this.checked.toString())">
+              <label for="set-show-next-up" style="font-size:.85rem;color:#d1d5db;cursor:pointer;flex:1">Show "Next Up" singer list</label>
+              <input type="range" id="set-next-up-size" min="1" max="5" step="1" value="3" style="width:72px"
+                oninput="document.getElementById('next-up-size-val').textContent=['XS','S','M','L','XL'][this.value-1];autoSave('next_up_size',this.value,300)">
+              <span id="next-up-size-val" style="font-size:.8rem;color:#a78bfa;min-width:22px;text-align:center">M</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Music tab ────────────────────────────────────────────────── -->
+      <div id="stab-music-content" style="display:none">
+        <div class="card" style="display:flex;flex-direction:column;gap:12px">
+          <h4 style="font-size:.95rem;font-weight:600"><i class="fa-solid fa-music" style="color:#a78bfa;margin-right:6px"></i>Background Music</h4>
 
           <!-- Source selector -->
-          <div style="display:flex;gap:6px;margin-bottom:12px">
-            <button id="bgsrc-local-btn" class="btn btn-gray btn-sm" style="flex:1"
+          <div style="display:flex;gap:6px">
+            <button id="bgsrc-local-btn" class="btn btn-primary btn-sm" style="flex:1"
               onclick="setBgSource('local')">
               <i class="fa-solid fa-folder-open"></i> Local Folder
             </button>
@@ -390,99 +417,102 @@
 
           <!-- Local folder section -->
           <div id="bg-local-section">
-            <div style="margin-bottom:10px">
-              <label class="field-label">Music folder</label>
-              <div style="display:flex;gap:8px;margin-top:4px">
-                <input id="set-bgmusic-dir" type="text" readonly placeholder="No folder selected" style="flex:1;font-size:.8rem">
-                <button class="btn btn-gray btn-sm" onclick="browseBgMusicDir()"><i class="fa-solid fa-folder"></i></button>
-                <button class="btn btn-red btn-sm" onclick="clearBgMusicDir()"><i class="fa-solid fa-xmark"></i></button>
-              </div>
-              <div id="bgmusic-dir-info" style="font-size:.72rem;color:#6b7280;margin-top:4px;min-height:1em"></div>
+            <label class="field-label">Music folder</label>
+            <div style="display:flex;gap:8px;margin-top:4px">
+              <input id="set-bgmusic-dir" type="text" readonly placeholder="No folder selected" style="flex:1;font-size:.8rem">
+              <button class="btn btn-gray btn-sm" onclick="browseBgMusicDir()"><i class="fa-solid fa-folder"></i></button>
+              <button class="btn btn-red btn-sm" onclick="clearBgMusicDir()"><i class="fa-solid fa-xmark"></i></button>
             </div>
+            <div id="bgmusic-dir-info" style="font-size:.72rem;color:#6b7280;margin-top:4px;min-height:1em"></div>
           </div>
 
           <!-- Spotify section -->
-          <div id="bg-spotify-section" style="display:none">
-
-            <!-- Client ID -->
-            <label class="field-label">Client ID
-              <span style="font-weight:400;color:#6b7280;font-size:.7rem;margin-left:6px">
-                <a href="https://developer.spotify.com/dashboard" target="_blank" style="color:#6b7280;text-decoration:underline">developer.spotify.com</a>
-                → App erstellen → Redirect URI: <code style="background:#111827;padding:1px 4px;border-radius:3px;font-size:.68rem">http://127.0.0.1:8888/callback</code>
-              </span>
-            </label>
-            <input id="set-spotify-client-id" type="text" placeholder="Client ID hier eintragen…"
-              style="margin-top:4px;font-size:.8rem;font-family:monospace">
-
-            <!-- Auth status + buttons -->
-            <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
-              <span id="spotify-auth-status" style="font-size:.75rem;color:#6b7280;flex:1"></span>
-              <button id="spotify-connect-btn" class="btn btn-gray btn-sm" onclick="connectSpotify()">
-                <i class="fa-brands fa-spotify" style="color:#1db954"></i> Verbinden
-              </button>
-              <button id="spotify-disconnect-btn" class="btn btn-red btn-sm" style="display:none" onclick="disconnectSpotify()">Trennen</button>
-            </div>
-
-            <!-- Playlist URL -->
-            <label class="field-label" style="margin-top:10px">Playlist URL</label>
-            <input id="set-spotify-playlist" type="text"
-              placeholder="https://open.spotify.com/playlist/…"
-              style="margin-top:4px;font-size:.8rem">
-            <div style="font-size:.72rem;color:#6b7280;margin-top:4px">
-              Rechtsklick auf Playlist → Teilen → Link kopieren.
-            </div>
+          <div id="bg-spotify-section" style="display:none;font-size:.82rem;color:#9ca3af;line-height:1.5">
+            <i class="fa-brands fa-spotify" style="color:#1db954;margin-right:6px"></i>
+            Start Spotify and play music there. This app mutes Spotify automatically when a karaoke song starts and unmutes it afterwards. No API login required.
           </div>
 
-          <!-- Volume (shared) -->
-          <div style="display:flex;align-items:center;gap:10px;margin-top:10px">
-            <label style="font-size:.85rem;color:#d1d5db;white-space:nowrap">Volume</label>
-            <input type="range" id="set-bgmusic-volume" min="0" max="100" step="1" value="50"
-              style="flex:1;margin-left:auto" oninput="document.getElementById('bgmusic-vol-val').textContent=this.value+'%'">
-            <span id="bgmusic-vol-val" style="font-size:.8rem;color:#a78bfa;min-width:36px;text-align:right">50%</span>
+          <div style="border-top:1px solid #374151;padding-top:12px">
+            <h4 style="font-size:.85rem;font-weight:600;color:#9ca3af;margin-bottom:10px">Volume &amp; Timing</h4>
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+              <label style="font-size:.85rem;color:#d1d5db;white-space:nowrap;width:60px">Volume</label>
+              <input type="range" id="set-bgmusic-volume" min="0" max="100" step="1" value="50" style="flex:1"
+                oninput="onBgVolChange(this.value)">
+              <span id="bgmusic-vol-val" style="font-size:.8rem;color:#a78bfa;min-width:36px;text-align:right">50%</span>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+              <div>
+                <label class="field-label">Mute lead time</label>
+                <div style="display:flex;align-items:center;gap:6px;margin-top:4px">
+                  <input type="number" id="set-mute-lead" min="0" max="3" step="0.1" value="0"
+                    style="width:56px;text-align:center;padding:5px"
+                    onchange="autoSave('bgmusic_mute_lead', String(Math.max(0,parseFloat(this.value)||0)))">
+                  <span style="font-size:.8rem;color:#6b7280">sec before song</span>
+                </div>
+              </div>
+              <div>
+                <label class="field-label">Unmute delay</label>
+                <div style="display:flex;align-items:center;gap:6px;margin-top:4px">
+                  <input type="number" id="set-unmute-delay" min="0" max="3" step="0.1" value="0"
+                    style="width:56px;text-align:center;padding:5px"
+                    onchange="autoSave('bgmusic_unmute_delay', String(Math.max(0,parseFloat(this.value)||0)))">
+                  <span style="font-size:.8rem;color:#6b7280">sec after song</span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
-
-        <button class="btn btn-primary btn-sm" onclick="saveTransitionSettings()">
-          <i class="fa-solid fa-floppy-disk"></i> Save
-        </button>
       </div>
 
-      <!-- Queue Algorithm -->
-      <div class="card">
-        <h4 style="font-size:.95rem;font-weight:600;margin-bottom:14px"><i class="fa-solid fa-sliders" style="color:#a78bfa;margin-right:6px"></i>Queue Algorithm</h4>
-
-        <!-- Preset buttons -->
-        <div style="font-size:.75rem;color:#6b7280;margin-bottom:8px">Preset</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:14px" id="algo-presets">
-          <button class="btn btn-gray btn-sm algo-preset-btn" data-preset="fifo"
-            onclick="setAlgoPreset('fifo')"
-            title="Songs play in the exact order they were added. One singer may have multiple songs in a row.">
-            📋 First-In-First-Out
-          </button>
-          <button class="btn btn-gray btn-sm algo-preset-btn" data-preset="smart_queue"
-            onclick="setAlgoPreset('smart_queue')"
-            title="Fair turn order. New singers are pushed up so no one sings twice in a row while others are waiting.">
-            ✨ Smart Queue
-          </button>
+      <!-- ── Queue tab ────────────────────────────────────────────────── -->
+      <div id="stab-queue-content" style="display:none">
+        <div class="card" style="display:flex;flex-direction:column;gap:12px">
+          <h4 style="font-size:.95rem;font-weight:600"><i class="fa-solid fa-sliders" style="color:#a78bfa;margin-right:6px"></i>Queue Algorithm</h4>
+          <div style="font-size:.75rem;color:#6b7280">Preset</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px" id="algo-presets">
+            <button class="btn btn-gray btn-sm algo-preset-btn" data-preset="fifo"
+              onclick="setAlgoPreset('fifo')"
+              title="Songs play in the exact order they were added. One singer may have multiple songs in a row.">
+              📋 First-In-First-Out
+            </button>
+            <button class="btn btn-gray btn-sm algo-preset-btn" data-preset="smart_queue"
+              onclick="setAlgoPreset('smart_queue')"
+              title="Fair turn order. New singers are pushed up so no one sings twice in a row while others are waiting.">
+              ✨ Smart Queue
+            </button>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <label style="font-size:.85rem;color:#d1d5db;flex:1">Singer cooldown after performing</label>
+            <input type="number" id="algo-cooldown" min="0" max="3600" value="0"
+              style="width:65px;text-align:center;padding:5px"
+              onchange="api.algoSetCooldown(parseInt(this.value)||0)">
+            <span style="font-size:.8rem;color:#6b7280">sec</span>
+          </div>
+          <div style="font-size:.73rem;color:#4b5563">0 = disabled. Prevents a singer from jumping to the front immediately after their song.</div>
         </div>
 
-        <!-- Cooldown -->
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
-          <label style="font-size:.85rem;color:#d1d5db;flex:1">Singer cooldown after performing</label>
-          <input type="number" id="algo-cooldown" min="0" max="3600" value="0"
-            style="width:65px;text-align:center;padding:5px"
-            onchange="api.algoSetCooldown(parseInt(this.value)||0)">
-          <span style="font-size:.8rem;color:#6b7280">sec</span>
+        <div class="card" style="display:flex;flex-direction:column;gap:12px;margin-top:0">
+          <h4 style="font-size:.95rem;font-weight:600"><i class="fa-solid fa-user-shield" style="color:#a78bfa;margin-right:6px"></i>Singer Rules</h4>
+          <div style="display:flex;align-items:center;gap:10px">
+            <label style="font-size:.85rem;color:#d1d5db;white-space:nowrap;flex:1">Max songs per user (request server)</label>
+            <input type="number" id="set-song-limit" min="1" max="20" value="3"
+              style="width:60px;text-align:center;padding:5px"
+              onchange="autoSave('request_song_limit', String(parseInt(this.value)||3))">
+            <span style="font-size:.8rem;color:#6b7280">songs</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <input type="checkbox" id="set-prevent-recent" style="width:16px;height:16px;accent-color:#7c3aed;cursor:pointer"
+              onchange="document.getElementById('set-recent-hours').disabled=!this.checked;autoSave('prevent_recent',this.checked.toString())">
+            <label for="set-prevent-recent" style="font-size:.85rem;color:#d1d5db;cursor:pointer;flex:1">Block recently played songs</label>
+            <input type="number" id="set-recent-hours" min="1" max="12" value="2" disabled
+              style="width:55px;text-align:center;padding:5px"
+              onchange="autoSave('recent_hours', String(Math.min(12,Math.max(1,parseInt(this.value)||2))))">
+            <span style="font-size:.8rem;color:#6b7280">h</span>
+          </div>
         </div>
-        <div style="font-size:.73rem;color:#4b5563">0 = disabled. Prevents a singer from jumping to the front immediately after their song.</div>
       </div>
 
-      <!-- Top songs -->
-      <div class="card" id="top-songs-card" style="display:none">
-        <h4 style="font-size:.95rem;font-weight:600;margin-bottom:10px"><i class="fa-solid fa-trophy" style="color:#facc15;margin-right:6px"></i>Most Played</h4>
-        <div id="top-songs"></div>
-      </div>
-    </div>
+    </div><!-- end scrollable content -->
   </div>
 </div>
 
@@ -686,6 +716,56 @@ function _applyIdleBg(path) {
 let _gainNode = null, _audioSrc = null, _audioBuf = null;
 let _startAt = 0, _pausedPos = 0, _songDur = 0;
 let _videoEl = null, _videoBlobUrl = null, _ytStreamUrl = null;
+
+// ── Video audio-level detection ───────────────────────────────────────────────
+// Connects the shared video element to a Web Audio analyser once, then polls
+// the signal level so we mute background music only when audio is actually heard.
+let _vidAudioCtx  = null;
+let _vidAnalyser  = null;
+let _vidWatchRaf  = null;   // active requestAnimationFrame id
+let _vidWatchDone = false;  // prevents double-fire
+
+function _initVidAudio() {
+  if (_vidAnalyser) return;
+  const video = document.getElementById('video-player');
+  _vidAudioCtx = new AudioContext();
+  _vidAnalyser = _vidAudioCtx.createAnalyser();
+  _vidAnalyser.fftSize = 256;
+  _vidAudioCtx.createMediaElementSource(video).connect(_vidAnalyser);
+  _vidAnalyser.connect(_vidAudioCtx.destination);
+}
+
+function _cancelVidWatch() {
+  if (_vidWatchRaf) { cancelAnimationFrame(_vidWatchRaf); _vidWatchRaf = null; }
+  _vidWatchDone = false;
+}
+
+// Call when a video starts playing; fires _bgStop() the first frame with real audio.
+// delayAfterMs > 0 = wait that many ms after detection before muting (late mute).
+// Falls back after maxWaitMs in case of silent video or detection glitch.
+function _watchVideoAudioThenMute(delayAfterMs = 0, maxWaitMs = 15000) {
+  _cancelVidWatch();
+  _initVidAudio();
+  if (_vidAudioCtx.state === 'suspended') _vidAudioCtx.resume();
+
+  const buf      = new Float32Array(_vidAnalyser.fftSize);
+  const deadline = performance.now() + maxWaitMs;
+
+  const tick = () => {
+    if (_vidWatchDone) return;
+    _vidAnalyser.getFloatTimeDomainData(buf);
+    const peak = buf.reduce((m, v) => Math.max(m, Math.abs(v)), 0);
+    if (peak > 0.005 || performance.now() >= deadline) {
+      _vidWatchDone = true;
+      _vidWatchRaf  = null;
+      if (delayAfterMs > 0) setTimeout(() => _bgStop(), delayAfterMs);
+      else _bgStop();
+    } else {
+      _vidWatchRaf = requestAnimationFrame(tick);
+    }
+  };
+  _vidWatchRaf = requestAnimationFrame(tick);
+}
 let _cdgBuf  = null; // stored for popout broadcast
 let _pitch = 0, _tempo = 0, _sync = 0;
 
@@ -959,7 +1039,9 @@ async function checkAndPlay() {
 
 function showIdle() {
   stopCurrent(); currentSong = null;
-  _bgStop();
+  // Spotify should keep playing (unmuted) when idle; only local audio needs stopping
+  if (_bgSource === 'spotify') _bgStart();
+  else _bgStop();
   show('player-idle'); hide('cdg-canvas'); hide('video-player'); hide('song-overlay');
   document.getElementById('ctrl-title').textContent = '—';
   document.getElementById('ctrl-meta').textContent  = '';
@@ -975,6 +1057,7 @@ function setInfo(song) {
 }
 
 function stopCurrent() {
+  _cancelVidWatch();
   if (_audioSrc) { try { _audioSrc.onended=null; _audioSrc.stop(0); } catch(_){} _audioSrc=null; }
   if (_gainNode) { _gainNode.disconnect(); _gainNode=null; }
   if (_audioBuf) { _audioBuf=null; }
@@ -1023,7 +1106,11 @@ async function playCdg(song) {
 
   _startAt   = audioCtx.currentTime + 0.1;
   _pausedPos = 0;
-  _bgStop(); // crossfade: bg fades out (600 ms) while CDG audio starts simultaneously
+  {
+    const leadMs       = parseFloat((await api.getSettings()).bgmusic_mute_lead || '0') * 1000;
+    const msUntilStart = Math.max(0, (_startAt - audioCtx.currentTime) * 1000);
+    setTimeout(() => _bgStop(), Math.max(0, msUntilStart - leadMs));
+  }
   _audioSrc.start(_startAt);
 
   cdgPlayer = new CdgPlayer(canvas);
@@ -1058,8 +1145,16 @@ async function playYoutube(song) {
   video.volume = vol();
   video.onended = () => advanceQueue();
   video.ontimeupdate = updateProgress;
-  // Fade out bg music the moment the video actually produces audio
-  video.addEventListener('playing', () => _bgStop(), { once: true });
+  api.getSettings().then(cfg => {
+    const leadMs = Math.max(0, parseFloat(cfg.bgmusic_mute_lead || '0') * 1000);
+    if (leadMs > 0) {
+      // Lead > 0: mute immediately on 'playing' (fires ≈ at audio start)
+      // then subtract lead to approximate an early trigger
+      video.addEventListener('playing', () => _bgStop(), { once: true });
+    } else {
+      video.addEventListener('playing', () => _watchVideoAudioThenMute(0), { once: true });
+    }
+  });
   _videoEl = video; _songDur = 0;
   try {
     await video.play();
@@ -1103,8 +1198,14 @@ async function playVideo(song) {
   video.volume = vol();
   video.onended = () => advanceQueue();
   video.ontimeupdate = updateProgress;
-  // Fade out bg music the moment the video actually produces audio (not just when loading starts)
-  video.addEventListener('playing', () => _bgStop(), { once: true });
+  api.getSettings().then(cfg => {
+    const leadMs = Math.max(0, parseFloat(cfg.bgmusic_mute_lead || '0') * 1000);
+    if (leadMs > 0) {
+      video.addEventListener('playing', () => _bgStop(), { once: true });
+    } else {
+      video.addEventListener('playing', () => _watchVideoAudioThenMute(0), { once: true });
+    }
+  });
   _videoEl = video; _songDur = 0;
   try {
     await video.play();
@@ -1404,42 +1505,24 @@ function quickAdd(idx){
 // ── Settings ──────────────────────────────────────────────────────────────────
 async function openSettings(){
   show('settings-modal');
+  switchSettingsTab(_settingsActiveTab);
   const [settings, stats] = await Promise.all([api.getSettings(), api.getStats()]);
-  // Library dirs
+
+  // Library
   let dirs = [];
   try { dirs = JSON.parse(settings.music_dirs || '[]'); } catch {}
   if (!dirs.length && settings.music_dir) dirs = [settings.music_dir];
   if (!dirs.length) dirs = [''];
   _renderLibraryRows(dirs);
-  // Transition settings
-  document.getElementById('set-thanks-time').value = settings.thanks_time   || '5';
-  document.getElementById('set-bg-time').value     = settings.bg_time       || '10';
-  document.getElementById('set-thanks').checked        = settings.show_thanks   === 'true';
-  document.getElementById('set-show-next-up').checked          = settings.show_next_up          === 'true';
-  document.getElementById('set-show-playback-banner').checked   = settings.show_playback_banner   === 'true';
-  const bgSrc = settings.bgmusic_source || 'local';
-  setBgSource(bgSrc);
-  const bgDir = settings.bgmusic_dir || '';
-  document.getElementById('set-bgmusic-dir').value = bgDir;
-  if (bgDir) api.bgmusicList(bgDir).then(f => {
-    document.getElementById('bgmusic-dir-info').textContent = f.length ? `${f.length} audio file${f.length!==1?'s':''} found` : 'No audio files found';
-  });
-  const bgVol = settings.bgmusic_volume || '50';
-  document.getElementById('set-bgmusic-volume').value     = bgVol;
-  document.getElementById('bgmusic-vol-val').textContent  = bgVol + '%';
-  // Spotify settings
-  const _spCid = document.getElementById('set-spotify-client-id');
-  if (_spCid) _spCid.value = settings.spotify_client_id || '';
-  document.getElementById('set-spotify-playlist').value = settings.spotify_playlist || '';
-  const spStatus = await api.spotifyStatus();
-  _updateSpotifyAuthUI(spStatus.authenticated);
-  if (settings.spotify_client_id) api.spotifyConfigure(settings.spotify_client_id);
-  // Start polling if Spotify is already active
-  if (bgSrc === 'spotify' && _spActive) _spStartPoll();
-  // Keep mini-player in sync
-  _bgPlayerShow(bgSrc === 'local' ? !!bgDir : true);
-  const volSlider = document.getElementById('bgmusic-vol-slider');
-  if (volSlider) volSlider.value = parseInt(bgVol) / 100;
+
+  // Display
+  document.getElementById('set-thanks').checked               = settings.show_thanks          === 'true';
+  document.getElementById('set-thanks-time').value            = settings.thanks_time          || '5';
+  document.getElementById('set-bg-time').value                = settings.bg_time              || '10';
+  document.getElementById('set-show-playback-banner').checked = settings.show_playback_banner === 'true';
+  document.getElementById('set-show-next-up').checked         = settings.show_next_up         === 'true';
+  document.getElementById('set-venue-path').value             = settings.venue_image_path     || '';
+  if (settings.venue_image_path) loadVenuePreview(settings.venue_image_path);
   const nuSize = settings.next_up_size || '3';
   document.getElementById('set-next-up-size').value         = nuSize;
   document.getElementById('next-up-size-val').textContent   = ['XS','S','M','L','XL'][parseInt(nuSize)-1] || 'M';
@@ -1449,18 +1532,36 @@ async function openSettings(){
   const bsz = settings.banner_size || '3';
   document.getElementById('set-banner-size').value        = bsz;
   document.getElementById('banner-size-val').textContent  = ['XS','S','M','L','XL'][parseInt(bsz)-1] || 'M';
-  document.getElementById('set-song-limit').value          = settings.request_song_limit  || '3';
+
+  // Music
+  const bgSrc = settings.bgmusic_source || 'local';
+  const bgDir = settings.bgmusic_dir || '';
+  // Restore _bgSource without triggering a redundant DB write
+  _bgSource = bgSrc;
+  _refreshBgSourceUI(bgSrc);
+  document.getElementById('set-bgmusic-dir').value = bgDir;
+  if (bgDir) api.bgmusicList(bgDir).then(f => {
+    document.getElementById('bgmusic-dir-info').textContent = f.length ? `${f.length} audio file${f.length!==1?'s':''} found` : 'No audio files found';
+  });
+  const bgVol = settings.bgmusic_volume || '50';
+  document.getElementById('set-bgmusic-volume').value    = bgVol;
+  document.getElementById('bgmusic-vol-val').textContent = bgVol + '%';
+  document.getElementById('set-mute-lead').value    = settings.bgmusic_mute_lead    || '0';
+  document.getElementById('set-unmute-delay').value = settings.bgmusic_unmute_delay || '0';
+  _bgPlayerShow(bgSrc === 'local' ? !!bgDir : true);
+  const volSlider = document.getElementById('bgmusic-vol-slider');
+  if (volSlider) volSlider.value = parseInt(bgVol) / 100;
+
+  // Queue
+  document.getElementById('set-song-limit').value    = settings.request_song_limit || '3';
   const preventRecent = settings.prevent_recent === 'true';
-  document.getElementById('set-prevent-recent').checked    = preventRecent;
-  document.getElementById('set-recent-hours').value        = settings.recent_hours        || '2';
-  document.getElementById('set-recent-hours').disabled     = !preventRecent;
-  document.getElementById('set-venue-path').value  = settings.venue_image_path || '';
-  if (settings.venue_image_path) loadVenuePreview(settings.venue_image_path);
-  // Queue algorithm
+  document.getElementById('set-prevent-recent').checked = preventRecent;
+  document.getElementById('set-recent-hours').value     = settings.recent_hours || '2';
+  document.getElementById('set-recent-hours').disabled  = !preventRecent;
   const algo = await api.algoGet();
   _renderAlgoUI(algo);
 
-  // Top songs
+  // Top songs (Library tab)
   if (stats.top_songs.length) {
     document.getElementById('top-songs-card').style.display = '';
     document.getElementById('top-songs').innerHTML = stats.top_songs.map((s,i) => `
@@ -1565,6 +1666,41 @@ function toast(msg,type='success'){
   setTimeout(()=>{t.style.opacity='0';setTimeout(()=>t.remove(),300);},3000);
 }
 
+// ── Settings helpers ──────────────────────────────────────────────────────────
+const _saveTimers = {};
+function autoSave(key, value, delayMs = 0) {
+  if (delayMs > 0) {
+    clearTimeout(_saveTimers[key]);
+    _saveTimers[key] = setTimeout(() => api.setSetting(key, String(value)).catch(() => {}), delayMs);
+  } else {
+    api.setSetting(key, String(value)).catch(() => {});
+  }
+}
+
+let _settingsActiveTab = 'library';
+function switchSettingsTab(tab) {
+  _settingsActiveTab = tab;
+  ['library','display','music','queue'].forEach(t => {
+    const btn     = document.getElementById(`stab-${t}`);
+    const content = document.getElementById(`stab-${t}-content`);
+    const active  = t === tab;
+    if (btn) {
+      btn.style.color       = active ? '#fff' : '#9ca3af';
+      btn.style.borderBottom = active ? '2px solid #7c3aed' : '2px solid transparent';
+    }
+    if (content) content.style.display = active ? '' : 'none';
+  });
+}
+
+function onBgVolChange(v) {
+  const pct = Math.round(parseFloat(v));
+  document.getElementById('bgmusic-vol-val').textContent = pct + '%';
+  const mini = document.getElementById('bgmusic-vol-slider');
+  if (mini) mini.value = pct / 100;
+  if (_bgAudio) _bgAudio.volume = pct / 100;
+  autoSave('bgmusic_volume', String(pct), 300);
+}
+
 // ── Venue image helpers ───────────────────────────────────────────────────────
 let _venueBlobUrl = null;
 
@@ -1584,6 +1720,20 @@ async function browseVenueImage() {
   if (!p) return;
   document.getElementById('set-venue-path').value = p;
   loadVenuePreview(p);
+  _venuePath = p;
+  _applyIdleBg(p);
+  broadcast({ type: 'venue_path', path: p });
+  api.setSetting('venue_image_path', p).catch(() => {});
+}
+
+function clearVenueImage() {
+  document.getElementById('set-venue-path').value = '';
+  const img = document.getElementById('set-venue-preview');
+  img.src = ''; img.style.display = 'none';
+  _venuePath = '';
+  _applyIdleBg('');
+  broadcast({ type: 'venue_path', path: '' });
+  api.setSetting('venue_image_path', '').catch(() => {});
 }
 
 async function browseBgMusicDir() {
@@ -1593,66 +1743,15 @@ async function browseBgMusicDir() {
   const files = await api.bgmusicList(p);
   document.getElementById('bgmusic-dir-info').textContent =
     files.length ? `${files.length} audio file${files.length!==1?'s':''} found` : 'No audio files found';
+  api.setSetting('bgmusic_dir', p).catch(() => {});
   _bgPlayerShow(true);
 }
+
 function clearBgMusicDir() {
   document.getElementById('set-bgmusic-dir').value = '';
   document.getElementById('bgmusic-dir-info').textContent = '';
+  api.setSetting('bgmusic_dir', '').catch(() => {});
   _bgPlayerShow(false);
-}
-
-function clearVenueImage() {
-  document.getElementById('set-venue-path').value = '';
-  const img = document.getElementById('set-venue-preview');
-  img.src = ''; img.style.display = 'none';
-}
-
-async function saveTransitionSettings() {
-  const thanksTime   = String(parseInt(document.getElementById('set-thanks-time').value) || 5);
-  const bgTime       = String(parseInt(document.getElementById('set-bg-time').value) || 10);
-  const thanks       = String(document.getElementById('set-thanks').checked);
-  const showNextUp          = String(document.getElementById('set-show-next-up').checked);
-  const showPlaybackBanner  = String(document.getElementById('set-show-playback-banner').checked);
-  const bgmusicSource  = document.getElementById('bg-spotify-section').style.display === 'none' ? 'local' : 'spotify';
-  const bgmusicDir    = document.getElementById('set-bgmusic-dir').value;
-  const bgmusicVolume = String(parseInt(document.getElementById('set-bgmusic-volume').value) || 50);
-  const spotifyClientId = (document.getElementById('set-spotify-client-id')?.value || '').trim();
-  const spotifyPlaylist = document.getElementById('set-spotify-playlist').value.trim();
-  const nextUpSize   = String(parseInt(document.getElementById('set-next-up-size').value) || 3);
-  const venue        = document.getElementById('set-venue-path').value;
-  const bannerSpeed  = String(parseInt(document.getElementById('set-banner-speed').value) || 4);
-  const bannerSize   = String(parseInt(document.getElementById('set-banner-size').value)  || 3);
-  const songLimit     = String(parseInt(document.getElementById('set-song-limit').value)   || 3);
-  const preventRecent = String(document.getElementById('set-prevent-recent').checked);
-  const recentHours   = String(Math.min(12, Math.max(1, parseInt(document.getElementById('set-recent-hours').value) || 2)));
-  await Promise.all([
-    api.setSetting('thanks_time',         thanksTime),
-    api.setSetting('bg_time',             bgTime),
-    api.setSetting('show_thanks',         thanks),
-    api.setSetting('show_next_up',           showNextUp),
-    api.setSetting('show_playback_banner',   showPlaybackBanner),
-    api.setSetting('bgmusic_source',         bgmusicSource),
-    api.setSetting('bgmusic_dir',            bgmusicDir),
-    api.setSetting('bgmusic_volume',         bgmusicVolume),
-    api.setSetting('spotify_client_id',      spotifyClientId),
-    api.setSetting('spotify_playlist',       spotifyPlaylist),
-    api.setSetting('next_up_size',        nextUpSize),
-    api.setSetting('venue_image_path',    venue),
-    api.setSetting('banner_speed',        bannerSpeed),
-    api.setSetting('banner_size',         bannerSize),
-    api.setSetting('request_song_limit',  songLimit),
-    api.setSetting('prevent_recent',      preventRecent),
-    api.setSetting('recent_hours',        recentHours),
-  ]);
-  _venuePath = venue;
-  _applyIdleBg(_venuePath);
-  broadcast({ type: 'venue_path', path: _venuePath });
-  // Sync mini-player with saved settings
-  _bgPlayerShow(bgmusicSource === 'spotify' ? true : !!bgmusicDir);
-  const volSlider = document.getElementById('bgmusic-vol-slider');
-  if (volSlider) { volSlider.value = parseInt(bgmusicVolume) / 100; }
-  if (_bgAudio) _bgAudio.volume = parseInt(bgmusicVolume) / 100;
-  toast('Settings saved');
 }
 
 // ── Between-song transition ───────────────────────────────────────────────────
@@ -1677,6 +1776,26 @@ let _bgPlaylist = [];     // shuffled list of file paths
 let _bgIdx      = 0;      // current track index
 let _bgActive   = false;  // true while we want music playing
 let _bgFadeTimer = null;  // active fade interval
+let _bgSource         = 'local'; // 'local' | 'spotify' — set on init/save
+let _bgSpotifyPollIv  = null;   // setInterval handle for Spotify track polling
+
+function _bgStartSpotifyPoll() {
+  _bgStopSpotifyPoll();
+  _bgPollSpotify();
+  _bgSpotifyPollIv = setInterval(_bgPollSpotify, 5000);
+}
+function _bgStopSpotifyPoll() {
+  if (_bgSpotifyPollIv) { clearInterval(_bgSpotifyPollIv); _bgSpotifyPollIv = null; }
+}
+async function _bgPollSpotify() {
+  try {
+    const info    = await api.spotifyNowPlaying();
+    const trackEl  = document.getElementById('bgmusic-track');
+    const artistEl = document.getElementById('bgmusic-artist');
+    if (trackEl)  trackEl.textContent  = (info && info.title)  ? info.title  : '— Spotify —';
+    if (artistEl) artistEl.textContent = (info && info.artist) ? info.artist : '';
+  } catch {}
+}
 
 function _bgFadeTo(targetVol, durationMs, cb) {
   if (_bgFadeTimer) { clearInterval(_bgFadeTimer); _bgFadeTimer = null; }
@@ -1701,26 +1820,38 @@ function _bgFadeTo(targetVol, durationMs, cb) {
 function _bgUpdateUI() {
   const wrap     = document.getElementById('bgmusic-player');
   const trackEl  = document.getElementById('bgmusic-track');
+  const artistEl = document.getElementById('bgmusic-artist');
   const playIcon = document.getElementById('bgmusic-play-icon');
   const icon     = document.getElementById('bgmusic-icon');
+  const ctrls    = document.getElementById('bgmusic-local-controls');
   if (!wrap) return;
 
-  // Local file mode only (Spotify embed has its own Spotify UI)
+  if (_bgSource === 'spotify') {
+    if (icon)  { icon.className = 'fa-brands fa-spotify'; icon.style.color = '#1db954'; }
+    // Hide controls but keep their height so the player stays 64px
+    if (ctrls) ctrls.style.visibility = 'hidden';
+    // track/artist text is updated by _bgPollSpotify
+    return;
+  }
+
+  // Local source
+  if (icon)  { icon.className = 'fa-solid fa-music'; }
+  if (ctrls) ctrls.style.visibility = 'visible';
   if (_bgPlaylist.length && _bgPlaylist[_bgIdx]) {
-    if (trackEl) trackEl.textContent = _bgPlaylist[_bgIdx].split(/[\\/]/).pop().replace(/\.[^.]+$/, '');
+    if (trackEl)  trackEl.textContent  = _bgPlaylist[_bgIdx].split(/[\\/]/).pop().replace(/\.[^.]+$/, '');
+    if (artistEl) artistEl.textContent = '';
   }
   const playing = _bgActive && _bgAudio && !_bgAudio.paused;
-  if (icon)     { icon.style.color = playing ? '#7c3aed' : '#6b7280'; icon.className = 'fa-solid fa-music'; }
-  if (playIcon) playIcon.className = playing ? 'fa-solid fa-pause' : 'fa-solid fa-play';
+  if (icon)     icon.style.color = playing ? '#7c3aed' : '#6b7280';
+  if (playIcon) {
+    playIcon.className       = playing ? 'fa-solid fa-pause' : 'fa-solid fa-play';
+    playIcon.style.marginLeft = playing ? '0' : '2px';
+  }
 }
 
 // Controls wired to the mini-player buttons
 async function _bgToggle() {
-  const cfg = await api.getSettings();
-  if ((cfg.bgmusic_source || 'local') === 'spotify') {
-    await _spToggle();
-    return;
-  }
+  if (_bgSource === 'spotify') return; // Spotify is controlled via native app
   // Local
   if (_bgActive && _bgAudio && !_bgAudio.paused) {
     _bgAudio.pause(); _bgActive = false; _bgUpdateUI();
@@ -1736,14 +1867,18 @@ async function _bgToggle() {
 }
 
 async function _bgSkip() {
-  const cfg = await api.getSettings();
-  if ((cfg.bgmusic_source || 'local') === 'spotify') {
-    // Spotify Connect: next track via skip (restart play with shuffle)
-    await _spotifyPlay();
-    return;
-  }
+  if (_bgSource === 'spotify') return;
   if (!_bgPlaylist.length) return;
   _bgIdx    = (_bgIdx + 1) % _bgPlaylist.length;
+  _bgActive = true;
+  const vol = parseFloat(document.getElementById('bgmusic-vol-slider')?.value ?? 0.5);
+  _bgLoad(_bgPlaylist[_bgIdx]).then(() => { _bgFadeTo(vol, 400); _bgUpdateUI(); });
+}
+
+async function _bgSkipPrev() {
+  if (_bgSource === 'spotify') return;
+  if (!_bgPlaylist.length) return;
+  _bgIdx    = (_bgIdx - 1 + _bgPlaylist.length) % _bgPlaylist.length;
   _bgActive = true;
   const vol = parseFloat(document.getElementById('bgmusic-vol-slider')?.value ?? 0.5);
   _bgLoad(_bgPlaylist[_bgIdx]).then(() => { _bgFadeTo(vol, 400); _bgUpdateUI(); });
@@ -1790,6 +1925,7 @@ async function _bgLoad(filePath) {
 async function _bgStart() {
   const cfg = await api.getSettings();
   const src = cfg.bgmusic_source || 'local';
+  _bgSource = src;
 
   // Sync vol slider
   const savedVol = Math.max(0, Math.min(1, parseInt(cfg.bgmusic_volume || '50') / 100));
@@ -1797,8 +1933,7 @@ async function _bgStart() {
   if (volSlider) volSlider.value = savedVol;
 
   if (src === 'spotify') {
-    if (_spActive) return; // already playing
-    await _spotifyPlay();
+    api.spotifyUnmute().catch(() => {});
     return;
   }
 
@@ -1824,9 +1959,9 @@ async function _bgStart() {
 
 function _bgStop() {
   return new Promise(async resolve => {
-    // Pause Spotify Connect if active
-    if (_spActive) {
-      await _spotifyStop().catch(() => {});
+    // Mute native Spotify if that source is active
+    if (_bgSource === 'spotify') {
+      api.spotifyMute().catch(() => {});
       resolve(); return;
     }
     // Stop local audio
@@ -1845,131 +1980,26 @@ function _bgStop() {
   });
 }
 
-// ── Spotify Connect engine ────────────────────────────────────────────────────
-// Controls playback on any active Spotify device via the Web API.
-// No IFrame embed, no DRM/Widevine required — audio plays through Spotify's app.
-let _spActive       = false;
-let _spPollInterval = null;
-
-function _spParsePlaylist(raw) {
-  if (!raw) return null;
-  const m = raw.match(/playlist\/([A-Za-z0-9]+)/);
-  if (m) return 'spotify:playlist:' + m[1];
-  if (raw.startsWith('spotify:playlist:')) return raw.split('?')[0];
-  return null;
-}
-
-async function _spotifyPlay() {
-  const cfg = await api.getSettings();
-  const uri = _spParsePlaylist(cfg.spotify_playlist || '');
-  if (!uri) { toast('Spotify-Playlist in Settings eintragen', 'error'); return; }
-  _spActive = true;
-  const res = await api.spotifyPlay(uri);
-  if (res.error) { toast(res.error, 'error'); _spActive = false; return; }
-  _spStartPoll();
-  _bgUpdateUI();
-}
-
-async function _spotifyStop() {
-  _spActive = false;
-  _spStopPoll();
-  await api.spotifyPause().catch(() => {});
-  _bgUpdateUI();
-}
-
-async function _spToggle() {
-  if (_spActive) { await _spotifyStop(); }
-  else            { await _spotifyPlay(); }
-}
-
-function _spStartPoll() {
-  if (_spPollInterval) return;
-  _spPollInterval = setInterval(_spPollTrack, 5000);
-  _spPollTrack(); // immediate first update
-}
-
-function _spStopPoll() {
-  if (_spPollInterval) { clearInterval(_spPollInterval); _spPollInterval = null; }
-}
-
-async function _spPollTrack() {
-  if (!_spActive) return;
-  const r = await api.spotifyCurrentTrack().catch(() => null);
-  if (!r || r.error) return;
-  const nameEl   = document.getElementById('sp-track-name');
-  const artistEl = document.getElementById('sp-track-artist');
-  const artEl    = document.getElementById('sp-album-art');
-  const idleIcon = document.getElementById('sp-idle-icon');
-  const playIcon = document.getElementById('sp-play-icon');
-  if (r.playing && r.trackName) {
-    if (nameEl)   nameEl.textContent   = r.trackName;
-    if (artistEl) artistEl.textContent = r.artist;
-    if (artEl && r.albumArt) {
-      artEl.src = r.albumArt;
-      artEl.style.display = '';
-      if (idleIcon) idleIcon.style.display = 'none';
-    }
-  } else {
-    if (nameEl)   nameEl.textContent   = 'Bereit';
-    if (artistEl) artistEl.textContent = 'Spotify Connect';
-    if (artEl)    { artEl.style.display = 'none'; if (idleIcon) idleIcon.style.display = ''; }
-  }
-  if (playIcon) playIcon.className = (_spActive && r.isPlaying) ? 'fa-solid fa-pause' : 'fa-solid fa-play';
-}
-
-// ── Spotify Settings helpers ──────────────────────────────────────────────────
-async function connectSpotify() {
-  const clientId = document.getElementById('set-spotify-client-id').value.trim();
-  if (!clientId) { toast('Client ID eintragen', 'error'); return; }
-  await api.setSetting('spotify_client_id', clientId);
-  await api.spotifyConfigure(clientId);
-  document.getElementById('spotify-connect-btn').disabled = true;
-  document.getElementById('spotify-auth-status').textContent = 'Browser öffnet sich…';
-  const res = await api.spotifyAuth();
-  document.getElementById('spotify-connect-btn').disabled = false;
-  if (res.error) {
-    document.getElementById('spotify-auth-status').textContent = '✗ ' + res.error;
-    return;
-  }
-  _updateSpotifyAuthUI(true);
-  toast('Spotify verbunden ✓');
-}
-
-async function disconnectSpotify() {
-  await api.spotifyDisconnect();
-  _updateSpotifyAuthUI(false);
-  _spController = null; _spCurrentUri = null;
-  toast('Spotify getrennt');
-}
-
-async function _updateSpotifyAuthUI(authenticated) {
-  const status  = document.getElementById('spotify-auth-status');
-  const connBtn = document.getElementById('spotify-connect-btn');
-  const discBtn = document.getElementById('spotify-disconnect-btn');
-  if (!status) return;
-  if (authenticated) {
-    status.innerHTML = '<span style="color:#22c55e">✓ Verbunden</span>';
-    if (connBtn) connBtn.style.display = 'none';
-    if (discBtn) discBtn.style.display = '';
-  } else {
-    status.textContent = '';
-    if (connBtn) connBtn.style.display = '';
-    if (discBtn) discBtn.style.display = 'none';
-  }
-}
-
-function setBgSource(src) {
+function _refreshBgSourceUI(src) {
+  // Update settings-panel visibility and button states — no save, no side effects
   document.getElementById('bg-local-section').style.display   = src === 'local'   ? '' : 'none';
   document.getElementById('bg-spotify-section').style.display = src === 'spotify' ? '' : 'none';
   document.getElementById('bgsrc-local-btn').classList.toggle('btn-primary', src === 'local');
   document.getElementById('bgsrc-local-btn').classList.toggle('btn-gray',    src !== 'local');
   document.getElementById('bgsrc-spotify-btn').classList.toggle('btn-primary', src === 'spotify');
   document.getElementById('bgsrc-spotify-btn').classList.toggle('btn-gray',    src !== 'spotify');
-  // Show/hide the correct mini-player row
-  const localRow   = document.getElementById('bgmusic-local-row');
-  const spotifyRow = document.getElementById('bgmusic-spotify-row');
-  if (localRow)   localRow.style.display   = src === 'local'   ? '' : 'none';
-  if (spotifyRow) spotifyRow.style.display = src === 'spotify' ? '' : 'none';
+  if (src === 'spotify') _bgStartSpotifyPoll();
+  else _bgStopSpotifyPoll();
+  _bgUpdateUI();
+}
+
+function setBgSource(src) {
+  _bgSource = src; // update active source immediately so _bgUpdateUI sees the right value
+  _refreshBgSourceUI(src);
+  // Persist source and update mini-player visibility
+  api.setSetting('bgmusic_source', src).catch(() => {});
+  const bgDir = document.getElementById('set-bgmusic-dir')?.value || '';
+  _bgPlayerShow(src === 'spotify' ? true : !!bgDir);
 }
 
 // ── Playback banner (shown while a song is playing) ──────────────────────────
@@ -2138,10 +2168,16 @@ async function doTransition(prevSinger, nextEntry) {
   const cfg      = await api.getSettings();
   const thanksMs = (parseInt(cfg.thanks_time || '5')  || 0) * 1000;
   const bgMs     = (parseInt(cfg.bg_time     || '10') || 0) * 1000;
-  if (thanksMs <= 0 && bgMs <= 0) return;
+  // Always unmute background source between songs, even with no visual transition
+  if (thanksMs <= 0 && bgMs <= 0) { _bgStart(); return; }
 
   _transitioning = true;
-  _bgStart(); // start background music (fire & forget, fades in)
+  const unmuteDelayMs = Math.max(0, parseFloat(cfg.bgmusic_unmute_delay || '0') * 1000);
+  if (unmuteDelayMs > 0) {
+    setTimeout(() => _bgStart(), unmuteDelayMs);
+  } else {
+    _bgStart();
+  }
   // Hide playback banner for the duration of the transition
   const pbWrap = document.getElementById('playback-banner-wrap');
   if (pbWrap) { pbWrap.style.display = 'none'; document.getElementById('song-overlay').style.bottom = '8px'; }
@@ -2496,13 +2532,14 @@ async function startApp() {
   // Init background music mini-player
   const bgSrc2 = s.bgmusic_source || 'local';
   const bgDir  = s.bgmusic_dir || '';
+  _bgSource = bgSrc2;
   setBgSource(bgSrc2);
-  _bgPlayerShow(bgSrc2 === 'spotify' ? !!s.spotify_playlist : !!bgDir);
+  // Clear any stale mute from a previous session
+  if (bgSrc2 === 'spotify') api.spotifyUnmute().catch(() => {});
+  _bgPlayerShow(bgSrc2 === 'spotify' ? true : !!bgDir);
   const volSlider = document.getElementById('bgmusic-vol-slider');
   if (volSlider) volSlider.value = parseInt(s.bgmusic_volume || '50') / 100;
   _bgUpdateUI();
-  // Restore Spotify OAuth state
-  if (s.spotify_client_id) api.spotifyConfigure(s.spotify_client_id);
 }
 
 async function onRestoreQueue() {
