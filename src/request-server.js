@@ -75,8 +75,24 @@ async function handleRequest(req, res) {
     return;
   }
 
+  // Song sources config (which tabs the client should offer)
+  if (url.pathname === '/api/config' && req.method === 'GET') {
+    const s = _db.getSettings();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      localEnabled:   s.source_local_enabled   !== 'false',
+      youtubeEnabled: s.source_youtube_enabled !== 'false',
+    }));
+    return;
+  }
+
   // Local song search
   if (url.pathname === '/api/songs' && req.method === 'GET') {
+    if (_db.getSetting('source_local_enabled') === 'false') {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'disabled' }));
+      return;
+    }
     const q = url.searchParams.get('q') || '';
     const songs = _db.searchSongs(q, 30);
     res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -86,6 +102,11 @@ async function handleRequest(req, res) {
 
   // YouTube search
   if (url.pathname === '/api/youtube' && req.method === 'GET') {
+    if (_db.getSetting('source_youtube_enabled') === 'false') {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'disabled' }));
+      return;
+    }
     const q = url.searchParams.get('q') || '';
     if (!q) { res.writeHead(400); res.end('{"error":"q required"}'); return; }
     try {
@@ -119,6 +140,17 @@ async function handleRequest(req, res) {
         if (!singer) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'singerName required' }));
+          return;
+        }
+
+        if (youtubeId && _db.getSetting('source_youtube_enabled') === 'false') {
+          res.writeHead(403, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'disabled', message: 'YouTube requests are disabled' }));
+          return;
+        }
+        if (songId && !youtubeId && _db.getSetting('source_local_enabled') === 'false') {
+          res.writeHead(403, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'disabled', message: 'Local library requests are disabled' }));
           return;
         }
 

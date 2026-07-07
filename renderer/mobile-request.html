@@ -367,6 +367,17 @@ function connect() {
 connect();
 
 fetch('/api/queue').then(r => r.json()).then(renderQueue).catch(() => {});
+
+// ── Source config (hide disabled tabs) ─────────────────────────────────────────
+fetch('/api/config').then(r => r.json()).then(cfg => {
+  if (cfg.localEnabled === false)   document.getElementById('tab-local').style.display = 'none';
+  if (cfg.youtubeEnabled === false) document.getElementById('tab-yt').style.display = 'none';
+  if (cfg.localEnabled === false && cfg.youtubeEnabled !== false) switchTab('yt');
+  if (cfg.localEnabled === false && cfg.youtubeEnabled === false) {
+    document.querySelector('.tabs').style.display = 'none';
+    resultsEl.innerHTML = '<div class="q-empty">Song requests are currently disabled</div>';
+  }
+}).catch(() => {});
 </script>
 </body>
 </html>

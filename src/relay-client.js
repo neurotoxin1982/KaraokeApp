@@ -30,6 +30,7 @@ function _connect() {
       type:      'register',
       venueId:   _cfg.venueId,
       venueName: _cfg.venueName || _cfg.venueId,
+      sourcesEnabled: _cfg.sourcesEnabled || { local: true, youtube: true },
     }));
   });
 

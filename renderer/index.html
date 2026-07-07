@@ -332,6 +332,22 @@
       <!-- ── Library tab ──────────────────────────────────────────────── -->
       <div id="stab-library-content">
         <div class="card">
+          <h4 style="font-size:.95rem;font-weight:600;margin-bottom:12px"><i class="fa-solid fa-list-check" style="color:#a78bfa;margin-right:6px"></i>Song Sources</h4>
+          <p style="font-size:.8rem;color:#6b7280;margin-bottom:12px;line-height:1.5">Choose which sources are offered when adding songs — in this app and for singers requesting songs from their phone.</p>
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <input type="checkbox" id="set-source-local" checked style="width:16px;height:16px;accent-color:#7c3aed;cursor:pointer"
+                onchange="_setSourceEnabled('local', this.checked)">
+              <label for="set-source-local" style="font-size:.85rem;color:#d1d5db;cursor:pointer;flex:1">Local library</label>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px">
+              <input type="checkbox" id="set-source-youtube" checked style="width:16px;height:16px;accent-color:#7c3aed;cursor:pointer"
+                onchange="_setSourceEnabled('youtube', this.checked)">
+              <label for="set-source-youtube" style="font-size:.85rem;color:#d1d5db;cursor:pointer;flex:1">YouTube</label>
+            </div>
+          </div>
+        </div>
+        <div class="card">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
             <h4 style="font-size:.95rem;font-weight:600"><i class="fa-solid fa-folder-open" style="color:#a78bfa;margin-right:6px"></i>Local Library</h4>
             <button class="btn btn-gray btn-sm" id="add-lib-btn" onclick="addLibraryRow()"><i class="fa-solid fa-plus"></i> Add Library</button>
@@ -1476,6 +1492,33 @@ window.addEventListener('resize',()=>{const c=document.getElementById('cdg-canva
 // ── Add Song Modal ────────────────────────────────────────────────────────────
 let _lastSongs=[], _mTimer;
 let _activeTab = 'local';
+let _sourcesCache = { local: true, youtube: true };
+api.sourcesGet().then(s => { _sourcesCache = s; });
+
+// Hide the tab button for any disabled source; if the active tab just got
+// disabled, switch to whichever source is still enabled.
+function _applySourceTabs() {
+  const tabLocal = document.getElementById('tab-local');
+  const tabYt    = document.getElementById('tab-yt');
+  if (!tabLocal || !tabYt) return;
+  tabLocal.style.display = _sourcesCache.local   ? '' : 'none';
+  tabYt.style.display    = _sourcesCache.youtube ? '' : 'none';
+  if (_activeTab === 'local' && !_sourcesCache.local && _sourcesCache.youtube) switchTab('yt');
+  else if (_activeTab === 'yt' && !_sourcesCache.youtube && _sourcesCache.local) switchTab('local');
+}
+
+async function _setSourceEnabled(source, enabled) {
+  if (!enabled) {
+    const other = source === 'local' ? 'youtube' : 'local';
+    if (!_sourcesCache[other]) {
+      document.getElementById(`set-source-${source}`).checked = true;
+      toast('At least one source must stay enabled', 'error');
+      return;
+    }
+  }
+  _sourcesCache = await api.sourcesSet({ [source]: enabled });
+  _applySourceTabs();
+}
 
 function switchTab(tab) {
   _activeTab = tab;
@@ -1504,7 +1547,8 @@ function openAddModal(){
   document.getElementById('yt-selected').classList.add('hidden');
   document.getElementById('yt-video-id').value='';
   _lastSongs=[]; _ytSongs=[];
-  switchTab('local');
+  switchTab(_sourcesCache.local || !_sourcesCache.youtube ? 'local' : 'yt');
+  _applySourceTabs();
 }
 function closeAdd(){hide('add-modal');}
 
@@ -1678,6 +1722,12 @@ async function openSettings(){
   if (!dirs.length && settings.music_dir) dirs = [settings.music_dir];
   if (!dirs.length) dirs = [''];
   _renderLibraryRows(dirs);
+
+  // Song sources
+  _sourcesCache = await api.sourcesGet();
+  document.getElementById('set-source-local').checked   = _sourcesCache.local;
+  document.getElementById('set-source-youtube').checked = _sourcesCache.youtube;
+  _applySourceTabs();
 
   // Display
   document.getElementById('set-thanks').checked               = settings.show_thanks          === 'true';

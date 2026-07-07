@@ -42,6 +42,10 @@ contextBridge.exposeInMainWorld('api', {
   getSettings:    ()              => ipcRenderer.invoke('settings:get'),
   setSetting:     (k, v)          => ipcRenderer.invoke('settings:set', k, v),
 
+  // Song sources (local library / YouTube)
+  sourcesGet:     ()              => ipcRenderer.invoke('sources:get'),
+  sourcesSet:     (patch)         => ipcRenderer.invoke('sources:set', patch),
+
   // Player window
   openPlayer:     ()              => ipcRenderer.invoke('player:open'),
 

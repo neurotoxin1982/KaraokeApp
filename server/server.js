@@ -35,7 +35,10 @@ wss.on('connection', (ws) => {
 
     if (msg.type === 'register') {
       venueId = msg.venueId;
-      venues.set(venueId, { ws, name: msg.venueName || venueId, connectedAt: new Date() });
+      venues.set(venueId, {
+        ws, name: msg.venueName || venueId, connectedAt: new Date(),
+        sourcesEnabled: msg.sourcesEnabled || { local: true, youtube: true },
+      });
       ws.send(JSON.stringify({
         type: 'registered',
         venueId,
@@ -68,7 +71,7 @@ app.get('/v/:venueId', (req, res) => {
 app.get('/v/:venueId/info', (req, res) => {
   const venue = venues.get(req.params.venueId);
   if (!venue) return res.status(404).json({ online: false });
-  res.json({ online: true, name: venue.name });
+  res.json({ online: true, name: venue.name, sourcesEnabled: venue.sourcesEnabled || { local: true, youtube: true } });
 });
 
 app.post('/v/:venueId/request', (req, res) => {

@@ -108,6 +108,13 @@ function _ytCookieOpts() {
   };
 }
 
+function _sourcesEnabled() {
+  return {
+    local:   db.getSetting('source_local_enabled')   !== 'false',
+    youtube: db.getSetting('source_youtube_enabled') !== 'false',
+  };
+}
+
 function _notifyQueueChanged() {
   if (mainWindow && !mainWindow.isDestroyed())
     mainWindow.webContents.send('queue-reordered');
@@ -245,6 +252,16 @@ function setupIPC() {
   // Settings
   ipcMain.handle('settings:get', ()           => db.getSettings());
   ipcMain.handle('settings:set', (_, k, v)    => db.setSetting(k, v));
+
+  // Song sources (local library / YouTube) — which are offered for requests
+  ipcMain.handle('sources:get', () => _sourcesEnabled());
+  ipcMain.handle('sources:set', (_, patch) => {
+    if (patch.local   !== undefined) db.setSetting('source_local_enabled',   String(patch.local));
+    if (patch.youtube !== undefined) db.setSetting('source_youtube_enabled', String(patch.youtube));
+    const sources = _sourcesEnabled();
+    relayClient?.updateConfig({ sourcesEnabled: sources });
+    return sources;
+  });
 
   // File reading (bypasses URL encoding issues with custom protocol)
   ipcMain.handle('read:file', async (_, filePath) => {
@@ -385,9 +402,14 @@ async function _initRelay() {
       serverUrl: settings.relay_server_url || 'ws://89.167.78.11:3000/ws',
       venueId,
       venueName: settings.relay_venue_name || 'My Karaoke Venue',
+      sourcesEnabled: _sourcesEnabled(),
     },
     async (msg) => {
       if (msg.type === 'search') {
+        if (!_sourcesEnabled().local) {
+          relayClient.send({ type: 'search-results', requestId: msg.requestId, results: [] });
+          return;
+        }
         const rows = db.searchSongs(msg.query || '', 20);
         relayClient.send({
           type:      'search-results',
@@ -395,6 +417,10 @@ async function _initRelay() {
           results:   rows.map(s => ({ id: s.id, title: s.title, artist: s.artist || '' })),
         });
       } else if (msg.type === 'add-to-queue') {
+        if (!_sourcesEnabled().local) {
+          relayClient.send({ type: 'add-to-queue-result', requestId: msg.requestId, ok: false, error: 'disabled' });
+          return;
+        }
         const admission = queueManager.validateAdmission(msg.singerName || '');
         if (!admission.allowed) {
           relayClient.send({ type: 'add-to-queue-result', requestId: msg.requestId, ok: false, error: admission.reason });
@@ -406,6 +432,10 @@ async function _initRelay() {
         if (mainWindow && !mainWindow.isDestroyed())
           mainWindow.webContents.send('relay-request', { ...msg, type: 'request' });
       } else if (msg.type === 'youtube-search') {
+        if (!_sourcesEnabled().youtube) {
+          relayClient.send({ type: 'youtube-search-results', requestId: msg.requestId, results: [] });
+          return;
+        }
         try {
           const ytdlp = require('./src/ytdlp');
           const results = await ytdlp.search(msg.query || '', 8, _ytCookieOpts());
@@ -414,6 +444,10 @@ async function _initRelay() {
           relayClient.send({ type: 'youtube-search-results', requestId: msg.requestId, results: [], error: err.message });
         }
       } else if (msg.type === 'add-youtube-to-queue') {
+        if (!_sourcesEnabled().youtube) {
+          relayClient.send({ type: 'add-youtube-to-queue-result', requestId: msg.requestId, ok: false, error: 'disabled' });
+          return;
+        }
         const { singerName, videoId, title, artist, duration } = msg;
         const admission = queueManager.validateAdmission(singerName || '');
         if (!admission.allowed) {

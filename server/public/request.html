@@ -222,8 +222,18 @@
         document.getElementById('form-wrap').style.display = 'none';
         document.getElementById('offline-view').style.display = 'block';
         document.getElementById('venue-name').textContent = 'Offline';
-      } else {
-        document.getElementById('venue-name').textContent = d.name;
+        return;
+      }
+      document.getElementById('venue-name').textContent = d.name;
+
+      const src = d.sourcesEnabled || { local: true, youtube: true };
+      if (!src.local)   document.getElementById('tab-local').style.display = 'none';
+      if (!src.youtube) document.getElementById('tab-yt').style.display = 'none';
+      if (!src.local && src.youtube) _switchTab('yt');
+      if (!src.local && !src.youtube) {
+        document.querySelector('.tabs').style.display = 'none';
+        document.getElementById('pane-local').innerHTML = '<div class="r-hint">Song requests are currently disabled</div>';
+        document.getElementById('pane-yt').style.display = 'none';
       }
     })
     .catch(() => {});
