@@ -1601,9 +1601,6 @@ index 784a168..101fecc 100644
 +          idleBg.style.display = 'block';
 +          if (idleIcon) idleIcon.style.display = 'none';
 +          if (idleText) idleText.style.display = 'none';
-+ ... aoke-test"; git diff HEAD -- main.js renderer/index.html renderer/pla ...
-+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- 
 +        }).catch(() => { idleBg.style.display = 'none'; });
 +      } else {
 +        idleBg.src = '';

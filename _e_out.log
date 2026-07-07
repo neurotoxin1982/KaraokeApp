@@ -1,0 +1,5 @@
+
+> karaoke-manager@1.0.0 start
+> electron . --remote-debugging-port=9222
+
+

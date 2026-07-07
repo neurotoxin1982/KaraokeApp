@@ -69,15 +69,26 @@ contextBridge.exposeInMainWorld('api', {
 
   // Dialogs
   openImageDialog: () => ipcRenderer.invoke('dialog:openImage'),
+  openCookiesFileDialog: () => ipcRenderer.invoke('dialog:openCookiesFile'),
 
   // Spotify native app — mute/unmute via Windows audio session API + SMTC track query
   spotifyMute:       () => ipcRenderer.invoke('spotify:mute'),
   spotifyUnmute:     () => ipcRenderer.invoke('spotify:unmute'),
   spotifyNowPlaying: () => ipcRenderer.invoke('spotify:now-playing'),
 
+  potStatus: () => ipcRenderer.invoke('pot:status'),
+
   // YouTube
   youtubeEnsure:  ()        => ipcRenderer.invoke('youtube:ensure'),
   youtubeSearch:  (q)       => ipcRenderer.invoke('youtube:search', q),
   youtubeStream:  (id)      => ipcRenderer.invoke('youtube:stream', id),
   onYtProgress:   (cb)      => ipcRenderer.on('youtube:progress', (_, p) => cb(p)),
+
+  // Relay — remote song requests from internet
+  relayStatus:    ()        => ipcRenderer.invoke('relay:status'),
+  relayGetConfig: ()        => ipcRenderer.invoke('relay:getConfig'),
+  relaySetConfig: (cfg)     => ipcRenderer.invoke('relay:setConfig', cfg),
+  relayQrCode:    (url)     => ipcRenderer.invoke('relay:qrcode', url),
+  onRelayRequest: (cb)      => ipcRenderer.on('relay-request',  (_, r) => cb(r)),
+  onRelayStatus:  (cb)      => ipcRenderer.on('relay-status',   (_, s) => cb(s)),
 });

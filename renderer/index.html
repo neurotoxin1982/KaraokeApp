@@ -86,10 +86,21 @@
       <div id="sync-hud" style="position:absolute;top:4px;left:4px;z-index:99;background:rgba(0,0,0,.75);color:#0f0;font:11px monospace;padding:4px 6px;border-radius:4px;pointer-events:none"></div>
       <canvas id="cdg-canvas" class="hidden"></canvas>
       <video  id="video-player" class="hidden" style="width:100%;height:100%;object-fit:contain"></video>
-      <div id="player-idle" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;color:#374151;overflow:hidden">
+      <div id="player-idle" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;color:#374151;overflow:hidden;gap:10px">
         <img id="player-idle-bg" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:none;z-index:0">
-        <i id="player-idle-icon" class="fa-solid fa-microphone" style="font-size:5rem;display:block;margin-bottom:12px;position:relative;z-index:1"></i>
-        <p id="player-idle-text" style="font-size:1.1rem;position:relative;z-index:1;text-shadow:0 1px 6px #000">No song playing</p>
+        <!-- Default (no QR) -->
+        <div id="player-idle-default" style="position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;gap:8px">
+          <i id="player-idle-icon" class="fa-solid fa-microphone" style="font-size:5rem"></i>
+          <p id="player-idle-text" style="font-size:1.1rem;text-shadow:0 1px 6px #000">No song playing</p>
+        </div>
+        <!-- QR + custom text — text pinned top / QR pinned bottom -->
+        <div id="player-idle-qr" style="display:none;position:absolute;inset:0;z-index:1;">
+          <p id="player-idle-custom-text" style="position:absolute;top:0;left:0;right:0;margin:0;padding:14px 40px;font-weight:700;color:#fff;text-shadow:0 2px 8px rgba(0,0,0,.8);text-align:center;"></p>
+          <div id="player-idle-qr-box" style="position:absolute;bottom:0;left:0;right:0;display:flex;flex-direction:column;align-items:center;padding:6px 0 10px;gap:6px;">
+            <img id="player-idle-qr-img" src="" alt="QR" style="width:140px;height:140px;border-radius:10px;image-rendering:pixelated">
+            <p id="player-idle-qr-url" style="margin:0;font-size:.65rem;color:#9ca3af;max-width:200px;word-break:break-all;text-align:center;"></p>
+          </div>
+        </div>
       </div>
       <!-- Between-song transition screen -->
       <div id="transition-overlay" style="display:none;position:absolute;inset:0;z-index:55">
@@ -309,6 +320,10 @@
         style="background:none;border:none;border-bottom:2px solid transparent;color:#9ca3af;padding:9px 18px;cursor:pointer;font-size:.82rem;white-space:nowrap">
         <i class="fa-solid fa-list-ol" style="margin-right:5px"></i>Queue
       </button>
+      <button id="stab-online" onclick="switchSettingsTab('online')"
+        style="background:none;border:none;border-bottom:2px solid transparent;color:#9ca3af;padding:9px 18px;cursor:pointer;font-size:.82rem;white-space:nowrap">
+        <i class="fa-solid fa-globe" style="margin-right:5px"></i>Online
+      </button>
     </div>
 
     <!-- Tab content (scrollable) -->
@@ -360,6 +375,41 @@
               <button class="btn btn-red btn-sm" onclick="clearVenueImage()"><i class="fa-solid fa-xmark"></i></button>
             </div>
             <img id="set-venue-preview" style="display:none;margin-top:8px;max-height:80px;border-radius:6px;object-fit:cover">
+          </div>
+
+          <div style="border-top:1px solid #374151;padding-top:12px">
+            <h4 style="font-size:.85rem;font-weight:600;color:#9ca3af;margin-bottom:10px">Idle Screen</h4>
+            <div style="display:flex;flex-direction:column;gap:10px">
+              <div style="display:flex;flex-direction:column;gap:5px">
+                <label style="font-size:.8rem;color:#9ca3af">Custom text</label>
+                <input type="text" id="set-idle-text" placeholder="e.g. Scan to request a song!"
+                  style="background:#111827;border:1.5px solid #374151;color:#f3f4f6;padding:7px 10px;border-radius:7px;font-size:.85rem"
+                  oninput="autoSave('idle_text', this.value, 600); _broadcastIdleConfig()">
+              </div>
+              <div style="display:flex;align-items:center;gap:10px">
+                <input type="checkbox" id="set-idle-show-text" style="width:16px;height:16px;accent-color:#7c3aed;cursor:pointer"
+                  onchange="autoSave('idle_show_text', this.checked.toString()); _broadcastIdleConfig()">
+                <label for="set-idle-show-text" style="font-size:.85rem;color:#d1d5db;cursor:pointer;flex:1">Show custom text on idle screen</label>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px">
+                <input type="checkbox" id="set-idle-show-qr" style="width:16px;height:16px;accent-color:#7c3aed;cursor:pointer"
+                  onchange="autoSave('idle_show_qr', this.checked.toString()); _broadcastIdleConfig()">
+                <label for="set-idle-show-qr" style="font-size:.85rem;color:#d1d5db;cursor:pointer;flex:1">Show QR code on idle screen</label>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px">
+                <label style="font-size:.8rem;color:#9ca3af;min-width:70px">Text color</label>
+                <input type="color" id="set-idle-text-color" value="#ffffff"
+                  style="width:36px;height:28px;padding:2px;background:none;border:1.5px solid #374151;border-radius:6px;cursor:pointer;flex-shrink:0"
+                  onchange="autoSave('idle_text_color', this.value); _broadcastIdleConfig()">
+              </div>
+              <div style="display:flex;align-items:center;gap:10px">
+                <label style="font-size:.8rem;color:#9ca3af;min-width:70px">Text size</label>
+                <input type="range" id="set-idle-text-size" min="0.5" max="6" step="0.25" value="1.8"
+                  style="flex:1;accent-color:#7c3aed"
+                  oninput="document.getElementById('idle-text-size-val').textContent=parseFloat(this.value).toFixed(2).replace(/\.?0+$/,'')+'rem'; autoSave('idle_text_size', this.value, 200); _broadcastIdleConfig()">
+                <span id="idle-text-size-val" style="font-size:.8rem;color:#9ca3af;min-width:38px;text-align:right">1.8rem</span>
+              </div>
+            </div>
           </div>
 
           <div style="border-top:1px solid #374151;padding-top:12px">
@@ -508,6 +558,116 @@
               style="width:55px;text-align:center;padding:5px"
               onchange="autoSave('recent_hours', String(Math.min(12,Math.max(1,parseInt(this.value)||2))))">
             <span style="font-size:.8rem;color:#6b7280">h</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Online tab ───────────────────────────────────────────────── -->
+      <div id="stab-online-content" style="display:none">
+        <div class="card" style="display:flex;flex-direction:column;gap:10px">
+          <h4 style="font-size:.95rem;font-weight:600">
+            <i class="fa-brands fa-youtube" style="color:#ff4444;margin-right:6px"></i>YouTube Playback
+          </h4>
+          <p style="font-size:.8rem;color:#6b7280;line-height:1.5">
+            A local token server runs in the background so yt-dlp can pass YouTube's "Sign in to confirm you're not a bot" check without cookies or a YouTube login — it just proves requests come from a real client. yt-dlp also auto-updates on launch.
+          </p>
+          <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:#111827;border-radius:8px">
+            <span id="pot-status-dot" style="width:9px;height:9px;border-radius:50%;background:#6b7280;flex-shrink:0;display:inline-block"></span>
+            <span id="pot-status-text" style="font-size:.8rem;color:#9ca3af">Checking…</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:5px">
+            <label style="font-size:.75rem;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.05em">Cookies file (.txt) — optional fallback</label>
+            <div style="display:flex;gap:8px">
+              <input id="set-yt-cookies-file" type="text" readonly placeholder="No file selected" style="flex:1;font-size:.8rem">
+              <button class="btn btn-gray btn-sm" onclick="browseYtCookiesFile()"><i class="fa-solid fa-folder"></i></button>
+              <button class="btn btn-red btn-sm" onclick="clearYtCookiesFile()"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:5px">
+            <label style="font-size:.75rem;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.05em">Or: cookies from browser (ignored if a file is set above)</label>
+            <select id="set-yt-cookies-browser"
+              style="background:#111827;border:1.5px solid #374151;color:#f3f4f6;padding:8px 12px;border-radius:8px;font-size:.9rem"
+              onchange="autoSave('youtube_cookies_browser', this.value)">
+              <option value="">None</option>
+              <option value="chrome">Chrome</option>
+              <option value="edge">Edge</option>
+              <option value="firefox">Firefox</option>
+              <option value="brave">Brave</option>
+              <option value="opera">Opera</option>
+              <option value="vivaldi">Vivaldi</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="card" style="display:flex;flex-direction:column;gap:14px">
+          <h4 style="font-size:.95rem;font-weight:600">
+            <i class="fa-solid fa-globe" style="color:#a78bfa;margin-right:6px"></i>Remote Song Requests
+          </h4>
+          <p style="font-size:.8rem;color:#6b7280;line-height:1.5">
+            Customers can submit song requests from their smartphones via the internet — no local network required. Share your QR code at the start of the event.
+          </p>
+
+          <!-- Enable toggle -->
+          <div style="display:flex;align-items:center;gap:10px">
+            <input type="checkbox" id="relay-enabled-toggle" style="width:16px;height:16px;accent-color:#7c3aed;cursor:pointer"
+              onchange="_relayToggleEnabled(this.checked)">
+            <label for="relay-enabled-toggle" style="font-size:.9rem;color:#d1d5db;cursor:pointer">Enable online requests</label>
+          </div>
+
+          <!-- Venue name -->
+          <div style="display:flex;flex-direction:column;gap:5px">
+            <label style="font-size:.75rem;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.05em">Venue Name</label>
+            <input type="text" id="relay-venue-name" placeholder="My Karaoke Venue"
+              style="background:#111827;border:1.5px solid #374151;color:#f3f4f6;padding:8px 12px;border-radius:8px;font-size:.9rem"
+              onchange="autoSave('relay_venue_name', this.value, 800); window.api.relaySetConfig({ venueName: this.value })">
+          </div>
+
+          <!-- Server URL -->
+          <div style="display:flex;flex-direction:column;gap:5px">
+            <label style="font-size:.75rem;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.05em">Relay Server URL</label>
+            <input type="text" id="relay-server-url" placeholder="ws://89.167.78.11:3000/ws"
+              style="background:#111827;border:1.5px solid #374151;color:#f3f4f6;padding:8px 12px;border-radius:8px;font-size:.85rem;font-family:monospace"
+              onchange="autoSave('relay_server_url', this.value, 800); window.api.relaySetConfig({ serverUrl: this.value })">
+          </div>
+
+          <!-- Venue ID (read-only) -->
+          <div style="display:flex;flex-direction:column;gap:5px">
+            <label style="font-size:.75rem;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.05em">Venue ID</label>
+            <div style="display:flex;gap:8px">
+              <input type="text" id="relay-venue-id" readonly
+                style="flex:1;background:#0d1117;border:1.5px solid #374151;color:#6b7280;padding:8px 12px;border-radius:8px;font-size:.85rem;font-family:monospace">
+              <button class="btn btn-gray btn-sm" onclick="_relaycopyvenueid()" title="Copy Venue ID">
+                <i class="fa-solid fa-copy"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Status + QR code (only visible when enabled) -->
+        <div id="relay-status-card" class="card" style="display:none;flex-direction:column;gap:14px;margin-top:0">
+          <!-- Status row -->
+          <div style="display:flex;align-items:center;gap:10px">
+            <span id="relay-status-dot" style="width:10px;height:10px;border-radius:50%;background:#ef4444;flex-shrink:0;display:inline-block"></span>
+            <span id="relay-status-text" style="font-size:.85rem;color:#9ca3af">Disconnected</span>
+          </div>
+
+          <!-- Public URL + copy -->
+          <div style="display:flex;flex-direction:column;gap:5px">
+            <label style="font-size:.75rem;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.05em">Customer URL</label>
+            <div style="display:flex;gap:8px">
+              <input type="text" id="relay-public-url" readonly
+                style="flex:1;background:#0d1117;border:1.5px solid #374151;color:#a78bfa;padding:8px 12px;border-radius:8px;font-size:.85rem;font-family:monospace">
+              <button class="btn btn-gray btn-sm" onclick="_relayCopyUrl()" title="Copy URL">
+                <i class="fa-solid fa-copy"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- QR Code -->
+          <div style="display:flex;flex-direction:column;align-items:center;gap:10px">
+            <img id="relay-qr-img" src="" alt="QR Code"
+              style="width:180px;height:180px;border-radius:10px;background:#1f2937;display:none">
+            <p style="font-size:.78rem;color:#6b7280;text-align:center">Customers scan this at the event to request songs</p>
           </div>
         </div>
       </div>
@@ -786,6 +946,7 @@ api.onBroadcast((msg) => {
       }
     } else if (!currentSong) {
       broadcast({ type: 'stop' });
+      _broadcastIdleConfig();
     } else {
       broadcast({ type: 'song_info', title: currentSong.title, artist: currentSong.artist, singer_name: currentSong.singer_name });
       broadcast({ type: 'position', pos: getPos(), playing: isPlaying });
@@ -1013,7 +1174,7 @@ async function checkAndPlay() {
     // Peek at the queue before marking anything as playing
     const queue = await api.getQueue();
     const nextPending = queue.find(e => e.status === 'pending');
-    if (!nextPending) { if (currentSong) showIdle(); return; }
+    if (!nextPending) { showIdle(); return; }
 
     // Show intro background before the very first song
     if (!_hadFirstSong) {
@@ -1025,7 +1186,7 @@ async function checkAndPlay() {
     song = await api.nextSong();
     if (song) await renderQueue();
   }
-  if (!song) { if (currentSong) showIdle(); return; }
+  if (!song) { showIdle(); return; }
   if (currentSong && currentSong.queue_id === song.queue_id) return;
   currentSong = song;
   stopCurrent();
@@ -1046,6 +1207,8 @@ function showIdle() {
   document.getElementById('ctrl-title').textContent = '—';
   document.getElementById('ctrl-meta').textContent  = '';
   broadcast({ type: 'stop' });
+  _applyIdleConfig();
+  _broadcastIdleConfig();
 }
 
 function setInfo(song) {
@@ -1224,6 +1387,7 @@ async function advanceQueue() {
   stopCurrent(); currentSong = null;
   const nextEntry = await api.nextSong();
   await renderQueue();
+  if (!nextEntry) { showIdle(); return; }
   await doTransition(prevSinger, nextEntry);
   await checkAndPlay();
 }
@@ -1521,6 +1685,17 @@ async function openSettings(){
   document.getElementById('set-bg-time').value                = settings.bg_time              || '10';
   document.getElementById('set-show-playback-banner').checked = settings.show_playback_banner === 'true';
   document.getElementById('set-show-next-up').checked         = settings.show_next_up         === 'true';
+  document.getElementById('set-idle-text').value              = settings.idle_text             || '';
+  document.getElementById('set-idle-show-text').checked       = settings.idle_show_text !== 'false';
+  document.getElementById('set-idle-show-qr').checked         = settings.idle_show_qr !== 'false';
+  const _idleColor = settings.idle_text_color || '#ffffff';
+  const _idleSize  = settings.idle_text_size  || '1.8';
+  document.getElementById('set-idle-text-color').value        = _idleColor;
+  document.getElementById('set-idle-text-size').value         = _idleSize;
+  document.getElementById('idle-text-size-val').textContent   = parseFloat(_idleSize).toFixed(2).replace(/\.?0+$/, '') + 'rem';
+  _broadcastIdleConfig();
+  document.getElementById('set-yt-cookies-file').value          = settings.youtube_cookies_file || '';
+  document.getElementById('set-yt-cookies-browser').value      = settings.youtube_cookies_browser || '';
   document.getElementById('set-venue-path').value             = settings.venue_image_path     || '';
   if (settings.venue_image_path) loadVenuePreview(settings.venue_image_path);
   const nuSize = settings.next_up_size || '3';
@@ -1680,7 +1855,7 @@ function autoSave(key, value, delayMs = 0) {
 let _settingsActiveTab = 'library';
 function switchSettingsTab(tab) {
   _settingsActiveTab = tab;
-  ['library','display','music','queue'].forEach(t => {
+  ['library','display','music','queue','online'].forEach(t => {
     const btn     = document.getElementById(`stab-${t}`);
     const content = document.getElementById(`stab-${t}-content`);
     const active  = t === tab;
@@ -1734,6 +1909,18 @@ function clearVenueImage() {
   _applyIdleBg('');
   broadcast({ type: 'venue_path', path: '' });
   api.setSetting('venue_image_path', '').catch(() => {});
+}
+
+async function browseYtCookiesFile() {
+  const p = await api.openCookiesFileDialog();
+  if (!p) return;
+  document.getElementById('set-yt-cookies-file').value = p;
+  autoSave('youtube_cookies_file', p);
+}
+
+function clearYtCookiesFile() {
+  document.getElementById('set-yt-cookies-file').value = '';
+  autoSave('youtube_cookies_file', '');
 }
 
 async function browseBgMusicDir() {
@@ -2584,6 +2771,179 @@ async function checkSessionRestore() {
 }
 
 checkSessionRestore();
+
+// ── Relay (remote song requests) ─────────────────────────────────────────────
+let _relayPublicUrl  = '';
+let _relayQrDataUrl  = '';
+
+function _applyIdleConfig() {
+  const text      = document.getElementById('set-idle-text')?.value || '';
+  const showText  = document.getElementById('set-idle-show-text')?.checked ?? true;
+  const showQr    = (document.getElementById('set-idle-show-qr')?.checked ?? true) && !!_relayQrDataUrl;
+  const textColor = document.getElementById('set-idle-text-color')?.value || '#ffffff';
+  const textSize  = parseFloat(document.getElementById('set-idle-text-size')?.value || '1.8');
+
+  const defEl   = document.getElementById('player-idle-default');
+  const qrWrap  = document.getElementById('player-idle-qr');
+  const custEl  = document.getElementById('player-idle-custom-text');
+  const qrBox   = document.getElementById('player-idle-qr-box');
+  if (!defEl || !qrWrap) return;
+
+  if (showQr || showText) {
+    custEl.style.display  = showText ? '' : 'none';
+    custEl.textContent    = text;
+    custEl.style.color    = textColor;
+    custEl.style.fontSize = textSize + 'rem';
+    qrBox.style.display   = showQr ? 'flex' : 'none';
+    if (showQr) {
+      document.getElementById('player-idle-qr-img').src = _relayQrDataUrl;
+      document.getElementById('player-idle-qr-url').textContent = _relayPublicUrl;
+    }
+    defEl.style.display  = 'none';
+    qrWrap.style.display = 'flex';
+  } else {
+    document.getElementById('player-idle-text').textContent = 'No song playing';
+    qrWrap.style.display = 'none';
+    defEl.style.display  = '';
+  }
+}
+
+async function _broadcastIdleConfig() {
+  const text      = document.getElementById('set-idle-text')?.value || '';
+  const showText  = document.getElementById('set-idle-show-text')?.checked ?? true;
+  const showQr    = document.getElementById('set-idle-show-qr')?.checked ?? true;
+  const textColor = document.getElementById('set-idle-text-color')?.value || '#ffffff';
+  const textSize  = parseFloat(document.getElementById('set-idle-text-size')?.value || '1.8');
+  const qrUrl     = _relayQrDataUrl;
+  api.broadcast({ type: 'idle_config', text, showText, showQr: showQr && !!qrUrl, qrDataUrl: qrUrl, url: _relayPublicUrl, textColor, textSize });
+  _applyIdleConfig();
+}
+
+async function _relayLoadTab() {
+  const cfg    = await window.api.relayGetConfig();
+  const status = await window.api.relayStatus();
+
+  const enabledEl   = document.getElementById('relay-enabled-toggle');
+  const venueNameEl = document.getElementById('relay-venue-name');
+  const serverUrlEl = document.getElementById('relay-server-url');
+  const venueIdEl   = document.getElementById('relay-venue-id');
+
+  if (enabledEl)   enabledEl.checked       = cfg.enabled;
+  if (venueNameEl) venueNameEl.value        = cfg.venueName || '';
+  if (serverUrlEl) serverUrlEl.value        = cfg.serverUrl || '';
+  if (venueIdEl)   venueIdEl.value          = cfg.venueId   || '';
+
+  _relayApplyStatus(status);
+}
+
+function _relayApplyStatus(status) {
+  const statusCard = document.getElementById('relay-status-card');
+  const dot        = document.getElementById('relay-status-dot');
+  const txt        = document.getElementById('relay-status-text');
+  const urlInput   = document.getElementById('relay-public-url');
+  const qrImg      = document.getElementById('relay-qr-img');
+  const enabledEl  = document.getElementById('relay-enabled-toggle');
+
+  const enabled = enabledEl?.checked;
+  if (statusCard) statusCard.style.display = enabled ? 'flex' : 'none';
+  if (!enabled) return;
+
+  const connected = status?.connected;
+  if (dot) dot.style.background = connected ? '#22c55e' : '#ef4444';
+  if (txt) txt.textContent       = connected ? 'Connected' : 'Connecting…';
+
+  if (connected && status.url) {
+    _relayPublicUrl = status.url;
+    if (urlInput) urlInput.value = status.url;
+    window.api.relayQrCode(status.url).then(dataUrl => {
+      if (qrImg) { qrImg.src = dataUrl; qrImg.style.display = 'block'; }
+      _relayQrDataUrl = dataUrl;
+      _broadcastIdleConfig();
+    });
+  } else {
+    _relayPublicUrl = '';
+    _relayQrDataUrl = '';
+    if (urlInput) urlInput.value = '';
+    if (qrImg)    qrImg.style.display = 'none';
+    _broadcastIdleConfig();
+  }
+}
+
+function _relayToggleEnabled(enabled) {
+  window.api.relaySetConfig({ enabled });
+  const statusCard = document.getElementById('relay-status-card');
+  if (statusCard) statusCard.style.display = enabled ? 'flex' : 'none';
+  if (!enabled) {
+    const dot = document.getElementById('relay-status-dot');
+    const txt = document.getElementById('relay-status-text');
+    if (dot) dot.style.background = '#ef4444';
+    if (txt) txt.textContent = 'Disconnected';
+  }
+}
+
+function _relayCopyUrl() {
+  if (_relayPublicUrl) { navigator.clipboard.writeText(_relayPublicUrl); toast('URL copied'); }
+}
+
+function _relaycopyvenueid() {
+  const v = document.getElementById('relay-venue-id')?.value;
+  if (v) { navigator.clipboard.writeText(v); toast('Venue ID copied'); }
+}
+
+// Listen for relay status changes from main process
+window.api.onRelayStatus(status => _relayApplyStatus(status));
+
+// On load: sync idle config (player may already be open)
+window.api.relayStatus().then(status => {
+  if (status?.connected && status.url) {
+    window.api.relayQrCode(status.url).then(dataUrl => {
+      _relayPublicUrl = status.url;
+      _relayQrDataUrl = dataUrl;
+      // Wait briefly for settings to be available
+      api.getSettings().then(s => {
+        document.getElementById('set-idle-text').value     = s.idle_text || '';
+        document.getElementById('set-idle-show-text').checked = s.idle_show_text !== 'false';
+        document.getElementById('set-idle-show-qr').checked = s.idle_show_qr !== 'false';
+        _broadcastIdleConfig();
+      });
+    });
+  }
+}).catch(() => {});
+
+// Listen for incoming song requests
+window.api.onRelayRequest(req => {
+  const singer = req.singerName || '';
+  const song   = req.songTitle  || '';
+  const artist = req.artist     ? ` – ${req.artist}` : '';
+  const msg    = `${singer} wants: ${song}${artist}`;
+  toast(`🎤 ${msg}`, 'info');
+});
+
+// Patch switchSettingsTab to lazy-load Online tab
+const _origSwitchSettingsTab = switchSettingsTab;
+switchSettingsTab = function(tab) {
+  _origSwitchSettingsTab(tab);
+  if (tab === 'online') { _relayLoadTab(); _loadPotStatus(); }
+};
+
+async function _loadPotStatus() {
+  const dot  = document.getElementById('pot-status-dot');
+  const text = document.getElementById('pot-status-text');
+  if (!dot || !text) return;
+  const s = await window.api.potStatus().catch(() => null);
+  const reasons = {
+    'already-running': ['#22c55e', 'Active — bypassing the bot check'],
+    'started':          ['#22c55e', 'Active — bypassing the bot check'],
+    'not-started':      ['#6b7280', 'Starting…'],
+    'node-not-found':   ['#ef4444', 'Inactive — Node.js not found on this machine'],
+    'npm-install-failed': ['#ef4444', 'Inactive — one-time setup failed (check internet connection)'],
+    'plugin-install-failed': ['#ef4444', 'Inactive — could not install yt-dlp plugin'],
+    'start-timeout':    ['#ef4444', 'Inactive — server did not start in time'],
+  };
+  const [color, label] = reasons[s?.reason] || ['#6b7280', 'Unknown'];
+  dot.style.background = color;
+  text.textContent = label;
+}
 </script>
 </body>
 </html>

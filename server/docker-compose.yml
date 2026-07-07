@@ -1,0 +1,9 @@
+services:
+  karaoke-relay:
+    build: .
+    container_name: karaoke-relay
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - PUBLIC_HOST=89.167.78.11:3000

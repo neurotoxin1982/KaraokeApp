@@ -1,10 +1,10 @@
 const { app, BrowserWindow, ipcMain, dialog, protocol, net } = require('electron');
-const path = require('path');
-const fs   = require('fs');
+const path   = require('path');
+const fs     = require('fs');
+const crypto = require('crypto');
 
 // Disable GPU sandbox issues on some Windows systems
 app.commandLine.appendSwitch('--disable-gpu-sandbox');
-
 
 let mainWindow = null;
 let playerWindow = null;
@@ -13,6 +13,7 @@ let scanner = null;
 let networkPlayer = null;
 let requestServer = null;
 let queueManager  = null;
+let relayClient   = null;
 
 // ── Protocol: serve local files as localfile:// ───────────────────────────────
 const MIME_TYPES = {
@@ -75,6 +76,9 @@ app.whenReady().then(async () => {
   networkPlayer = require('./src/network-player');
   requestServer = require('./src/request-server');
   await db.initialize();
+
+  // Best-effort background start; YouTube playback falls back gracefully if this never comes up.
+  require('./src/pot-server').ensure().catch(() => {});
   const QueueManager = require('./src/QueueManager');
   queueManager = new QueueManager(db);
 
@@ -91,9 +95,18 @@ app.whenReady().then(async () => {
 
   createMainWindow();
   setupIPC();
+  _initRelay();
 });
 
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
+app.on('before-quit', () => require('./src/pot-server').stop());
+
+function _ytCookieOpts() {
+  return {
+    file:    db.getSetting('youtube_cookies_file'),
+    browser: db.getSetting('youtube_cookies_browser'),
+  };
+}
 
 function _notifyQueueChanged() {
   if (mainWindow && !mainWindow.isDestroyed())
@@ -247,6 +260,17 @@ function setupIPC() {
     return r.canceled ? null : r.filePaths[0];
   });
 
+  // Cookies file picker (Netscape format, for yt-dlp)
+  ipcMain.handle('dialog:openCookiesFile', async () => {
+    const r = await dialog.showOpenDialog(mainWindow, {
+      properties: ['openFile'],
+      filters: [{ name: 'Cookies file', extensions: ['txt'] }]
+    });
+    return r.canceled ? null : r.filePaths[0];
+  });
+
+  ipcMain.handle('pot:status', () => require('./src/pot-server').status());
+
   // YouTube (yt-dlp)
   ipcMain.handle('youtube:ensure', async (event) => {
     const ytdlp = require('./src/ytdlp');
@@ -254,11 +278,11 @@ function setupIPC() {
   });
   ipcMain.handle('youtube:search', async (_, query) => {
     const ytdlp = require('./src/ytdlp');
-    return ytdlp.search(query);
+    return ytdlp.search(query, 10, _ytCookieOpts());
   });
   ipcMain.handle('youtube:stream', async (_, videoId) => {
     const ytdlp = require('./src/ytdlp');
-    return ytdlp.getStreamUrl(videoId);
+    return ytdlp.getStreamUrl(videoId, _ytCookieOpts());
   });
 
   // Player window
@@ -317,4 +341,99 @@ function setupIPC() {
     });
     networkPlayer.broadcast(msg);
   });
+
+  // ── Relay (remote song requests) ─────────────────────────────────────────────
+  ipcMain.handle('relay:status', () => relayClient?.getStatus() || { connected: false });
+
+  ipcMain.handle('relay:getConfig', () => {
+    const s = db.getSettings();
+    return {
+      enabled:   s.relay_enabled === 'true',
+      serverUrl: s.relay_server_url || 'ws://89.167.78.11:3000/ws',
+      venueId:   s.relay_venue_id  || '',
+      venueName: s.relay_venue_name || '',
+    };
+  });
+
+  ipcMain.handle('relay:setConfig', (_, cfg) => {
+    if (cfg.enabled   !== undefined) { db.setSetting('relay_enabled',    String(cfg.enabled)); relayClient?.setEnabled(cfg.enabled); }
+    if (cfg.serverUrl !== undefined)   db.setSetting('relay_server_url', cfg.serverUrl);
+    if (cfg.venueId   !== undefined)   db.setSetting('relay_venue_id',   cfg.venueId);
+    if (cfg.venueName !== undefined)   db.setSetting('relay_venue_name', cfg.venueName);
+    if (cfg.serverUrl || cfg.venueName) relayClient?.updateConfig(cfg);
+    return { ok: true };
+  });
+
+  ipcMain.handle('relay:qrcode', async (_, url) => {
+    const QRCode = require('qrcode');
+    return QRCode.toDataURL(url, { width: 256, margin: 2, color: { dark: '#fff', light: '#1f2937' } });
+  });
+}
+
+// ── Relay init ────────────────────────────────────────────────────────────────
+async function _initRelay() {
+  const settings = db.getSettings();
+  let venueId = settings.relay_venue_id;
+  if (!venueId) {
+    venueId = crypto.randomBytes(4).toString('hex');
+    db.setSetting('relay_venue_id', venueId);
+  }
+  relayClient = require('./src/relay-client');
+  relayClient.init(
+    {
+      enabled:   settings.relay_enabled === 'true',
+      serverUrl: settings.relay_server_url || 'ws://89.167.78.11:3000/ws',
+      venueId,
+      venueName: settings.relay_venue_name || 'My Karaoke Venue',
+    },
+    async (msg) => {
+      if (msg.type === 'search') {
+        const rows = db.searchSongs(msg.query || '', 20);
+        relayClient.send({
+          type:      'search-results',
+          requestId: msg.requestId,
+          results:   rows.map(s => ({ id: s.id, title: s.title, artist: s.artist || '' })),
+        });
+      } else if (msg.type === 'add-to-queue') {
+        const admission = queueManager.validateAdmission(msg.singerName || '');
+        if (!admission.allowed) {
+          relayClient.send({ type: 'add-to-queue-result', requestId: msg.requestId, ok: false, error: admission.reason });
+          return;
+        }
+        const result = db.addToQueue(msg.songId, msg.singerName);
+        if (queueManager.recalculateQueue()) _notifyQueueChanged();
+        relayClient.send({ type: 'add-to-queue-result', requestId: msg.requestId, ok: !!result, error: result?.error });
+        if (mainWindow && !mainWindow.isDestroyed())
+          mainWindow.webContents.send('relay-request', { ...msg, type: 'request' });
+      } else if (msg.type === 'youtube-search') {
+        try {
+          const ytdlp = require('./src/ytdlp');
+          const results = await ytdlp.search(msg.query || '', 8, _ytCookieOpts());
+          relayClient.send({ type: 'youtube-search-results', requestId: msg.requestId, results });
+        } catch (err) {
+          relayClient.send({ type: 'youtube-search-results', requestId: msg.requestId, results: [], error: err.message });
+        }
+      } else if (msg.type === 'add-youtube-to-queue') {
+        const { singerName, videoId, title, artist, duration } = msg;
+        const admission = queueManager.validateAdmission(singerName || '');
+        if (!admission.allowed) {
+          relayClient.send({ type: 'add-youtube-to-queue-result', requestId: msg.requestId, ok: false, error: admission.reason });
+          return;
+        }
+        const song   = db.importSong({ title, artist: artist || '', file_path: 'yt:' + videoId, file_format: 'youtube', duration: duration || 0 });
+        const result = db.addToQueue(song.id, singerName);
+        if (queueManager.recalculateQueue()) _notifyQueueChanged();
+        relayClient.send({ type: 'add-youtube-to-queue-result', requestId: msg.requestId, ok: !!result });
+        if (mainWindow && !mainWindow.isDestroyed())
+          mainWindow.webContents.send('relay-request', { type: 'request', singerName, songTitle: title, artist: artist || '' });
+      } else if (msg.type === 'request') {
+        if (mainWindow && !mainWindow.isDestroyed())
+          mainWindow.webContents.send('relay-request', msg);
+      }
+    },
+    (status) => {
+      if (mainWindow && !mainWindow.isDestroyed())
+        mainWindow.webContents.send('relay-status', status);
+    }
+  );
 }

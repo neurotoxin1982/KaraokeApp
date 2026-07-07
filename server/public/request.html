@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>Song Request</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { min-height: 100%; background: #111827; color: #f3f4f6; font-family: system-ui, -apple-system, sans-serif; }
+    .page { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; padding: 28px 16px 48px; }
+
+    .modal { background: #1f2937; border-radius: 14px; width: 100%; max-width: 440px; overflow: hidden; box-shadow: 0 8px 40px rgba(0,0,0,0.5); }
+    .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid #374151; }
+    .modal-title  { font-size: 1.1rem; font-weight: 700; color: #fff; }
+    .venue-badge  { font-size: .78rem; color: #7c3aed; font-weight: 600; }
+    .modal-body   { padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+
+    /* Tabs */
+    .tabs { display: flex; background: #111827; border-radius: 8px; padding: 3px; gap: 3px; }
+    .tab-btn {
+      flex: 1; padding: 8px 10px; border: none; border-radius: 6px;
+      font-size: .84rem; font-weight: 600; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 5px;
+      transition: background .15s, color .15s;
+    }
+    .tab-btn.active       { background: #7c3aed; color: #fff; }
+    .tab-btn:not(.active) { background: transparent; color: #9ca3af; }
+    .yt-icon { width: 16px; height: 11px; background: #ff0000; border-radius: 3px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .yt-icon::after { content: ''; border-left: 6px solid #fff; border-top: 4px solid transparent; border-bottom: 4px solid transparent; margin-left: 1px; }
+
+    /* Fields */
+    .field { display: flex; flex-direction: column; gap: 5px; }
+    .field label { font-size: .8rem; font-weight: 600; color: #9ca3af; }
+    .field input {
+      width: 100%; padding: 11px 13px; border-radius: 8px;
+      background: #111827; border: 1.5px solid #374151;
+      color: #f3f4f6; font-size: .95rem; outline: none;
+      transition: border-color .15s; -webkit-appearance: none;
+    }
+    .field input:focus { border-color: #7c3aed; }
+    .field input::placeholder { color: #4b5563; }
+
+    /* Results */
+    .results-wrap { display: none; flex-direction: column; gap: 4px; margin-top: -6px; }
+    .result-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 9px 11px; border-radius: 7px;
+      background: #111827; border: 1.5px solid transparent;
+      cursor: pointer; transition: border-color .1s, background .1s;
+    }
+    .result-item:hover  { border-color: #7c3aed; background: #1a2035; }
+    .result-item:active { background: #1e2845; }
+    .r-icon   { font-size: .9rem; color: #6b7280; flex-shrink: 0; }
+    .r-title  { font-size: .86rem; font-weight: 600; color: #fff; line-height: 1.3; }
+    .r-sub    { font-size: .74rem; color: #6b7280; margin-top: 1px; }
+    .r-hint   { font-size: .8rem; color: #4b5563; text-align: center; padding: 10px 0; }
+    /* YT thumbnail */
+    .r-thumb { width: 48px; height: 34px; border-radius: 4px; object-fit: cover; flex-shrink: 0; background: #374151; }
+
+    /* Selected chip */
+    .chip {
+      display: none; align-items: center; gap: 10px;
+      background: #1a2035; border: 1.5px solid #7c3aed;
+      border-radius: 8px; padding: 9px 13px;
+    }
+    .chip-text { flex: 1; overflow: hidden; }
+    .chip-title  { font-size: .88rem; font-weight: 600; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .chip-sub    { font-size: .74rem; color: #9ca3af; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .chip-x { background: none; border: none; color: #6b7280; font-size: 1rem; cursor: pointer; padding: 0 2px; flex-shrink: 0; }
+    .chip-x:hover { color: #ef4444; }
+
+    /* Manual link */
+    .manual-link { text-align: center; }
+    .manual-link button { background: none; border: none; color: #6b7280; font-size: .78rem; cursor: pointer; text-decoration: underline; }
+    .manual-extra { display: none; flex-direction: column; gap: 10px; }
+
+    /* Footer */
+    .modal-footer { display: flex; gap: 10px; padding: 0 20px 20px; }
+    .btn-cancel {
+      flex: 1; padding: 12px; border: 1.5px solid #374151; border-radius: 8px;
+      background: none; color: #9ca3af; font-size: .93rem; font-weight: 600; cursor: pointer;
+    }
+    .btn-add {
+      flex: 2; padding: 12px; border: none; border-radius: 8px;
+      background: #7c3aed; color: #fff; font-size: .93rem; font-weight: 700;
+      cursor: pointer; transition: background .15s, transform .1s;
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+    }
+    .btn-add:active   { transform: scale(.98); }
+    .btn-add:disabled { background: #374151; color: #6b7280; cursor: not-allowed; transform: none; }
+
+    /* Success */
+    #success-view { display: none; text-align: center; padding: 32px 24px; }
+    #success-view.show { display: block; }
+    .form-wrap.hide { display: none; }
+    .check { font-size: 3rem; margin-bottom: 12px; }
+    #success-view h2 { font-size: 1.15rem; font-weight: 700; color: #fff; margin-bottom: 8px; }
+    #success-view p  { color: #9ca3af; font-size: .87rem; line-height: 1.5; margin-bottom: 20px; }
+    .btn-another { padding: 10px 22px; border: 1.5px solid #374151; border-radius: 8px; background: none; color: #d1d5db; font-size: .87rem; cursor: pointer; }
+
+    /* Offline */
+    #offline-view { display: none; text-align: center; padding: 32px 20px; }
+    #offline-view h2 { color: #fff; font-size: 1.05rem; font-weight: 600; margin-bottom: 8px; }
+    #offline-view p  { color: #6b7280; font-size: .84rem; line-height: 1.5; }
+  </style>
+</head>
+<body>
+<div class="page">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">Add to Queue</span>
+      <span class="venue-badge" id="venue-name">…</span>
+    </div>
+
+    <div id="offline-view">
+      <div style="font-size:2rem;margin-bottom:12px">📡</div>
+      <h2>Venue Offline</h2>
+      <p>The karaoke system is not connected.<br>Try again in a moment.</p>
+    </div>
+
+    <div class="form-wrap" id="form-wrap">
+      <div class="modal-body">
+
+        <!-- Tabs -->
+        <div class="tabs">
+          <button class="tab-btn active" id="tab-local" onclick="_switchTab('local')">
+            🎵 Local
+          </button>
+          <button class="tab-btn" id="tab-yt" onclick="_switchTab('yt')">
+            <span class="yt-icon"></span> YouTube
+          </button>
+        </div>
+
+        <!-- ── LOCAL tab ────────────────────────────────────────────────── -->
+        <div id="pane-local">
+          <div class="field">
+            <label>Song</label>
+            <input id="local-search" type="search" placeholder="Search title or artist…"
+              autocomplete="off" oninput="_localSearch()" onfocus="_localSearch()">
+          </div>
+          <div class="results-wrap" id="local-results"></div>
+          <div class="chip" id="local-chip">
+            <span class="r-icon">🎵</span>
+            <div class="chip-text">
+              <div class="chip-title"  id="lchip-title"></div>
+              <div class="chip-sub"    id="lchip-artist"></div>
+            </div>
+            <button type="button" class="chip-x" onclick="_localClear()">✕</button>
+          </div>
+          <div class="manual-link" id="local-manual-link" style="display:none">
+            <button type="button" onclick="_toggleManual()">Song not found? Enter manually</button>
+          </div>
+          <div class="manual-extra" id="local-manual-extra">
+            <div class="field">
+              <label>Song Title</label>
+              <input id="man-title" type="text" placeholder="e.g. Bohemian Rhapsody" oninput="_updateBtn()">
+            </div>
+            <div class="field">
+              <label>Artist <span style="font-weight:400;color:#4b5563">(optional)</span></label>
+              <input id="man-artist" type="text" placeholder="e.g. Queen">
+            </div>
+          </div>
+        </div>
+
+        <!-- ── YOUTUBE tab ──────────────────────────────────────────────── -->
+        <div id="pane-yt" style="display:none">
+          <div class="field">
+            <label>Song</label>
+            <input id="yt-search" type="search" placeholder="Search title or artist…"
+              autocomplete="off" oninput="_ytSearch()" onfocus="_ytSearch()">
+          </div>
+          <div class="results-wrap" id="yt-results"></div>
+          <div class="chip" id="yt-chip">
+            <img class="r-thumb" id="ychip-thumb" src="" alt="">
+            <div class="chip-text">
+              <div class="chip-title" id="ychip-title"></div>
+              <div class="chip-sub"   id="ychip-uploader"></div>
+            </div>
+            <button type="button" class="chip-x" onclick="_ytClear()">✕</button>
+          </div>
+        </div>
+
+        <!-- Singer name (always shown) -->
+        <div class="field">
+          <label>Singer name</label>
+          <input id="singer-name" type="text" placeholder="Enter name…"
+            autocomplete="given-name" oninput="_updateBtn()">
+        </div>
+
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn-cancel" onclick="window.history.back()">Cancel</button>
+        <button class="btn-add" id="btn-add" disabled onclick="_submit()">Add to Queue</button>
+      </div>
+    </div>
+
+    <div id="success-view">
+      <div class="check">✅</div>
+      <h2 id="success-title">Added to Queue!</h2>
+      <p>Your song is in the queue.<br>Get ready to sing!</p>
+      <button class="btn-another" onclick="_reset()">Request Another Song</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const venueId = location.pathname.split('/')[2];
+
+  let _tab       = 'local';
+  let _localSong = null;   // { id, title, artist }
+  let _ytSong    = null;   // { id, title, uploader, thumbnail, duration }
+  let _manual    = false;
+  let _lTimer    = null, _lLastQ = '';
+  let _yTimer    = null, _yLastQ = '';
+
+  // ── Venue info ──────────────────────────────────────────────────────────────
+  fetch(`/v/${venueId}/info`)
+    .then(r => r.json())
+    .then(d => {
+      if (!d.online) {
+        document.getElementById('form-wrap').style.display = 'none';
+        document.getElementById('offline-view').style.display = 'block';
+        document.getElementById('venue-name').textContent = 'Offline';
+      } else {
+        document.getElementById('venue-name').textContent = d.name;
+      }
+    })
+    .catch(() => {});
+
+  // ── Tabs ─────────────────────────────────────────────────────────────────
+  function _switchTab(tab) {
+    _tab = tab;
+    document.getElementById('tab-local').classList.toggle('active', tab === 'local');
+    document.getElementById('tab-yt').classList.toggle('active', tab === 'yt');
+    document.getElementById('pane-local').style.display = tab === 'local' ? '' : 'none';
+    document.getElementById('pane-yt').style.display    = tab === 'yt'    ? '' : 'none';
+    _updateBtn();
+  }
+
+  // ── LOCAL search ────────────────────────────────────────────────────────────
+  function _localSearch() {
+    const q = document.getElementById('local-search').value.trim();
+    if (q === _lLastQ) return;
+    _lLastQ = q;
+    clearTimeout(_lTimer);
+    if (q.length < 2) { _hideLocal(); return; }
+    _show('local-results', '<div class="r-hint">Searching…</div>');
+    _lTimer = setTimeout(() => _doLocal(q), 280);
+  }
+
+  async function _doLocal(q) {
+    try {
+      const r = await fetch(`/v/${venueId}/search?q=${encodeURIComponent(q)}`);
+      const songs = await r.json();
+      if (!songs.length) {
+        _show('local-results',
+          '<div class="r-hint">No results</div>');
+        document.getElementById('local-manual-link').style.display = 'block';
+        return;
+      }
+      document.getElementById('local-results').innerHTML = songs.map(s => `
+        <div class="result-item" onclick="_localPick(${_attr(s)})">
+          <span class="r-icon">🎵</span>
+          <div>
+            <div class="r-title">${_e(s.title)}</div>
+            ${s.artist ? `<div class="r-sub">${_e(s.artist)}</div>` : ''}
+          </div>
+        </div>
+      `).join('') + `<div class="r-hint" style="font-size:.73rem">Not here? <button style="background:none;border:none;color:#7c3aed;cursor:pointer;font-size:.73rem;text-decoration:underline" onclick="_toggleManual()">Enter manually</button></div>`;
+      document.getElementById('local-results').style.display = 'flex';
+      _updateBtn();
+    } catch {
+      _show('local-results', '<div class="r-hint">Search unavailable</div>');
+    }
+  }
+
+  function _hideLocal() {
+    document.getElementById('local-results').style.display = 'none';
+    document.getElementById('local-results').innerHTML = '';
+    if (!_localSong && !_manual)
+      document.getElementById('local-manual-link').style.display = 'none';
+    _updateBtn();
+  }
+
+  function _localPick(song) {
+    _localSong = song;
+    _manual = false;
+    document.getElementById('lchip-title').textContent  = song.title;
+    document.getElementById('lchip-artist').textContent = song.artist || '';
+    document.getElementById('local-chip').style.display = 'flex';
+    document.getElementById('local-search').closest('.field').style.display = 'none';
+    document.getElementById('local-results').style.display = 'none';
+    document.getElementById('local-manual-link').style.display = 'none';
+    document.getElementById('local-manual-extra').style.display = 'none';
+    _updateBtn();
+    document.getElementById('singer-name').focus();
+  }
+
+  function _localClear() {
+    _localSong = null;
+    document.getElementById('local-chip').style.display = 'none';
+    document.getElementById('local-search').closest('.field').style.display = '';
+    document.getElementById('local-search').value = '';
+    _lLastQ = '';
+    _updateBtn();
+    document.getElementById('local-search').focus();
+  }
+
+  function _toggleManual() {
+    _manual = !_manual;
+    document.getElementById('local-manual-extra').style.display = _manual ? 'flex' : 'none';
+    if (_manual) document.getElementById('local-manual-link').style.display = 'none';
+    _updateBtn();
+  }
+
+  // ── YOUTUBE search ──────────────────────────────────────────────────────────
+  function _ytSearch() {
+    const q = document.getElementById('yt-search').value.trim();
+    if (q === _yLastQ) return;
+    _yLastQ = q;
+    clearTimeout(_yTimer);
+    if (q.length < 2) { _hideYt(); return; }
+    _show('yt-results', '<div class="r-hint">Searching YouTube…</div>');
+    _yTimer = setTimeout(() => _doYt(q), 400);
+  }
+
+  async function _doYt(q) {
+    try {
+      const r = await fetch(`/v/${venueId}/youtube-search?q=${encodeURIComponent(q)}`);
+      const vids = await r.json();
+      if (!vids.length) { _show('yt-results', '<div class="r-hint">No results</div>'); return; }
+      document.getElementById('yt-results').innerHTML = vids.map(v => `
+        <div class="result-item" onclick="_ytPick(${_attr(v)})">
+          <img class="r-thumb" src="${_e(v.thumbnail)}" alt="" loading="lazy" onerror="this.style.display='none'">
+          <div style="flex:1;overflow:hidden">
+            <div class="r-title" style="white-space:normal;line-height:1.3">${_e(v.title)}</div>
+            <div class="r-sub">${_e(v.uploader)}${v.duration ? ' · ' + _dur(v.duration) : ''}</div>
+          </div>
+        </div>
+      `).join('');
+      document.getElementById('yt-results').style.display = 'flex';
+      _updateBtn();
+    } catch {
+      _show('yt-results', '<div class="r-hint">YouTube search unavailable</div>');
+    }
+  }
+
+  function _hideYt() {
+    document.getElementById('yt-results').style.display = 'none';
+    document.getElementById('yt-results').innerHTML = '';
+    _updateBtn();
+  }
+
+  function _ytPick(v) {
+    _ytSong = v;
+    document.getElementById('ychip-thumb').src         = v.thumbnail || '';
+    document.getElementById('ychip-title').textContent = v.title;
+    document.getElementById('ychip-uploader').textContent = v.uploader || '';
+    document.getElementById('yt-chip').style.display   = 'flex';
+    document.getElementById('yt-search').closest('.field').style.display = 'none';
+    document.getElementById('yt-results').style.display = 'none';
+    _updateBtn();
+    document.getElementById('singer-name').focus();
+  }
+
+  function _ytClear() {
+    _ytSong = null;
+    document.getElementById('yt-chip').style.display = 'none';
+    document.getElementById('yt-search').closest('.field').style.display = '';
+    document.getElementById('yt-search').value = '';
+    _yLastQ = '';
+    _updateBtn();
+    document.getElementById('yt-search').focus();
+  }
+
+  // ── Shared ──────────────────────────────────────────────────────────────────
+  function _updateBtn() {
+    const name = document.getElementById('singer-name').value.trim();
+    let hasSong = false;
+    if (_tab === 'local') hasSong = !!_localSong || (_manual && document.getElementById('man-title').value.trim());
+    if (_tab === 'yt')    hasSong = !!_ytSong;
+    document.getElementById('btn-add').disabled = !(name && hasSong);
+  }
+
+  function _show(id, html) {
+    const el = document.getElementById(id);
+    el.innerHTML = html;
+    el.style.display = 'flex';
+  }
+
+  function _dur(s) {
+    const m = Math.floor(s / 60), sec = Math.floor(s % 60);
+    return m + ':' + String(sec).padStart(2, '0');
+  }
+
+  // ── Submit ──────────────────────────────────────────────────────────────────
+  async function _submit() {
+    const btn        = document.getElementById('btn-add');
+    const singerName = document.getElementById('singer-name').value.trim();
+    btn.disabled = true; btn.textContent = 'Adding…';
+
+    try {
+      let res, data;
+
+      if (_tab === 'yt' && _ytSong) {
+        res = await fetch(`/v/${venueId}/youtube-queue`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ videoId: _ytSong.id, singerName, title: _ytSong.title, artist: _ytSong.uploader, duration: _ytSong.duration }),
+        });
+      } else if (_localSong) {
+        res = await fetch(`/v/${venueId}/queue`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ songId: _localSong.id, singerName, songTitle: _localSong.title, artist: _localSong.artist }),
+        });
+      } else {
+        res = await fetch(`/v/${venueId}/request`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ singerName, songTitle: document.getElementById('man-title').value.trim(), artist: document.getElementById('man-artist').value.trim() }),
+        });
+        document.getElementById('success-title').textContent = 'Request Sent!';
+      }
+
+      data = await res.json();
+      if (data.ok) {
+        document.getElementById('form-wrap').classList.add('hide');
+        document.getElementById('success-view').classList.add('show');
+      } else {
+        throw new Error(data.error || 'Unknown error');
+      }
+    } catch (err) {
+      alert('Error: ' + err.message);
+      btn.disabled = false; btn.textContent = 'Add to Queue';
+      _updateBtn();
+    }
+  }
+
+  function _reset() {
+    _localSong = null; _ytSong = null; _manual = false; _lLastQ = ''; _yLastQ = '';
+    ['local-search','yt-search','singer-name','man-title','man-artist'].forEach(id => {
+      const el = document.getElementById(id); if (el) el.value = '';
+    });
+    document.getElementById('local-chip').style.display   = 'none';
+    document.getElementById('yt-chip').style.display      = 'none';
+    document.getElementById('local-search').closest('.field').style.display = '';
+    document.getElementById('yt-search').closest('.field').style.display    = '';
+    document.getElementById('local-results').style.display = 'none';
+    document.getElementById('yt-results').style.display    = 'none';
+    document.getElementById('local-manual-extra').style.display = 'none';
+    document.getElementById('local-manual-link').style.display  = 'none';
+    document.getElementById('form-wrap').classList.remove('hide');
+    document.getElementById('success-view').classList.remove('show');
+    document.getElementById('success-title').textContent = 'Added to Queue!';
+    document.getElementById('btn-add').textContent = 'Add to Queue';
+    _switchTab('local');
+    _updateBtn();
+  }
+
+  function _attr(s) { return JSON.stringify(s).replace(/"/g, '&quot;'); }
+  function _e(s)    { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+</script>
+</body>
+</html>

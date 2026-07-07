@@ -49,11 +49,39 @@
       position: absolute; inset: 0;
       display: flex; flex-direction: column; align-items: center; justify-content: center;
       color: #4b5563;
-      gap: 16px;
+      gap: 20px;
       overflow: hidden;
     }
     #idle-screen .logo { font-size: 3rem; position: relative; }
-    #idle-screen p { font-size: 1.1rem; position: relative; text-shadow: 0 1px 6px #000; }
+    #idle-default p { font-size: 1.1rem; position: relative; text-shadow: 0 1px 6px #000; }
+
+    /* QR layout — text pinned top, QR pinned bottom */
+    #idle-qr-wrap {
+      display: none;
+      position: absolute; inset: 0; z-index: 1;
+    }
+    #idle-custom-text {
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      padding: 14px 40px;
+      font-weight: 700;
+      color: #fff; text-shadow: 0 2px 12px rgba(0,0,0,.8);
+      text-align: center;
+    }
+    #idle-qr-bottom {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      display: flex; flex-direction: column; align-items: center;
+      padding: 6px 0 10px; gap: 3px;
+    }
+    #idle-qr-img {
+      height: clamp(70px, 13vw, 110px); width: auto;
+      aspect-ratio: 1 / 1;
+      border-radius: 10px; image-rendering: pixelated;
+    }
+    #idle-qr-sub {
+      font-size: clamp(.55rem, 1.1vw, .8rem); color: #9ca3af; text-align: center;
+    }
   </style>
 </head>
 <body>
@@ -71,8 +99,19 @@
 
 <div id="idle-screen">
   <img id="idle-bg" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:none;z-index:0">
-  <div id="idle-icon" class="logo">🎤</div>
-  <p id="idle-text">Waiting for next song…</p>
+  <!-- Default (no QR) -->
+  <div id="idle-default">
+    <div class="logo">🎤</div>
+    <p id="idle-text" style="margin-top:16px">Waiting for next song…</p>
+  </div>
+  <!-- QR + custom text — text pinned top / QR pinned bottom -->
+  <div id="idle-qr-wrap" style="display:none;position:absolute;inset:0;z-index:1;">
+    <p id="idle-custom-text" style="position:absolute;top:0;left:0;right:0;margin:0;padding:14px 40px;font-weight:700;color:#fff;text-shadow:0 2px 12px rgba(0,0,0,.8);text-align:center;font-size:1.8rem;"></p>
+    <div id="idle-qr-bottom" style="position:absolute;bottom:0;left:0;right:0;display:flex;flex-direction:column;align-items:center;padding:6px 0 10px;gap:3px;">
+      <img id="idle-qr-img" src="" alt="QR Code" style="height:clamp(70px,13vw,110px);width:auto;aspect-ratio:1/1;border-radius:10px;image-rendering:pixelated;">
+      <p id="idle-qr-sub" style="margin:0;font-size:clamp(.55rem,1.1vw,.8rem);color:#9ca3af;text-align:center;"></p>
+    </div>
+  </div>
 </div>
 
 <!-- Between-song transition -->
@@ -210,6 +249,36 @@ function getPos() {
 // ── IPC broadcast (Electron) ──────────────────────────────────────────────────
 api.onBroadcast((msg) => {
   switch (msg.type) {
+
+    case 'idle_config': {
+      const defaultEl  = document.getElementById('idle-default');
+      const qrWrap     = document.getElementById('idle-qr-wrap');
+      const qrImg      = document.getElementById('idle-qr-img');
+      const customText = document.getElementById('idle-custom-text');
+      const qrBottom   = document.getElementById('idle-qr-bottom');
+      const qrSub      = document.getElementById('idle-qr-sub');
+      const idleText   = document.getElementById('idle-text');
+      const showQr     = !!(msg.showQr && msg.qrDataUrl);
+      const showText   = msg.showText !== false;
+      if (showQr || showText) {
+        qrWrap.style.display      = 'flex';
+        customText.style.display  = showText ? '' : 'none';
+        customText.textContent    = msg.text || '';
+        customText.style.color    = msg.textColor || '#fff';
+        customText.style.fontSize = msg.textSize ? (msg.textSize + 'rem') : '1.8rem';
+        if (qrBottom) qrBottom.style.display = showQr ? 'flex' : 'none';
+        if (showQr) {
+          qrImg.src         = msg.qrDataUrl;
+          qrSub.textContent = msg.url || '';
+        }
+        defaultEl.style.display = 'none';
+      } else {
+        idleText.textContent = 'Waiting for next song…';
+        qrWrap.style.display    = 'none';
+        defaultEl.style.display = '';
+      }
+      break;
+    }
 
     case 'song_info': {
       document.getElementById('song-title').textContent  = msg.title  || '';

@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>Karaoke — Find Your Venue</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { min-height: 100%; background: #0f1117; color: #f3f4f6; font-family: system-ui, -apple-system, sans-serif; }
+
+    .page { min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 40px 20px 60px; }
+
+    .header { text-align: center; margin-bottom: 32px; }
+    .header .icon { font-size: 3rem; margin-bottom: 12px; }
+    .header h1 { font-size: 1.6rem; font-weight: 700; color: #fff; }
+    .header p  { color: #6b7280; font-size: .9rem; margin-top: 6px; }
+
+    .search-wrap { width: 100%; max-width: 440px; margin-bottom: 20px; position: relative; }
+    .search-wrap input {
+      width: 100%; padding: 13px 16px 13px 42px;
+      border-radius: 12px; border: 1.5px solid #374151;
+      background: #1f2937; color: #f3f4f6; font-size: 1rem;
+      outline: none; -webkit-appearance: none;
+      transition: border-color .15s;
+    }
+    .search-wrap input:focus { border-color: #7c3aed; }
+    .search-wrap input::placeholder { color: #4b5563; }
+    .search-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); font-size: 1rem; color: #6b7280; pointer-events: none; }
+
+    .venue-list { width: 100%; max-width: 440px; display: flex; flex-direction: column; gap: 10px; }
+
+    .venue-card {
+      background: #1f2937; border-radius: 14px; padding: 18px 20px;
+      display: flex; align-items: center; justify-content: space-between;
+      cursor: pointer; text-decoration: none; color: inherit;
+      border: 1.5px solid transparent;
+      transition: border-color .15s, background .15s, transform .1s;
+    }
+    .venue-card:hover  { border-color: #7c3aed; background: #263041; }
+    .venue-card:active { transform: scale(.98); }
+
+    .venue-info { display: flex; align-items: center; gap: 14px; }
+    .venue-dot  { width: 10px; height: 10px; border-radius: 50%; background: #22c55e; flex-shrink: 0; }
+    .venue-name { font-size: 1rem; font-weight: 600; color: #fff; }
+
+    .venue-arrow { color: #7c3aed; font-size: 1.1rem; }
+
+    .empty { text-align: center; color: #4b5563; padding: 40px 0; }
+    .empty .empty-icon { font-size: 2.5rem; margin-bottom: 12px; }
+    .empty p { font-size: .9rem; line-height: 1.6; }
+
+    .loading { text-align: center; color: #4b5563; padding: 30px; font-size: .9rem; }
+
+    .refresh-hint { margin-top: 24px; font-size: .75rem; color: #374151; text-align: center; }
+  </style>
+</head>
+<body>
+<div class="page">
+  <div class="header">
+    <div class="icon">🎤</div>
+    <h1>Karaoke Night</h1>
+    <p>Find your venue and request a song</p>
+  </div>
+
+  <div class="search-wrap">
+    <span class="search-icon">🔍</span>
+    <input type="search" id="search" placeholder="Search venue…" oninput="filterVenues()" autocomplete="off">
+  </div>
+
+  <div class="venue-list" id="venue-list">
+    <div class="loading">Loading venues…</div>
+  </div>
+
+  <div class="refresh-hint" id="refresh-hint"></div>
+</div>
+
+<script>
+  let _allVenues = [];
+
+  async function loadVenues() {
+    try {
+      const r = await fetch('/venues');
+      _allVenues = await r.json();
+      renderVenues(_allVenues);
+      document.getElementById('refresh-hint').textContent =
+        'Refreshes every 10 seconds · ' + new Date().toLocaleTimeString();
+    } catch {
+      document.getElementById('venue-list').innerHTML =
+        '<div class="empty"><div class="empty-icon">⚠️</div><p>Could not load venues.<br>Check your connection.</p></div>';
+    }
+  }
+
+  function filterVenues() {
+    const q = document.getElementById('search').value.toLowerCase().trim();
+    renderVenues(q ? _allVenues.filter(v => v.name.toLowerCase().includes(q)) : _allVenues);
+  }
+
+  function renderVenues(list) {
+    const el = document.getElementById('venue-list');
+    if (list.length === 0) {
+      el.innerHTML = '<div class="empty"><div class="empty-icon">📡</div>' +
+        '<p>No venues online right now.<br>Ask the host to start the karaoke system.</p></div>';
+      return;
+    }
+    el.innerHTML = list.map(v => `
+      <a class="venue-card" href="/v/${encodeURIComponent(v.id)}">
+        <div class="venue-info">
+          <span class="venue-dot"></span>
+          <span class="venue-name">${escHtml(v.name)}</span>
+        </div>
+        <span class="venue-arrow">›</span>
+      </a>
+    `).join('');
+  }
+
+  function escHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  loadVenues();
+  setInterval(loadVenues, 10000);
+</script>
+</body>
+</html>
