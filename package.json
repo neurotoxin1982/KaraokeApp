@@ -5,7 +5,9 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "build": "electron-builder --win --x64"
+    "build": "electron-builder --win --x64",
+    "build:win": "electron-builder --win --x64",
+    "build:mac": "electron-builder --mac"
   },
   "dependencies": {
     "better-sqlite3": "^12.10.0",
@@ -25,12 +27,26 @@
     "win": {
       "target": "nsis"
     },
+    "mac": {
+      "target": [
+        { "target": "dmg", "arch": ["x64", "arm64"] },
+        { "target": "zip", "arch": ["x64", "arm64"] }
+      ],
+      "category": "public.app-category.music",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false
+    },
     "files": [
       "renderer/**",
       "src/**",
       "main.js",
       "preload.js"
     ],
-    "extraResources": []
+    "extraResources": [],
+    "publish": {
+      "provider": "github",
+      "owner": "neurotoxin1982",
+      "repo": "KaraokeApp"
+    }
   }
 }

@@ -34,10 +34,20 @@ wss.on('connection', (ws) => {
     try { msg = JSON.parse(raw.toString()); } catch { return; }
 
     if (msg.type === 'register') {
+      // If this venueId was already claimed with a secret, a reconnect must prove
+      // it's the same venue — otherwise someone who just saw/guessed the venueId
+      // (it's public in the QR/URL) could hijack another venue's connection.
+      const existing = venues.get(msg.venueId);
+      if (existing && existing.secret && existing.secret !== msg.venueSecret) {
+        ws.send(JSON.stringify({ type: 'register-rejected', reason: 'secret-mismatch' }));
+        console.log(`[!] rejected registration for ${msg.venueId}: secret mismatch`);
+        return;
+      }
       venueId = msg.venueId;
       venues.set(venueId, {
         ws, name: msg.venueName || venueId, connectedAt: new Date(),
         sourcesEnabled: msg.sourcesEnabled || { local: true, youtube: true },
+        secret: msg.venueSecret || existing?.secret,
       });
       ws.send(JSON.stringify({
         type: 'registered',

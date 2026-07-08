@@ -36,8 +36,8 @@
 <nav>
   <a class="logo" href="#"><i class="fa-solid fa-microphone"></i> Karaoke</a>
   <div style="display:flex;align-items:center;gap:8px">
-    <button class="nav-btn" id="req-nav-btn" onclick="openRequestModal()" title="Singer Requests">
-      <i class="fa-solid fa-mobile-screen-button"></i> Requests
+    <button class="nav-btn" id="venue-online-btn" onclick="toggleVenueOnline()" title="Toggle whether singers can add songs remotely (local WiFi + online)">
+      <span id="venue-online-dot" style="width:8px;height:8px;border-radius:50%;display:inline-block;vertical-align:middle;margin-right:7px;background:#22c55e"></span><span id="venue-online-label" style="vertical-align:middle">Online</span>
     </button>
     <button class="nav-btn" onclick="openSettings()"><i class="fa-solid fa-gear"></i> Settings</button>
   </div>
@@ -93,12 +93,16 @@
           <i id="player-idle-icon" class="fa-solid fa-microphone" style="font-size:5rem"></i>
           <p id="player-idle-text" style="font-size:1.1rem;text-shadow:0 1px 6px #000">No song playing</p>
         </div>
-        <!-- QR + custom text — text pinned top / QR pinned bottom -->
+        <!-- QR + custom text — text pinned top; QR box position/size set by JS -->
         <div id="player-idle-qr" style="display:none;position:absolute;inset:0;z-index:1;">
           <p id="player-idle-custom-text" style="position:absolute;top:0;left:0;right:0;margin:0;padding:14px 40px;font-weight:700;color:#fff;text-shadow:0 2px 8px rgba(0,0,0,.8);text-align:center;"></p>
-          <div id="player-idle-qr-box" style="position:absolute;bottom:0;left:0;right:0;display:flex;flex-direction:column;align-items:center;padding:6px 0 10px;gap:6px;">
-            <img id="player-idle-qr-img" src="" alt="QR" style="width:140px;height:140px;border-radius:10px;image-rendering:pixelated">
+          <div id="player-idle-qr-box-a" style="position:absolute;display:flex;flex-direction:column;align-items:center;padding:6px;gap:6px;">
+            <img id="player-idle-qr-img" src="" alt="QR" style="width:auto;border-radius:10px;image-rendering:pixelated">
             <p id="player-idle-qr-url" style="margin:0;font-size:.65rem;color:#9ca3af;max-width:200px;word-break:break-all;text-align:center;"></p>
+          </div>
+          <div id="player-idle-qr-box-b" style="display:none;position:absolute;flex-direction:column;align-items:center;padding:6px;gap:6px;">
+            <img id="player-idle-qr-img-b" src="" alt="QR" style="width:auto;border-radius:10px;image-rendering:pixelated">
+            <p id="player-idle-qr-url-b" style="margin:0;font-size:.65rem;color:#9ca3af;max-width:200px;word-break:break-all;text-align:center;"></p>
           </div>
         </div>
       </div>
@@ -294,10 +298,10 @@
 
 <!-- ── Settings Modal ────────────────────────────────────────────────── -->
 <div id="settings-modal" class="modal-overlay hidden">
-  <div class="modal" style="max-width:600px;max-height:85vh;display:flex;flex-direction:column;overflow:hidden">
+  <div id="settings-modal-box" class="modal" style="max-width:600px;max-height:85vh;display:flex;flex-direction:column;overflow:hidden">
 
-    <!-- Header -->
-    <div class="modal-header" style="flex-shrink:0">
+    <!-- Header (drag handle) -->
+    <div class="modal-header" id="settings-modal-drag-handle" style="flex-shrink:0;cursor:move">
       <h3 style="font-size:1.1rem;font-weight:600">Settings</h3>
       <button class="btn btn-gray btn-sm" onclick="closeSettings()"><i class="fa-solid fa-xmark"></i></button>
     </div>
@@ -344,6 +348,56 @@
               <input type="checkbox" id="set-source-youtube" checked style="width:16px;height:16px;accent-color:#7c3aed;cursor:pointer"
                 onchange="_setSourceEnabled('youtube', this.checked)">
               <label for="set-source-youtube" style="font-size:.85rem;color:#d1d5db;cursor:pointer;flex:1">YouTube</label>
+            </div>
+          </div>
+        </div>
+        <div class="card" id="yt-filters-card">
+          <h4 style="font-size:.95rem;font-weight:600;margin-bottom:12px"><i class="fa-brands fa-youtube" style="color:#ff4444;margin-right:6px"></i>YouTube Filters</h4>
+          <p style="font-size:.8rem;color:#6b7280;margin-bottom:12px;line-height:1.5">Only karaoke videos from these providers are shown. Enabling a language additionally allows karaoke videos in that language from any channel.</p>
+          <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px">
+            <label style="font-size:.75rem;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.05em">Karaoke providers</label>
+            <div style="display:flex;align-items:center;gap:10px">
+              <input type="checkbox" id="set-yt-provider-singking" checked style="width:16px;height:16px;accent-color:#7c3aed;cursor:pointer"
+                onchange="autoSave('youtube_provider_singking', this.checked.toString())">
+              <label for="set-yt-provider-singking" style="font-size:.85rem;color:#d1d5db;cursor:pointer;flex:1">Sing King</label>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px">
+              <input type="checkbox" id="set-yt-provider-karafun" checked style="width:16px;height:16px;accent-color:#7c3aed;cursor:pointer"
+                onchange="autoSave('youtube_provider_karafun', this.checked.toString())">
+              <label for="set-yt-provider-karafun" style="font-size:.85rem;color:#d1d5db;cursor:pointer;flex:1">KaraFun</label>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px">
+              <input type="checkbox" id="set-yt-provider-stingray" checked style="width:16px;height:16px;accent-color:#7c3aed;cursor:pointer"
+                onchange="autoSave('youtube_provider_stingray', this.checked.toString())">
+              <label for="set-yt-provider-stingray" style="font-size:.85rem;color:#d1d5db;cursor:pointer;flex:1">TheKARAOKEChannel</label>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <label style="font-size:.75rem;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.05em">Also allow by language</label>
+            <div style="display:flex;align-items:center;gap:10px">
+              <input type="checkbox" id="set-yt-lang-et" style="width:16px;height:16px;accent-color:#7c3aed;cursor:pointer"
+                onchange="autoSave('youtube_lang_et', this.checked.toString())">
+              <label for="set-yt-lang-et" style="font-size:.85rem;color:#d1d5db;cursor:pointer;flex:1">Estonian</label>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px">
+              <input type="checkbox" id="set-yt-lang-fi" style="width:16px;height:16px;accent-color:#7c3aed;cursor:pointer"
+                onchange="autoSave('youtube_lang_fi', this.checked.toString())">
+              <label for="set-yt-lang-fi" style="font-size:.85rem;color:#d1d5db;cursor:pointer;flex:1">Finnish</label>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px">
+              <input type="checkbox" id="set-yt-lang-sv" style="width:16px;height:16px;accent-color:#7c3aed;cursor:pointer"
+                onchange="autoSave('youtube_lang_sv', this.checked.toString())">
+              <label for="set-yt-lang-sv" style="font-size:.85rem;color:#d1d5db;cursor:pointer;flex:1">Swedish</label>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px">
+              <input type="checkbox" id="set-yt-lang-de" style="width:16px;height:16px;accent-color:#7c3aed;cursor:pointer"
+                onchange="autoSave('youtube_lang_de', this.checked.toString())">
+              <label for="set-yt-lang-de" style="font-size:.85rem;color:#d1d5db;cursor:pointer;flex:1">German</label>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px">
+              <input type="checkbox" id="set-yt-lang-ru" style="width:16px;height:16px;accent-color:#7c3aed;cursor:pointer"
+                onchange="autoSave('youtube_lang_ru', this.checked.toString())">
+              <label for="set-yt-lang-ru" style="font-size:.85rem;color:#d1d5db;cursor:pointer;flex:1">Russian</label>
             </div>
           </div>
         </div>
@@ -411,6 +465,32 @@
                 <input type="checkbox" id="set-idle-show-qr" style="width:16px;height:16px;accent-color:#7c3aed;cursor:pointer"
                   onchange="autoSave('idle_show_qr', this.checked.toString()); _broadcastIdleConfig()">
                 <label for="set-idle-show-qr" style="font-size:.85rem;color:#d1d5db;cursor:pointer;flex:1">Show QR code on idle screen</label>
+              </div>
+              <div style="display:flex;align-items:center;gap:14px">
+                <label style="font-size:.8rem;color:#9ca3af;min-width:70px">QR position</label>
+                <div style="display:grid;grid-template-columns:repeat(3,26px);grid-template-rows:repeat(3,26px);gap:2px">
+                  <div></div>
+                  <button type="button" class="btn btn-gray btn-sm" style="padding:0;min-width:0" onclick="_nudgeQr(0,-1)"><i class="fa-solid fa-chevron-up" style="font-size:.7rem"></i></button>
+                  <div></div>
+                  <button type="button" class="btn btn-gray btn-sm" style="padding:0;min-width:0" onclick="_nudgeQr(-1,0)"><i class="fa-solid fa-chevron-left" style="font-size:.7rem"></i></button>
+                  <button type="button" class="btn btn-gray btn-sm" style="padding:0;min-width:0" title="Reset to center-bottom" onclick="_resetQrPosition()"><i class="fa-solid fa-crosshairs" style="font-size:.65rem"></i></button>
+                  <button type="button" class="btn btn-gray btn-sm" style="padding:0;min-width:0" onclick="_nudgeQr(1,0)"><i class="fa-solid fa-chevron-right" style="font-size:.7rem"></i></button>
+                  <div></div>
+                  <button type="button" class="btn btn-gray btn-sm" style="padding:0;min-width:0" onclick="_nudgeQr(0,1)"><i class="fa-solid fa-chevron-down" style="font-size:.7rem"></i></button>
+                  <div></div>
+                </div>
+                <span id="idle-qr-pos-val" style="font-size:.75rem;color:#6b7280;white-space:nowrap">50%, 85%</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px">
+                <input type="checkbox" id="set-idle-qr-both" style="width:16px;height:16px;accent-color:#7c3aed;cursor:pointer"
+                  onchange="autoSave('idle_qr_both', this.checked.toString()); _broadcastIdleConfig()">
+                <label for="set-idle-qr-both" style="font-size:.85rem;color:#d1d5db;cursor:pointer;flex:1">Also show mirrored on the opposite side</label>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px">
+                <label style="font-size:.85rem;color:#d1d5db;white-space:nowrap;width:70px">QR size</label>
+                <input type="range" id="set-idle-qr-size" min="1" max="5" step="1" value="3" style="flex:1;accent-color:#7c3aed"
+                  oninput="document.getElementById('idle-qr-size-val').textContent=['XS','S','M','L','XL'][this.value-1];autoSave('idle_qr_size',this.value,300);_broadcastIdleConfig()">
+                <span id="idle-qr-size-val" style="font-size:.8rem;color:#a78bfa;min-width:22px;text-align:center">M</span>
               </div>
               <div style="display:flex;align-items:center;gap:10px">
                 <label style="font-size:.8rem;color:#9ca3af;min-width:70px">Text color</label>
@@ -615,6 +695,26 @@
           </div>
         </div>
 
+        <div class="card" style="display:flex;flex-direction:column;gap:12px">
+          <h4 style="font-size:.95rem;font-weight:600">
+            <i class="fa-solid fa-wifi" style="color:#a78bfa;margin-right:6px"></i>Local Network Requests
+          </h4>
+          <p style="font-size:.8rem;color:#6b7280;line-height:1.5">
+            Singers on the venue's WiFi can open this URL on their phone to browse songs and add themselves to the queue. Runs automatically whenever the venue is "Online" (top-right toggle).
+          </p>
+          <div id="local-req-offline" style="font-size:.85rem;color:#6b7280">Venue is offline — not running.</div>
+          <div id="local-req-online" class="hidden">
+            <div style="display:flex;gap:8px;margin-bottom:10px">
+              <input id="local-req-url" type="text" readonly style="flex:1;font-size:.85rem;font-weight:600;color:#a78bfa;background:#111827;border-color:#7c3aed;min-width:0">
+              <button class="btn btn-gray btn-sm" onclick="_copyLocalReqUrl()" title="Copy"><i class="fa-solid fa-copy"></i></button>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;font-size:.8rem;color:#6b7280">
+              <span>Connected phones:</span>
+              <span id="local-req-clients" style="font-weight:700;color:#a78bfa">0</span>
+            </div>
+          </div>
+        </div>
+
         <div class="card" style="display:flex;flex-direction:column;gap:14px">
           <h4 style="font-size:.95rem;font-weight:600">
             <i class="fa-solid fa-globe" style="color:#a78bfa;margin-right:6px"></i>Remote Song Requests
@@ -809,53 +909,6 @@
   </div>
 </div>
 
-<!-- ── Requests Modal ──────────────────────────────────────────────── -->
-<div id="requests-modal" class="modal-overlay hidden">
-  <div class="modal" style="max-width:440px">
-    <div class="modal-header">
-      <h3 style="font-size:1.1rem;font-weight:600">
-        <i class="fa-solid fa-mobile-screen-button" style="color:#a78bfa;margin-right:8px"></i>Singer Requests
-      </h3>
-      <button class="btn btn-gray btn-sm" onclick="closeRequestModal()"><i class="fa-solid fa-xmark"></i></button>
-    </div>
-    <div class="modal-body" style="display:flex;flex-direction:column;gap:16px">
-
-      <div id="req-stopped">
-        <p style="font-size:.875rem;color:#9ca3af;margin-bottom:14px">
-          Start the request server so singers can browse the song library and add themselves to the queue from their phone.
-        </p>
-        <button class="btn btn-primary w-full" onclick="reqStart()">
-          <i class="fa-solid fa-play"></i> Start Request Server
-        </button>
-      </div>
-
-      <div id="req-running" class="hidden">
-        <div style="margin-bottom:14px">
-          <p style="font-size:.7rem;color:#6b7280;margin-bottom:6px">Singers open this URL on their phone:</p>
-          <div style="display:flex;gap:6px;margin-bottom:8px">
-            <input id="req-url" type="text" readonly style="flex:1;font-size:.85rem;font-weight:600;color:#a78bfa;background:#111827;border-color:#7c3aed;min-width:0">
-            <button class="btn btn-gray btn-sm" onclick="reqCopyUrl()" title="Copy"><i class="fa-solid fa-copy"></i></button>
-          </div>
-        </div>
-        <div style="background:#111827;border-radius:10px;padding:12px 16px;margin-bottom:14px">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-            <span style="font-size:.8rem;color:#6b7280">Connected phones</span>
-            <span id="req-clients" style="font-size:1.1rem;font-weight:700;color:#a78bfa">0</span>
-          </div>
-          <div id="req-last-request" style="font-size:.78rem;color:#4b5563"></div>
-        </div>
-        <div id="req-alt-urls" class="hidden" style="font-size:.8rem;color:#6b7280;margin-bottom:14px;background:#1f2937;border-radius:8px;padding:10px 12px">
-          <div style="color:#9ca3af;margin-bottom:6px">Other addresses:</div>
-          <div id="req-alt-list"></div>
-        </div>
-        <button class="btn btn-red w-full" onclick="reqStop()">
-          <i class="fa-solid fa-stop"></i> Stop Request Server
-        </button>
-      </div>
-
-    </div>
-  </div>
-</div>
 
 <script src="js/cdg-player.js"></script>
 <script>
@@ -1175,16 +1228,9 @@ async function rm(id) { await api.removeFromQueue(id); renderQueue(); toast('Rem
 async function unpin(id) { await api.setPinned(id, false); renderQueue(); toast('Released from pin'); }
 
 // ── Player ────────────────────────────────────────────────────────────────────
-let _hadFirstSong = false; // tracks whether the intro background was shown/skipped
-
 async function checkAndPlay() {
   if (_transitioning) return;
   let song = await api.getCurrentSong();
-
-  if (song) {
-    // A song is already in "playing" state in the DB (e.g. app restarted mid-song)
-    _hadFirstSong = true;
-  }
 
   if (!song) {
     // Peek at the queue before marking anything as playing
@@ -1192,12 +1238,9 @@ async function checkAndPlay() {
     const nextPending = queue.find(e => e.status === 'pending');
     if (!nextPending) { showIdle(); return; }
 
-    // Show intro background before the very first song
-    if (!_hadFirstSong) {
-      _hadFirstSong = true;
-      await doTransition(null, nextPending); // no "Thank You", just background
-      if (_transitioning) return; // doTransition may have been interrupted
-    }
+    // Always show the background/countdown transition when coming from idle
+    await doTransition(null, nextPending); // no "Thank You", just background
+    if (_transitioning) return; // doTransition may have been interrupted
 
     song = await api.nextSong();
     if (song) await renderQueue();
@@ -1403,7 +1446,13 @@ async function advanceQueue() {
   stopCurrent(); currentSong = null;
   const nextEntry = await api.nextSong();
   await renderQueue();
-  if (!nextEntry) { showIdle(); return; }
+  if (!nextEntry) {
+    // Still say thank you to the last singer, but skip the "up next" waiting
+    // screen (phase 2) — there's nothing queued to promote.
+    await doTransition(prevSinger, null);
+    showIdle();
+    return;
+  }
   await doTransition(prevSinger, nextEntry);
   await checkAndPlay();
 }
@@ -1729,6 +1778,16 @@ async function openSettings(){
   document.getElementById('set-source-youtube').checked = _sourcesCache.youtube;
   _applySourceTabs();
 
+  // YouTube provider/language filters
+  document.getElementById('set-yt-provider-singking').checked = settings.youtube_provider_singking !== 'false';
+  document.getElementById('set-yt-provider-karafun').checked  = settings.youtube_provider_karafun  !== 'false';
+  document.getElementById('set-yt-provider-stingray').checked = settings.youtube_provider_stingray !== 'false';
+  document.getElementById('set-yt-lang-et').checked = settings.youtube_lang_et === 'true';
+  document.getElementById('set-yt-lang-fi').checked = settings.youtube_lang_fi === 'true';
+  document.getElementById('set-yt-lang-sv').checked = settings.youtube_lang_sv === 'true';
+  document.getElementById('set-yt-lang-de').checked = settings.youtube_lang_de === 'true';
+  document.getElementById('set-yt-lang-ru').checked = settings.youtube_lang_ru === 'true';
+
   // Display
   document.getElementById('set-thanks').checked               = settings.show_thanks          === 'true';
   document.getElementById('set-thanks-time').value            = settings.thanks_time          || '5';
@@ -1738,6 +1797,11 @@ async function openSettings(){
   document.getElementById('set-idle-text').value              = settings.idle_text             || '';
   document.getElementById('set-idle-show-text').checked       = settings.idle_show_text !== 'false';
   document.getElementById('set-idle-show-qr').checked         = settings.idle_show_qr !== 'false';
+  _loadQrPosition(settings);
+  document.getElementById('set-idle-qr-both').checked         = settings.idle_qr_both === 'true';
+  const _qrSize = settings.idle_qr_size || '3';
+  document.getElementById('set-idle-qr-size').value           = _qrSize;
+  document.getElementById('idle-qr-size-val').textContent     = ['XS','S','M','L','XL'][_qrSize-1] || 'M';
   const _idleColor = settings.idle_text_color || '#ffffff';
   const _idleSize  = settings.idle_text_size  || '1.8';
   document.getElementById('set-idle-text-color').value        = _idleColor;
@@ -1797,7 +1861,54 @@ async function openSettings(){
       </div>`).join('');
   }
 }
-function closeSettings(){hide('settings-modal');}
+function closeSettings(){
+  hide('settings-modal');
+  _stopLocalReqPoll();
+  // Reset any drag so it re-opens centered next time, not at the last dragged spot.
+  const box = document.getElementById('settings-modal-box');
+  if (box) { box.style.position = ''; box.style.left = ''; box.style.top = ''; box.style.margin = ''; }
+}
+
+// ── Settings modal: draggable by its header ────────────────────────────────────
+(function initSettingsDrag() {
+  const handle = document.getElementById('settings-modal-drag-handle');
+  const box    = document.getElementById('settings-modal-box');
+  if (!handle || !box) return;
+
+  let dragging = false, startX, startY, startLeft, startTop;
+
+  handle.addEventListener('mousedown', (e) => {
+    if (e.target.closest('button')) return; // don't drag when clicking the close button
+    const rect = box.getBoundingClientRect();
+    // Switch from flex-centered to a fixed position pinned at its current spot,
+    // so dragging moves it from wherever it already is rather than jumping.
+    box.style.position = 'fixed';
+    box.style.margin   = '0';
+    box.style.left     = rect.left + 'px';
+    box.style.top      = rect.top  + 'px';
+    startX = e.clientX; startY = e.clientY;
+    startLeft = rect.left; startTop = rect.top;
+    dragging = true;
+    document.body.style.userSelect = 'none';
+    e.preventDefault();
+  });
+
+  window.addEventListener('mousemove', (e) => {
+    if (!dragging) return;
+    const margin = 40; // keep at least this much of the modal on-screen
+    let newLeft = startLeft + (e.clientX - startX);
+    let newTop  = startTop  + (e.clientY - startY);
+    newLeft = Math.max(margin - box.offsetWidth, Math.min(window.innerWidth  - margin, newLeft));
+    newTop  = Math.max(0, Math.min(window.innerHeight - margin, newTop));
+    box.style.left = newLeft + 'px';
+    box.style.top  = newTop  + 'px';
+  });
+
+  window.addEventListener('mouseup', () => {
+    dragging = false;
+    document.body.style.userSelect = '';
+  });
+})();
 
 function _renderLibraryRows(dirs) {
   document.getElementById('library-rows').innerHTML = '';
@@ -2440,7 +2551,8 @@ async function doTransition(prevSinger, nextEntry) {
   }
 
   // ── Phase 2: Background + banner ───────────────────────────────────────
-  if (bgMs > 0) {
+  // Skipped when there's no next song (nothing to promote/count down to).
+  if (bgMs > 0 && nextEntry) {
     // Start timer immediately so async setup doesn't eat into display time
     p2.style.display = 'flex';
     const phaseEnd = Date.now() + bgMs;
@@ -2669,62 +2781,47 @@ function _startCastPoll() {
   }, 3000);
 }
 
-// ── Singer Requests ───────────────────────────────────────────────────────────
-let _reqPollTimer = null;
+// ── Venue online/offline (master switch for remote requests) ──────────────────
+function _updateVenueOnlineButton(online) {
+  document.getElementById('venue-online-dot').style.background = online ? '#22c55e' : '#ef4444';
+  document.getElementById('venue-online-label').textContent    = online ? 'Online' : 'Offline';
+}
+async function _loadVenueOnlineState() {
+  _updateVenueOnlineButton(await api.venueGetOnline());
+}
+async function toggleVenueOnline() {
+  const wasOnline = document.getElementById('venue-online-label').textContent === 'Online';
+  const { online } = await api.venueSetOnline(!wasOnline);
+  _updateVenueOnlineButton(online);
+  toast(online ? 'Venue is online — accepting requests' : 'Venue is offline — no remote requests', online ? 'success' : 'error');
+  _loadLocalReqInfo(); // refresh the Settings card if it happens to be open
+}
+_loadVenueOnlineState();
 
-async function openRequestModal() {
-  show('requests-modal');
+// ── Local network requests (read-only info card in Settings > Online) ─────────
+let _localReqPollTimer = null;
+async function _loadLocalReqInfo() {
+  const offlineEl = document.getElementById('local-req-offline');
+  const onlineEl  = document.getElementById('local-req-online');
+  if (!offlineEl || !onlineEl) return; // Settings not open on the Online tab
   const s = await api.requestsStatus();
-  _updateReqUI(s);
-  if (s.running) _startReqPoll();
-}
-function closeRequestModal() {
-  hide('requests-modal');
-  clearInterval(_reqPollTimer); _reqPollTimer = null;
-}
-async function reqStart() {
-  const url = await api.requestsStart();
-  _updateReqUI({ running: true, url, clients: 0, allUrls: [] });
-  _startReqPoll();
-  toast('Request server started');
-}
-async function reqStop() {
-  await api.requestsStop();
-  _updateReqUI({ running: false });
-  clearInterval(_reqPollTimer); _reqPollTimer = null;
-  toast('Request server stopped');
-}
-function reqCopyUrl() {
-  navigator.clipboard.writeText(document.getElementById('req-url').value).then(() => toast('URL copied'));
-}
-function _updateReqUI(s) {
-  document.getElementById('req-stopped').classList.toggle('hidden',  s.running);
-  document.getElementById('req-running').classList.toggle('hidden',  !s.running);
-  document.getElementById('req-nav-btn').classList.toggle('active',  s.running);
+  offlineEl.classList.toggle('hidden', s.running);
+  onlineEl.classList.toggle('hidden', !s.running);
   if (s.running) {
-    document.getElementById('req-url').value = s.url || '';
-    document.getElementById('req-clients').textContent = s.clients ?? 0;
-    _updateQrInModal();
-    const alts = (s.allUrls || []).filter(a => a.url !== s.url);
-    const altBlock = document.getElementById('req-alt-urls');
-    if (alts.length) {
-      document.getElementById('req-alt-list').innerHTML = alts.map(a =>
-        `<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-          <span style="color:#6b7280;min-width:110px;font-size:.75rem">${a.label}</span>
-          <code style="color:#a78bfa;font-size:.75rem;cursor:pointer" onclick="navigator.clipboard.writeText('${a.url}').then(()=>toast('Copied'))">${a.url}</code>
-        </div>`).join('');
-      altBlock.classList.remove('hidden');
-    } else {
-      altBlock.classList.add('hidden');
-    }
+    document.getElementById('local-req-url').value = s.url || '';
+    document.getElementById('local-req-clients').textContent = s.clients ?? 0;
   }
 }
-function _startReqPoll() {
-  clearInterval(_reqPollTimer);
-  _reqPollTimer = setInterval(async () => {
-    const s = await api.requestsStatus();
-    if (s.running) document.getElementById('req-clients').textContent = s.clients ?? 0;
-  }, 3000);
+function _copyLocalReqUrl() {
+  navigator.clipboard.writeText(document.getElementById('local-req-url').value).then(() => toast('URL copied'));
+}
+function _startLocalReqPoll() {
+  clearInterval(_localReqPollTimer);
+  _loadLocalReqInfo();
+  _localReqPollTimer = setInterval(_loadLocalReqInfo, 3000);
+}
+function _stopLocalReqPoll() {
+  clearInterval(_localReqPollTimer); _localReqPollTimer = null;
 }
 
 // Instant notification when a singer adds a song from mobile
@@ -2734,8 +2831,6 @@ api.onQueueReordered(() => renderQueue());
 api.onMobileRequest(singerName => {
   renderQueue();
   toast(`🎤 ${singerName} added a song request`, 'info');
-  const lastEl = document.getElementById('req-last-request');
-  if (lastEl) lastEl.textContent = `Last request: ${singerName}`;
 });
 
 // ── Player fullscreen ─────────────────────────────────────────────────────────
@@ -2826,17 +2921,75 @@ checkSessionRestore();
 let _relayPublicUrl  = '';
 let _relayQrDataUrl  = '';
 
+// ── QR box position/size (user-configurable, freely positioned via arrows) ────
+const QR_SIZE_SCALE = [0, 0.65, 0.85, 1, 1.3, 1.65]; // index 1-5 -> XS..XL
+const QR_POS_STEP   = 3;   // % of screen per arrow click
+const QR_POS_MIN    = 5, QR_POS_MAX = 95; // keep the box from clipping fully off-screen
+const QR_POS_DEFAULT = { x: 50, y: 85 };
+// One-time migration from the old preset dropdown (bottom/top/left/right/center/both)
+const QR_LEGACY_PRESET_XY = { top: [50,12], bottom: [50,85], left: [12,50], right: [88,50], center: [50,50], both: [50,85] };
+
+let _qrPos = { ...QR_POS_DEFAULT };
+
+function _loadQrPosition(settings) {
+  if (settings.idle_qr_x !== undefined && settings.idle_qr_y !== undefined) {
+    _qrPos = { x: parseFloat(settings.idle_qr_x), y: parseFloat(settings.idle_qr_y) };
+  } else if (settings.idle_qr_position && QR_LEGACY_PRESET_XY[settings.idle_qr_position]) {
+    const [x, y] = QR_LEGACY_PRESET_XY[settings.idle_qr_position];
+    _qrPos = { x, y };
+  } else {
+    _qrPos = { ...QR_POS_DEFAULT };
+  }
+  _updateQrPosLabel();
+}
+
+function _updateQrPosLabel() {
+  const el = document.getElementById('idle-qr-pos-val');
+  if (el) el.textContent = `${Math.round(_qrPos.x)}%, ${Math.round(_qrPos.y)}%`;
+}
+
+function _nudgeQr(dx, dy) {
+  _qrPos.x = Math.max(QR_POS_MIN, Math.min(QR_POS_MAX, _qrPos.x + dx * QR_POS_STEP));
+  _qrPos.y = Math.max(QR_POS_MIN, Math.min(QR_POS_MAX, _qrPos.y + dy * QR_POS_STEP));
+  _updateQrPosLabel();
+  autoSave('idle_qr_x', _qrPos.x.toString());
+  autoSave('idle_qr_y', _qrPos.y.toString());
+  _broadcastIdleConfig();
+}
+
+function _resetQrPosition() {
+  _qrPos = { ...QR_POS_DEFAULT };
+  _updateQrPosLabel();
+  autoSave('idle_qr_x', _qrPos.x.toString());
+  autoSave('idle_qr_y', _qrPos.y.toString());
+  _broadcastIdleConfig();
+}
+
+// left:{x}%;top:{y}% + translate(-50%,-50%) anchors the QR box's CENTER at (x,y),
+// so the same formula works for every position, not just a handful of presets.
+function _qrBoxStyleAt(x, y) {
+  return `left:${x}%;top:${y}%;transform:translate(-50%,-50%);`;
+}
+function _qrSizeStyle(sizeLevel) {
+  const scale = QR_SIZE_SCALE[sizeLevel] || 1;
+  const h1 = Math.round(70 * scale), h2 = (13 * scale).toFixed(1), h3 = Math.round(110 * scale);
+  return `height:clamp(${h1}px,${h2}vw,${h3}px);aspect-ratio:1/1;`;
+}
+
 function _applyIdleConfig() {
   const text      = document.getElementById('set-idle-text')?.value || '';
   const showText  = document.getElementById('set-idle-show-text')?.checked ?? true;
   const showQr    = (document.getElementById('set-idle-show-qr')?.checked ?? true) && !!_relayQrDataUrl;
   const textColor = document.getElementById('set-idle-text-color')?.value || '#ffffff';
   const textSize  = parseFloat(document.getElementById('set-idle-text-size')?.value || '1.8');
+  const qrBoth    = document.getElementById('set-idle-qr-both')?.checked ?? false;
+  const qrSize    = parseInt(document.getElementById('set-idle-qr-size')?.value || '3');
 
-  const defEl   = document.getElementById('player-idle-default');
-  const qrWrap  = document.getElementById('player-idle-qr');
-  const custEl  = document.getElementById('player-idle-custom-text');
-  const qrBox   = document.getElementById('player-idle-qr-box');
+  const defEl  = document.getElementById('player-idle-default');
+  const qrWrap = document.getElementById('player-idle-qr');
+  const custEl = document.getElementById('player-idle-custom-text');
+  const boxA   = document.getElementById('player-idle-qr-box-a');
+  const boxB   = document.getElementById('player-idle-qr-box-b');
   if (!defEl || !qrWrap) return;
 
   if (showQr || showText) {
@@ -2844,10 +2997,25 @@ function _applyIdleConfig() {
     custEl.textContent    = text;
     custEl.style.color    = textColor;
     custEl.style.fontSize = textSize + 'rem';
-    qrBox.style.display   = showQr ? 'flex' : 'none';
     if (showQr) {
+      const sizeStyle = _qrSizeStyle(qrSize);
+      boxA.style.cssText = 'position:absolute;display:flex;flex-direction:column;align-items:center;padding:6px;gap:6px;' + _qrBoxStyleAt(_qrPos.x, _qrPos.y);
+      document.getElementById('player-idle-qr-img').style.cssText = 'width:auto;border-radius:10px;image-rendering:pixelated;' + sizeStyle;
       document.getElementById('player-idle-qr-img').src = _relayQrDataUrl;
       document.getElementById('player-idle-qr-url').textContent = _relayPublicUrl;
+      boxA.style.display = 'flex';
+      if (qrBoth) {
+        boxB.style.cssText = 'position:absolute;display:flex;flex-direction:column;align-items:center;padding:6px;gap:6px;' + _qrBoxStyleAt(100 - _qrPos.x, _qrPos.y);
+        document.getElementById('player-idle-qr-img-b').style.cssText = 'width:auto;border-radius:10px;image-rendering:pixelated;' + sizeStyle;
+        document.getElementById('player-idle-qr-img-b').src = _relayQrDataUrl;
+        document.getElementById('player-idle-qr-url-b').textContent = _relayPublicUrl;
+        boxB.style.display = 'flex';
+      } else {
+        boxB.style.display = 'none';
+      }
+    } else {
+      boxA.style.display = 'none';
+      boxB.style.display = 'none';
     }
     defEl.style.display  = 'none';
     qrWrap.style.display = 'flex';
@@ -2864,8 +3032,10 @@ async function _broadcastIdleConfig() {
   const showQr    = document.getElementById('set-idle-show-qr')?.checked ?? true;
   const textColor = document.getElementById('set-idle-text-color')?.value || '#ffffff';
   const textSize  = parseFloat(document.getElementById('set-idle-text-size')?.value || '1.8');
+  const qrBoth    = document.getElementById('set-idle-qr-both')?.checked ?? false;
+  const qrSize    = parseInt(document.getElementById('set-idle-qr-size')?.value || '3');
   const qrUrl     = _relayQrDataUrl;
-  api.broadcast({ type: 'idle_config', text, showText, showQr: showQr && !!qrUrl, qrDataUrl: qrUrl, url: _relayPublicUrl, textColor, textSize });
+  api.broadcast({ type: 'idle_config', text, showText, showQr: showQr && !!qrUrl, qrDataUrl: qrUrl, url: _relayPublicUrl, textColor, textSize, qrX: _qrPos.x, qrY: _qrPos.y, qrBoth, qrSize });
   _applyIdleConfig();
 }
 
@@ -2899,8 +3069,11 @@ function _relayApplyStatus(status) {
   if (!enabled) return;
 
   const connected = status?.connected;
+  const rejected  = status?.error === 'secret-mismatch';
   if (dot) dot.style.background = connected ? '#22c55e' : '#ef4444';
-  if (txt) txt.textContent       = connected ? 'Connected' : 'Connecting…';
+  if (txt) txt.textContent       = connected ? 'Connected'
+    : rejected ? 'Venue ID conflict — this ID is already registered to another connection'
+    : 'Connecting…';
 
   if (connected && status.url) {
     _relayPublicUrl = status.url;
@@ -2954,6 +3127,9 @@ window.api.relayStatus().then(status => {
         document.getElementById('set-idle-text').value     = s.idle_text || '';
         document.getElementById('set-idle-show-text').checked = s.idle_show_text !== 'false';
         document.getElementById('set-idle-show-qr').checked = s.idle_show_qr !== 'false';
+        _loadQrPosition(s);
+        document.getElementById('set-idle-qr-both').checked = s.idle_qr_both === 'true';
+        document.getElementById('set-idle-qr-size').value   = s.idle_qr_size || '3';
         _broadcastIdleConfig();
       });
     });
@@ -2973,7 +3149,8 @@ window.api.onRelayRequest(req => {
 const _origSwitchSettingsTab = switchSettingsTab;
 switchSettingsTab = function(tab) {
   _origSwitchSettingsTab(tab);
-  if (tab === 'online') { _relayLoadTab(); _loadPotStatus(); }
+  if (tab === 'online') { _relayLoadTab(); _loadPotStatus(); _startLocalReqPoll(); }
+  else { _stopLocalReqPoll(); }
 };
 
 async function _loadPotStatus() {

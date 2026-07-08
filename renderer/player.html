@@ -55,7 +55,8 @@
     #idle-screen .logo { font-size: 3rem; position: relative; }
     #idle-default p { font-size: 1.1rem; position: relative; text-shadow: 0 1px 6px #000; }
 
-    /* QR layout — text pinned top, QR pinned bottom */
+    /* QR layout — text pinned top; QR box position/size are applied inline by JS
+       (see _qrBoxStyle/_qrSizeStyle) since they're user-configurable. */
     #idle-qr-wrap {
       display: none;
       position: absolute; inset: 0; z-index: 1;
@@ -68,18 +69,17 @@
       color: #fff; text-shadow: 0 2px 12px rgba(0,0,0,.8);
       text-align: center;
     }
-    #idle-qr-bottom {
+    .idle-qr-box {
       position: absolute;
-      bottom: 0; left: 0; right: 0;
       display: flex; flex-direction: column; align-items: center;
-      padding: 6px 0 10px; gap: 3px;
+      padding: 6px; gap: 3px;
     }
-    #idle-qr-img {
+    .idle-qr-img {
       height: clamp(70px, 13vw, 110px); width: auto;
       aspect-ratio: 1 / 1;
       border-radius: 10px; image-rendering: pixelated;
     }
-    #idle-qr-sub {
+    .idle-qr-sub {
       font-size: clamp(.55rem, 1.1vw, .8rem); color: #9ca3af; text-align: center;
     }
   </style>
@@ -104,12 +104,16 @@
     <div class="logo">🎤</div>
     <p id="idle-text" style="margin-top:16px">Waiting for next song…</p>
   </div>
-  <!-- QR + custom text — text pinned top / QR pinned bottom -->
+  <!-- QR + custom text — text pinned top; QR box position/size set by JS -->
   <div id="idle-qr-wrap" style="display:none;position:absolute;inset:0;z-index:1;">
     <p id="idle-custom-text" style="position:absolute;top:0;left:0;right:0;margin:0;padding:14px 40px;font-weight:700;color:#fff;text-shadow:0 2px 12px rgba(0,0,0,.8);text-align:center;font-size:1.8rem;"></p>
-    <div id="idle-qr-bottom" style="position:absolute;bottom:0;left:0;right:0;display:flex;flex-direction:column;align-items:center;padding:6px 0 10px;gap:3px;">
-      <img id="idle-qr-img" src="" alt="QR Code" style="height:clamp(70px,13vw,110px);width:auto;aspect-ratio:1/1;border-radius:10px;image-rendering:pixelated;">
-      <p id="idle-qr-sub" style="margin:0;font-size:clamp(.55rem,1.1vw,.8rem);color:#9ca3af;text-align:center;"></p>
+    <div id="idle-qr-box-a" class="idle-qr-box">
+      <img id="idle-qr-img" class="idle-qr-img" src="" alt="QR Code">
+      <p id="idle-qr-sub" class="idle-qr-sub"></p>
+    </div>
+    <div id="idle-qr-box-b" class="idle-qr-box" style="display:none">
+      <img id="idle-qr-img-b" class="idle-qr-img" src="" alt="QR Code">
+      <p id="idle-qr-sub-b" class="idle-qr-sub"></p>
     </div>
   </div>
 </div>
@@ -246,6 +250,20 @@ function getPos() {
   return _position + elapsed;
 }
 
+// ── QR box position/size (user-configurable, freely positioned via arrows) ────
+const QR_SIZE_SCALE = [0, 0.65, 0.85, 1, 1.3, 1.65]; // index 1-5 -> XS..XL
+const QR_POS_DEFAULT_X = 50, QR_POS_DEFAULT_Y = 85;
+
+// left:{x}%;top:{y}% + translate(-50%,-50%) anchors the QR box's CENTER at (x,y).
+function _qrBoxStyleAt(x, y) {
+  return `left:${x}%;top:${y}%;transform:translate(-50%,-50%);`;
+}
+function _qrSizeStyle(sizeLevel) {
+  const scale = QR_SIZE_SCALE[sizeLevel] || 1;
+  const h1 = Math.round(70 * scale), h2 = (13 * scale).toFixed(1), h3 = Math.round(110 * scale);
+  return `height:clamp(${h1}px,${h2}vw,${h3}px);`;
+}
+
 // ── IPC broadcast (Electron) ──────────────────────────────────────────────────
 api.onBroadcast((msg) => {
   switch (msg.type) {
@@ -253,23 +271,42 @@ api.onBroadcast((msg) => {
     case 'idle_config': {
       const defaultEl  = document.getElementById('idle-default');
       const qrWrap     = document.getElementById('idle-qr-wrap');
-      const qrImg      = document.getElementById('idle-qr-img');
       const customText = document.getElementById('idle-custom-text');
-      const qrBottom   = document.getElementById('idle-qr-bottom');
-      const qrSub      = document.getElementById('idle-qr-sub');
+      const boxA       = document.getElementById('idle-qr-box-a');
+      const boxB       = document.getElementById('idle-qr-box-b');
+      const imgA       = document.getElementById('idle-qr-img');
+      const imgB       = document.getElementById('idle-qr-img-b');
+      const subA       = document.getElementById('idle-qr-sub');
+      const subB       = document.getElementById('idle-qr-sub-b');
       const idleText   = document.getElementById('idle-text');
       const showQr     = !!(msg.showQr && msg.qrDataUrl);
       const showText   = msg.showText !== false;
+      const sizeStyle  = _qrSizeStyle(msg.qrSize);
       if (showQr || showText) {
         qrWrap.style.display      = 'flex';
         customText.style.display  = showText ? '' : 'none';
         customText.textContent    = msg.text || '';
         customText.style.color    = msg.textColor || '#fff';
         customText.style.fontSize = msg.textSize ? (msg.textSize + 'rem') : '1.8rem';
-        if (qrBottom) qrBottom.style.display = showQr ? 'flex' : 'none';
         if (showQr) {
-          qrImg.src         = msg.qrDataUrl;
-          qrSub.textContent = msg.url || '';
+          const x = msg.qrX ?? QR_POS_DEFAULT_X, y = msg.qrY ?? QR_POS_DEFAULT_Y;
+          boxA.style.cssText = _qrBoxStyleAt(x, y);
+          imgA.style.cssText = sizeStyle;
+          imgA.src            = msg.qrDataUrl;
+          subA.textContent    = msg.url || '';
+          boxA.style.display  = 'flex';
+          if (msg.qrBoth) {
+            boxB.style.cssText = _qrBoxStyleAt(100 - x, y);
+            imgB.style.cssText = sizeStyle;
+            imgB.src           = msg.qrDataUrl;
+            subB.textContent   = msg.url || '';
+            boxB.style.display = 'flex';
+          } else {
+            boxB.style.display = 'none';
+          }
+        } else {
+          boxA.style.display = 'none';
+          boxB.style.display = 'none';
         }
         defaultEl.style.display = 'none';
       } else {

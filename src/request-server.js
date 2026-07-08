@@ -111,7 +111,9 @@ async function handleRequest(req, res) {
     if (!q) { res.writeHead(400); res.end('{"error":"q required"}'); return; }
     try {
       const ytdlp = require('./ytdlp');
-      const results = await ytdlp.search(q, 10);
+      const filterOpts = ytdlp.filterOptsFromSettings((k) => _db.getSetting(k));
+      const cookieOpts = { file: _db.getSetting('youtube_cookies_file'), browser: _db.getSetting('youtube_cookies_browser') };
+      const results = await ytdlp.search(q, 10, cookieOpts, filterOpts);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(results));
     } catch (e) {

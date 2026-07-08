@@ -96,7 +96,17 @@ app.whenReady().then(async () => {
   createMainWindow();
   setupIPC();
   _initRelay();
+
+  // Local WiFi request server: auto-start unless the admin left the venue offline last time.
+  if (db.getSetting('venue_online') !== 'false') {
+    requestServer.start(db, queueManager, _requestServerOnNewRequest).catch(() => {});
+  }
 });
+
+function _requestServerOnNewRequest(singerName) {
+  if (mainWindow && !mainWindow.isDestroyed())
+    mainWindow.webContents.send('mobile-request-added', singerName);
+}
 
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 app.on('before-quit', () => require('./src/pot-server').stop());
@@ -106,6 +116,10 @@ function _ytCookieOpts() {
     file:    db.getSetting('youtube_cookies_file'),
     browser: db.getSetting('youtube_cookies_browser'),
   };
+}
+
+function _ytFilterOpts() {
+  return require('./src/ytdlp').filterOptsFromSettings((k) => db.getSetting(k));
 }
 
 function _sourcesEnabled() {
@@ -295,7 +309,7 @@ function setupIPC() {
   });
   ipcMain.handle('youtube:search', async (_, query) => {
     const ytdlp = require('./src/ytdlp');
-    return ytdlp.search(query, 10, _ytCookieOpts());
+    return ytdlp.search(query, 10, _ytCookieOpts(), _ytFilterOpts());
   });
   ipcMain.handle('youtube:stream', async (_, videoId) => {
     const ytdlp = require('./src/ytdlp');
@@ -306,13 +320,7 @@ function setupIPC() {
   ipcMain.handle('player:open', () => openPlayerWindow());
 
   // Singer request server
-  ipcMain.handle('requests:start', async () => {
-    const url = await requestServer.start(db, queueManager, (singerName) => {
-      if (mainWindow && !mainWindow.isDestroyed())
-        mainWindow.webContents.send('mobile-request-added', singerName);
-    });
-    return url;
-  });
+  ipcMain.handle('requests:start', async () => requestServer.start(db, queueManager, _requestServerOnNewRequest));
   ipcMain.handle('requests:stop', () => { requestServer.stop(); });
   ipcMain.handle('requests:status', ()      => ({
     running: requestServer.isRunning(),
@@ -320,6 +328,21 @@ function setupIPC() {
     clients: requestServer.clientCount(),
     allUrls: requestServer.isRunning() ? requestServer.allUrls() : [],
   }));
+
+  // Venue online/offline — master switch for whether remote singers (local WiFi
+  // or internet relay) can add songs at all.
+  ipcMain.handle('venue:getOnline', () => db.getSetting('venue_online') !== 'false');
+  ipcMain.handle('venue:setOnline', async (_, online) => {
+    db.setSetting('venue_online', String(online));
+    if (online) {
+      if (!requestServer.isRunning()) await requestServer.start(db, queueManager, _requestServerOnNewRequest).catch(() => {});
+      if (db.getSetting('relay_enabled') === 'true') relayClient?.setEnabled(true);
+    } else {
+      requestServer.stop();
+      relayClient?.setEnabled(false);
+    }
+    return { online };
+  });
 
   // Wireless network player
   ipcMain.handle('network:start',    async () => networkPlayer.start());
@@ -395,12 +418,20 @@ async function _initRelay() {
     venueId = crypto.randomBytes(4).toString('hex');
     db.setSetting('relay_venue_id', venueId);
   }
+  // Proves to the relay server that reconnects are really this venue, not someone
+  // else registering a guessed/observed venueId. Never exposed to the renderer/UI.
+  let venueSecret = settings.relay_venue_secret;
+  if (!venueSecret) {
+    venueSecret = crypto.randomBytes(16).toString('hex');
+    db.setSetting('relay_venue_secret', venueSecret);
+  }
   relayClient = require('./src/relay-client');
   relayClient.init(
     {
-      enabled:   settings.relay_enabled === 'true',
+      enabled:   settings.relay_enabled === 'true' && settings.venue_online !== 'false',
       serverUrl: settings.relay_server_url || 'ws://89.167.78.11:3000/ws',
       venueId,
+      venueSecret,
       venueName: settings.relay_venue_name || 'My Karaoke Venue',
       sourcesEnabled: _sourcesEnabled(),
     },
@@ -438,7 +469,7 @@ async function _initRelay() {
         }
         try {
           const ytdlp = require('./src/ytdlp');
-          const results = await ytdlp.search(msg.query || '', 8, _ytCookieOpts());
+          const results = await ytdlp.search(msg.query || '', 8, _ytCookieOpts(), _ytFilterOpts());
           relayClient.send({ type: 'youtube-search-results', requestId: msg.requestId, results });
         } catch (err) {
           relayClient.send({ type: 'youtube-search-results', requestId: msg.requestId, results: [], error: err.message });

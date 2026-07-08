@@ -56,6 +56,33 @@ function cookiesArgs({ file, browser } = {}) {
 // android_sdkless client without needing cookies. See yt-dlp/yt-dlp#15865.
 const CLIENT_ARGS = ['--extractor-args', 'youtube:player_client=default,-android_sdkless'];
 
+// Canonical karaoke providers. Matched by searching each channel's own "/search"
+// tab directly (see _searchChannel), not by display name — e.g. "TheKARAOKEChannel"
+// is the handle users know it by, though the channel now displays as "Stingray Karaoke".
+const PROVIDERS = {
+  singking: { label: 'Sing King',         handle: '@singkingkaraoke' },
+  karafun:  { label: 'KaraFun',           handle: '@karafun' },
+  stingray: { label: 'TheKARAOKEChannel', handle: '@StingrayKaraoke' },
+};
+
+const LANGUAGES = {
+  et: 'Estonian',
+  fi: 'Finnish',
+  sv: 'Swedish',
+  de: 'German',
+  ru: 'Russian',
+};
+
+// Reads the youtube_provider_<key> / youtube_lang_<key> settings into the
+// { providers, languages } shape `search()` expects. Providers default to
+// enabled (unset = 'true'); languages default to disabled (unset = 'false').
+function filterOptsFromSettings(getSetting) {
+  return {
+    providers: Object.keys(PROVIDERS).filter(k => getSetting(`youtube_provider_${k}`) !== 'false'),
+    languages: Object.keys(LANGUAGES).filter(k => getSetting(`youtube_lang_${k}`) === 'true'),
+  };
+}
+
 function _execFile(bin, args, opts) {
   return new Promise((resolve, reject) => {
     execFile(bin, args, opts, (err, stdout) => err ? reject(err) : resolve(stdout));
@@ -75,31 +102,87 @@ async function _runWithCookieFallback(bin, baseArgs, cookieOpts, opts) {
   }
 }
 
-async function search(query, limit = 10, cookieOpts) {
-  const bin = await ensureYtDlp();
-  const searchQuery = `ytsearch${limit}:${query} karaoke`;
+function _toResult(e) {
+  return {
+    id:        e.id,
+    title:     e.title || '',
+    uploader:  e.uploader || e.channel || '',
+    duration:  e.duration || 0,
+    thumbnail: e.thumbnail || `https://i.ytimg.com/vi/${e.id}/hqdefault.jpg`,
+  };
+}
 
+// A broad search has no trusted-channel guarantee (unlike _searchChannel), so
+// YouTube's fuzzy relevance ranking alone lets plain music/lyric videos slip in
+// even though "karaoke" is in the query — require it in the actual title too.
+// Includes the Cyrillic spelling since Russian karaoke channels often use it.
+const KARAOKE_TITLE_RE = /karaoke|караоке/i;
+
+async function _searchBroad(bin, searchQuery, limit, cookieOpts) {
   const stdout = await _runWithCookieFallback(bin, [
-    searchQuery,
+    `ytsearch${limit}:${searchQuery}`,
     '--flat-playlist',
     '--dump-single-json',
     '--no-warnings',
     '--no-playlist',
     ...CLIENT_ARGS,
   ], cookieOpts, { timeout: 30000 });
+  const data = JSON.parse(stdout.trim());
+  return (data.entries || [])
+    .filter(e => KARAOKE_TITLE_RE.test(e.title || ''))
+    .map(_toResult);
+}
 
-  try {
-    const data = JSON.parse(stdout.trim());
-    return (data.entries || []).map(e => ({
-      id:        e.id,
-      title:     e.title || '',
-      uploader:  e.uploader || e.channel || '',
-      duration:  e.duration || 0,
-      thumbnail: e.thumbnail || `https://i.ytimg.com/vi/${e.id}/hqdefault.jpg`,
-    }));
-  } catch (e) {
-    throw new Error('Failed to parse yt-dlp output: ' + e.message);
+// Searches *within* a single channel via its own "/search" tab, so results are
+// guaranteed to come from that provider — not just ranked highly in a broad search.
+async function _searchChannel(bin, provider, query, cookieOpts) {
+  const url = `https://www.youtube.com/${provider.handle}/search?query=${encodeURIComponent(query)}`;
+  const stdout = await _runWithCookieFallback(bin, [
+    url,
+    '--flat-playlist',
+    '--dump-single-json',
+    '--no-warnings',
+    '--playlist-items', '1-8',
+    ...CLIENT_ARGS,
+  ], cookieOpts, { timeout: 30000 });
+  const data = JSON.parse(stdout.trim());
+  // Exclude playlist/tab entries (ie_key "YoutubeTab") — keep actual videos only.
+  return (data.entries || []).filter(e => e.ie_key === 'Youtube').map(_toResult);
+}
+
+async function search(query, limit = 10, cookieOpts, filterOpts) {
+  const bin = await ensureYtDlp();
+
+  if (!filterOpts) {
+    return _searchBroad(bin, `${query} karaoke`, limit, cookieOpts);
   }
+
+  const { providers = [], languages = [] } = filterOpts;
+  if (!providers.length && !languages.length) return [];
+
+  const tasks = [
+    ...providers.filter(k => PROVIDERS[k]).map(k => _searchChannel(bin, PROVIDERS[k], query, cookieOpts)),
+    // Ask for more than `limit` raw results since the title filter above discards some.
+    ...languages.filter(k => LANGUAGES[k]).map(k => _searchBroad(bin, `${query} karaoke ${LANGUAGES[k]}`, Math.max(15, limit * 2), cookieOpts)),
+  ];
+
+  const settled = await Promise.allSettled(tasks);
+  const lists = settled.filter(r => r.status === 'fulfilled').map(r => r.value);
+
+  // Interleave round-robin across sources so one provider/language can't crowd
+  // out the others just by returning more results.
+  const seen = new Set();
+  const merged = [];
+  for (let i = 0; merged.length < limit && lists.some(l => i < l.length); i++) {
+    for (const list of lists) {
+      if (merged.length >= limit) break;
+      const entry = list[i];
+      if (!entry || seen.has(entry.id)) continue;
+      seen.add(entry.id);
+      merged.push(entry);
+    }
+  }
+  return merged;
 }
 
 async function getStreamUrl(videoId, cookieOpts) {
@@ -126,4 +209,4 @@ function fmtDuration(sec) {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-module.exports = { ensureYtDlp, search, getStreamUrl, fmtDuration };
+module.exports = { ensureYtDlp, search, getStreamUrl, fmtDuration, filterOptsFromSettings, PROVIDERS, LANGUAGES };

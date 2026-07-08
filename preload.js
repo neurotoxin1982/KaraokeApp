@@ -55,6 +55,10 @@ contextBridge.exposeInMainWorld('api', {
   requestsStatus: ()              => ipcRenderer.invoke('requests:status'),
   onMobileRequest:(cb)            => ipcRenderer.on('mobile-request-added', (_, name) => cb(name)),
 
+  // Venue online/offline
+  venueGetOnline: ()              => ipcRenderer.invoke('venue:getOnline'),
+  venueSetOnline: (online)        => ipcRenderer.invoke('venue:setOnline', online),
+
   // Wireless network player
   networkStart:    ()             => ipcRenderer.invoke('network:start'),
   networkStop:     ()             => ipcRenderer.invoke('network:stop'),

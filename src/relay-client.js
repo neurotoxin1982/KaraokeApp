@@ -6,6 +6,7 @@ let _cfg           = null;
 let _status        = { connected: false, url: null };
 let _onRequest     = null;
 let _onStatus      = null;
+let _rejected      = false; // true once the server has told us this venueId belongs to someone else
 
 function init(cfg, onRequest, onStatus) {
   _cfg       = { ...cfg };
@@ -18,6 +19,7 @@ function _connect() {
   if (_reconnectTimer) { clearTimeout(_reconnectTimer); _reconnectTimer = null; }
   if (_ws) { try { _ws.terminate(); } catch {} _ws = null; }
   if (!_cfg?.serverUrl) return;
+  _rejected = false;
 
   try {
     _ws = new WebSocket(_cfg.serverUrl);
@@ -27,9 +29,10 @@ function _connect() {
 
   _ws.once('open', () => {
     _ws.send(JSON.stringify({
-      type:      'register',
-      venueId:   _cfg.venueId,
-      venueName: _cfg.venueName || _cfg.venueId,
+      type:           'register',
+      venueId:        _cfg.venueId,
+      venueName:      _cfg.venueName || _cfg.venueId,
+      venueSecret:    _cfg.venueSecret,
       sourcesEnabled: _cfg.sourcesEnabled || { local: true, youtube: true },
     }));
   });
@@ -40,6 +43,13 @@ function _connect() {
     if (msg.type === 'registered') {
       _status = { connected: true, url: msg.url, venueId: _cfg.venueId };
       _onStatus?.(_status);
+    } else if (msg.type === 'register-rejected') {
+      // Someone else already holds this venueId with a different secret — retrying
+      // would just fail the same way forever, so stop and surface it instead.
+      _rejected = true;
+      _status = { connected: false, url: null, error: msg.reason || 'register-rejected' };
+      _onStatus?.(_status);
+      try { _ws.close(); } catch {}
     } else {
       _onRequest?.(msg);
     }
@@ -49,9 +59,9 @@ function _connect() {
   _ws.on('error', () => {});
 
   _ws.on('close', () => {
-    _status = { connected: false, url: null };
+    _status = _rejected ? _status : { connected: false, url: null };
     _onStatus?.(_status);
-    if (_cfg?.enabled) _scheduleReconnect();
+    if (_cfg?.enabled && !_rejected) _scheduleReconnect();
   });
 }
 
