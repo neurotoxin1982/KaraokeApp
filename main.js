@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, protocol, net } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, protocol, net, Menu } = require('electron');
 const path   = require('path');
 const fs     = require('fs');
 const crypto = require('crypto');
@@ -93,6 +93,10 @@ app.whenReady().then(async () => {
     if (changed) _notifyQueueChanged();
   }, 10_000);
 
+  // The app has its own custom UI chrome; the default File/Edit/View/Window/Help
+  // bar is Electron boilerplate that was never replaced.
+  Menu.setApplicationMenu(null);
+
   createMainWindow();
   setupIPC();
   _initRelay();
@@ -141,6 +145,14 @@ function _broadcastToAll(msg) {
 }
 
 // ── Windows ───────────────────────────────────────────────────────────────────
+// F12 still opens DevTools even with the app menu removed (that menu was the
+// only thing wiring up that accelerator).
+function _registerDevToolsToggle(win) {
+  win.webContents.on('before-input-event', (_event, input) => {
+    if (input.type === 'keyDown' && input.key === 'F12') win.webContents.toggleDevTools();
+  });
+}
+
 function createMainWindow() {
   mainWindow = new BrowserWindow({
     width: 1440, height: 900,
@@ -154,6 +166,7 @@ function createMainWindow() {
   });
   mainWindow.loadFile('renderer/index.html');
   mainWindow.on('closed', () => { mainWindow = null; app.quit(); });
+  _registerDevToolsToggle(mainWindow);
 }
 
 function openPlayerWindow() {
@@ -169,6 +182,7 @@ function openPlayerWindow() {
   });
   playerWindow.loadFile('renderer/player.html');
   playerWindow.on('closed', () => { playerWindow = null; });
+  _registerDevToolsToggle(playerWindow);
 }
 
 // ── IPC bridge ────────────────────────────────────────────────────────────────

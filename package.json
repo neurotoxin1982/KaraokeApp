@@ -1,6 +1,6 @@
 {
   "name": "karaoke-manager",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Local karaoke management app",
   "main": "main.js",
   "scripts": {
@@ -26,6 +26,10 @@
     "productName": "Karaoke Manager",
     "win": {
       "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
     },
     "mac": {
       "target": [
