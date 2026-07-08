@@ -181,5 +181,19 @@ app.get('/venues', (_req, res) => {
   res.json(list);
 });
 
+// ── Admin (no auth yet — see project notes) ───────────────────────────────────
+app.get('/admin', (_req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
+
+app.get('/admin/venues', (_req, res) => {
+  const list = [];
+  venues.forEach((v, id) => list.push({
+    id,
+    name: v.name,
+    connectedAt: v.connectedAt,
+    sourcesEnabled: v.sourcesEnabled || { local: true, youtube: true },
+  }));
+  res.json(list);
+});
+
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => console.log(`karaoke-relay listening on :${PORT}`));
