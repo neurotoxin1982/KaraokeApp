@@ -86,6 +86,14 @@ contextBridge.exposeInMainWorld('api', {
 
   potStatus: () => ipcRenderer.invoke('pot:status'),
 
+  // Software update
+  updateGetVersion: ()             => ipcRenderer.invoke('update:getVersion'),
+  updateCheck:    ()               => ipcRenderer.invoke('update:check'),
+  updateDownload: (url, name)      => ipcRenderer.invoke('update:download', url, name),
+  updateInstall:  (filePath)       => ipcRenderer.invoke('update:install', filePath),
+  onUpdateProgress: (cb)           => ipcRenderer.on('update:progress', (_, pct) => cb(pct)),
+  platform: process.platform,
+
   // YouTube
   youtubeEnsure:  ()        => ipcRenderer.invoke('youtube:ensure'),
   youtubeSearch:  (q)       => ipcRenderer.invoke('youtube:search', q),

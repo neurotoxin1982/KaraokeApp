@@ -330,6 +330,15 @@ function setupIPC() {
     return ytdlp.getStreamUrl(videoId, _ytCookieOpts());
   });
 
+  // Software update (manual: check -> download -> install, each user-triggered)
+  ipcMain.handle('update:getVersion', () => app.getVersion());
+  ipcMain.handle('update:check', () => require('./src/updater').checkForUpdate());
+  ipcMain.handle('update:download', async (event, downloadUrl, assetName) => {
+    const updater = require('./src/updater');
+    return updater.downloadUpdate(downloadUrl, assetName, (pct) => event.sender.send('update:progress', pct));
+  });
+  ipcMain.handle('update:install', (_, filePath) => require('./src/updater').installUpdate(filePath));
+
   // Player window
   ipcMain.handle('player:open', () => openPlayerWindow());
 

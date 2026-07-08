@@ -72,6 +72,8 @@ wss.on('connection', (ws) => {
 });
 
 // ── Customer-facing routes ────────────────────────────────────────────────────
+app.get('/download', (req, res) => res.sendFile(path.join(__dirname, 'public', 'download.html')));
+
 app.get('/v/:venueId', (req, res) => {
   const venue = venues.get(req.params.venueId);
   if (!venue) return res.status(404).sendFile(path.join(__dirname, 'public', 'offline.html'));

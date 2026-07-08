@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>Karaoke Manager — Download</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { min-height: 100%; background: #0f1117; color: #f3f4f6; font-family: system-ui, -apple-system, sans-serif; }
+
+    .page { min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 40px 20px 60px; }
+
+    .header { text-align: center; margin-bottom: 32px; }
+    .header .icon { font-size: 3rem; margin-bottom: 12px; }
+    .header h1 { font-size: 1.6rem; font-weight: 700; color: #fff; }
+    .header p  { color: #6b7280; font-size: .9rem; margin-top: 6px; }
+
+    .dl-list { width: 100%; max-width: 440px; display: flex; flex-direction: column; gap: 10px; }
+
+    .dl-card {
+      background: #1f2937; border-radius: 14px; padding: 18px 20px;
+      display: flex; align-items: center; gap: 14px;
+      cursor: pointer; text-decoration: none; color: inherit;
+      border: 1.5px solid transparent;
+      transition: border-color .15s, background .15s, transform .1s;
+    }
+    .dl-card:hover  { border-color: #7c3aed; background: #263041; }
+    .dl-card:active { transform: scale(.98); }
+
+    .dl-icon { font-size: 1.6rem; flex-shrink: 0; }
+    .dl-info { display: flex; flex-direction: column; gap: 2px; flex: 1; }
+    .dl-name { font-size: 1rem; font-weight: 600; color: #fff; }
+    .dl-sub  { font-size: .8rem; color: #6b7280; }
+    .dl-arrow { color: #7c3aed; font-size: 1.2rem; flex-shrink: 0; }
+
+    .section-label {
+      width: 100%; max-width: 440px; font-size: .78rem; font-weight: 700;
+      letter-spacing: .06em; text-transform: uppercase; color: #4b5563;
+      margin: 22px 0 10px; padding-left: 2px;
+    }
+    .section-label:first-of-type { margin-top: 0; }
+
+    .note {
+      width: 100%; max-width: 440px; margin-top: 28px;
+      background: #1a1f2b; border: 1px solid #263041; border-radius: 12px;
+      padding: 16px 18px; font-size: .82rem; line-height: 1.6; color: #9ca3af;
+    }
+    .note strong { color: #d1d5db; }
+    .note + .note { margin-top: 10px; }
+  </style>
+</head>
+<body>
+<div class="page">
+  <div class="header">
+    <div class="icon">🎤</div>
+    <h1>Karaoke Manager</h1>
+    <p>Version 1.0.2</p>
+  </div>
+
+  <div class="section-label">Windows</div>
+  <div class="dl-list">
+    <a class="dl-card" href="/downloads/KaraokeManager-Windows.exe">
+      <span class="dl-icon">🪟</span>
+      <div class="dl-info">
+        <span class="dl-name">Windows Installer</span>
+        <span class="dl-sub">.exe · 64-bit</span>
+      </div>
+      <span class="dl-arrow">⬇</span>
+    </a>
+  </div>
+
+  <div class="section-label">macOS</div>
+  <div class="dl-list">
+    <a class="dl-card" href="/downloads/KaraokeManager-macOS-AppleSilicon.dmg">
+      <span class="dl-icon">🍎</span>
+      <div class="dl-info">
+        <span class="dl-name">Apple Silicon</span>
+        <span class="dl-sub">M1 / M2 / M3 / M4 Macs</span>
+      </div>
+      <span class="dl-arrow">⬇</span>
+    </a>
+    <a class="dl-card" href="/downloads/KaraokeManager-macOS-Intel.dmg">
+      <span class="dl-icon">🍎</span>
+      <div class="dl-info">
+        <span class="dl-name">Intel</span>
+        <span class="dl-sub">Older Intel-based Macs</span>
+      </div>
+      <span class="dl-arrow">⬇</span>
+    </a>
+  </div>
+
+  <div class="note">
+    Not sure which Mac chip you have? <strong>Apple menu → About This Mac</strong> and look for "Chip" or "Processor".
+  </div>
+  <div class="note">
+    <strong>Windows</strong> may show a SmartScreen warning on first launch (click "More info" → "Run anyway"). <strong>macOS</strong> will block the app the first time — right-click it and choose "Open" instead of double-clicking. Both happen because the app isn't code-signed yet.
+  </div>
+</div>
+</body>
+</html>

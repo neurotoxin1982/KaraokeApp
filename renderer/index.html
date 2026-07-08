@@ -328,6 +328,10 @@
         style="background:none;border:none;border-bottom:2px solid transparent;color:#9ca3af;padding:9px 18px;cursor:pointer;font-size:.82rem;white-space:nowrap">
         <i class="fa-solid fa-globe" style="margin-right:5px"></i>Online
       </button>
+      <button id="stab-update" onclick="switchSettingsTab('update')"
+        style="background:none;border:none;border-bottom:2px solid transparent;color:#9ca3af;padding:9px 18px;cursor:pointer;font-size:.82rem;white-space:nowrap">
+        <i class="fa-solid fa-arrow-up-right-dots" style="margin-right:5px"></i>Update
+      </button>
     </div>
 
     <!-- Tab content (scrollable) -->
@@ -785,6 +789,57 @@
               style="width:180px;height:180px;border-radius:10px;background:#1f2937;display:none">
             <p style="font-size:.78rem;color:#6b7280;text-align:center">Customers scan this at the event to request songs</p>
           </div>
+        </div>
+
+      </div>
+
+      <!-- ── Update tab ───────────────────────────────────────────────── -->
+      <div id="stab-update-content" style="display:none">
+        <div class="card" id="update-card" style="display:flex;flex-direction:column;gap:12px">
+          <h4 style="font-size:.95rem;font-weight:600">
+            <i class="fa-solid fa-arrow-up-right-dots" style="color:#a78bfa;margin-right:6px"></i>Software Update
+          </h4>
+          <p style="font-size:.8rem;color:#6b7280" id="update-current-version">Version —</p>
+
+          <div id="update-idle">
+            <button class="btn btn-gray btn-sm" onclick="_checkForUpdate()">
+              <i class="fa-solid fa-rotate"></i> Check for Updates
+            </button>
+          </div>
+
+          <div id="update-checking" class="hidden" style="font-size:.85rem;color:#9ca3af">
+            <i class="fa-solid fa-spinner fa-spin"></i> Checking…
+          </div>
+
+          <div id="update-uptodate" class="hidden" style="font-size:.85rem;color:#22c55e">
+            <i class="fa-solid fa-check"></i> You're up to date.
+          </div>
+
+          <div id="update-available" class="hidden" style="display:flex;flex-direction:column;gap:10px">
+            <div style="font-size:.85rem;color:#d1d5db">
+              Version <span id="update-latest-version" style="font-weight:700;color:#a78bfa"></span> is available.
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="_downloadUpdate()">
+              <i class="fa-solid fa-download"></i> Download Update
+            </button>
+          </div>
+
+          <div id="update-downloading" class="hidden" style="display:flex;flex-direction:column;gap:8px">
+            <div style="font-size:.85rem;color:#9ca3af">Downloading… <span id="update-progress-pct">0</span>%</div>
+            <div style="height:6px;background:#111827;border-radius:3px;overflow:hidden">
+              <div id="update-progress-bar" style="height:100%;width:0%;background:#7c3aed;transition:width .2s"></div>
+            </div>
+          </div>
+
+          <div id="update-ready" class="hidden" style="display:flex;flex-direction:column;gap:10px">
+            <div style="font-size:.85rem;color:#d1d5db" id="update-ready-text">Update downloaded.</div>
+            <button class="btn btn-primary btn-sm" onclick="_installUpdate()">
+              <i class="fa-solid fa-arrow-up-right-from-square"></i>
+              <span id="update-install-btn-text">Install &amp; Restart</span>
+            </button>
+          </div>
+
+          <div id="update-error" class="hidden" style="font-size:.85rem;color:#ef4444"></div>
         </div>
       </div>
 
@@ -2016,7 +2071,7 @@ function autoSave(key, value, delayMs = 0) {
 let _settingsActiveTab = 'library';
 function switchSettingsTab(tab) {
   _settingsActiveTab = tab;
-  ['library','display','music','queue','online'].forEach(t => {
+  ['library','display','music','queue','online','update'].forEach(t => {
     const btn     = document.getElementById(`stab-${t}`);
     const content = document.getElementById(`stab-${t}-content`);
     const active  = t === tab;
@@ -3113,6 +3168,63 @@ function _relaycopyvenueid() {
   if (v) { navigator.clipboard.writeText(v); toast('Venue ID copied'); }
 }
 
+// ── Software update (manual: check -> download -> install) ────────────────────
+let _updatePendingAsset = null; // { downloadUrl, assetName } once a newer release is found
+let _updateDownloadedPath = null;
+
+function _updateShowState(name) {
+  ['idle', 'checking', 'uptodate', 'available', 'downloading', 'ready', 'error'].forEach(s => {
+    const el = document.getElementById('update-' + s);
+    if (el) el.classList.toggle('hidden', s !== name);
+  });
+}
+
+async function _checkForUpdate() {
+  _updateShowState('checking');
+  try {
+    const result = await window.api.updateCheck();
+    document.getElementById('update-current-version').textContent = `Version ${result.currentVersion}`;
+    if (result.available && result.downloadUrl) {
+      _updatePendingAsset = { downloadUrl: result.downloadUrl, assetName: result.assetName };
+      document.getElementById('update-latest-version').textContent = result.latestVersion;
+      _updateShowState('available');
+    } else {
+      _updateShowState('uptodate');
+    }
+  } catch (e) {
+    document.getElementById('update-error').textContent = `Could not check for updates: ${e.message || e}`;
+    _updateShowState('error');
+  }
+}
+
+async function _downloadUpdate() {
+  if (!_updatePendingAsset) return;
+  _updateShowState('downloading');
+  document.getElementById('update-progress-pct').textContent = '0';
+  document.getElementById('update-progress-bar').style.width = '0%';
+  window.api.onUpdateProgress(pct => {
+    document.getElementById('update-progress-pct').textContent = String(pct);
+    document.getElementById('update-progress-bar').style.width = pct + '%';
+  });
+  try {
+    _updateDownloadedPath = await window.api.updateDownload(_updatePendingAsset.downloadUrl, _updatePendingAsset.assetName);
+    const isMac = window.api.platform === 'darwin';
+    document.getElementById('update-ready-text').textContent = isMac
+      ? 'Downloaded. Open the disk image and drag the app to Applications to finish.'
+      : 'Update downloaded. Installing will close and restart the app.';
+    document.getElementById('update-install-btn-text').textContent = isMac ? 'Show in Finder' : 'Install & Restart';
+    _updateShowState('ready');
+  } catch (e) {
+    document.getElementById('update-error').textContent = `Download failed: ${e.message || e}`;
+    _updateShowState('error');
+  }
+}
+
+async function _installUpdate() {
+  if (!_updateDownloadedPath) return;
+  await window.api.updateInstall(_updateDownloadedPath);
+}
+
 // Listen for relay status changes from main process
 window.api.onRelayStatus(status => _relayApplyStatus(status));
 
@@ -3151,7 +3263,15 @@ switchSettingsTab = function(tab) {
   _origSwitchSettingsTab(tab);
   if (tab === 'online') { _relayLoadTab(); _loadPotStatus(); _startLocalReqPoll(); }
   else { _stopLocalReqPoll(); }
+  if (tab === 'update') _loadUpdateVersion();
 };
+
+async function _loadUpdateVersion() {
+  const el = document.getElementById('update-current-version');
+  if (!el) return;
+  const version = await window.api.updateGetVersion().catch(() => null);
+  if (version) el.textContent = `Version ${version}`;
+}
 
 async function _loadPotStatus() {
   const dot  = document.getElementById('pot-status-dot');
