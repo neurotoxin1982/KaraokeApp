@@ -355,6 +355,13 @@
             </div>
           </div>
         </div>
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+            <h4 style="font-size:.95rem;font-weight:600"><i class="fa-solid fa-folder-open" style="color:#a78bfa;margin-right:6px"></i>Local Library</h4>
+            <button class="btn btn-gray btn-sm" id="add-lib-btn" onclick="addLibraryRow()"><i class="fa-solid fa-plus"></i> Add Library</button>
+          </div>
+          <div id="library-rows"></div>
+        </div>
         <div class="card" id="yt-filters-card">
           <h4 style="font-size:.95rem;font-weight:600;margin-bottom:12px"><i class="fa-brands fa-youtube" style="color:#ff4444;margin-right:6px"></i>YouTube Filters</h4>
           <p style="font-size:.8rem;color:#6b7280;margin-bottom:12px;line-height:1.5">Only karaoke videos from these providers are shown. Enabling a language additionally allows karaoke videos in that language from any channel.</p>
@@ -405,12 +412,12 @@
             </div>
           </div>
         </div>
-        <div class="card">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-            <h4 style="font-size:.95rem;font-weight:600"><i class="fa-solid fa-folder-open" style="color:#a78bfa;margin-right:6px"></i>Local Library</h4>
-            <button class="btn btn-gray btn-sm" id="add-lib-btn" onclick="addLibraryRow()"><i class="fa-solid fa-plus"></i> Add Library</button>
+        <div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+          <div>
+            <h4 style="font-size:.95rem;font-weight:600"><i class="fa-brands fa-youtube" style="color:#ff4444;margin-right:6px"></i>YouTube Playback</h4>
+            <p style="font-size:.8rem;color:#6b7280;margin-top:4px">Bot-check bypass runs automatically in the background.</p>
           </div>
-          <div id="library-rows"></div>
+          <button class="btn btn-gray btn-sm" onclick="openYtPlaybackModal()">Optional Fallback</button>
         </div>
         <div class="card" id="top-songs-card" style="display:none">
           <h4 style="font-size:.95rem;font-weight:600;margin-bottom:10px"><i class="fa-solid fa-trophy" style="color:#facc15;margin-right:6px"></i>Most Played</h4>
@@ -664,41 +671,6 @@
 
       <!-- ── Online tab ───────────────────────────────────────────────── -->
       <div id="stab-online-content" style="display:none">
-        <div class="card" style="display:flex;flex-direction:column;gap:10px">
-          <h4 style="font-size:.95rem;font-weight:600">
-            <i class="fa-brands fa-youtube" style="color:#ff4444;margin-right:6px"></i>YouTube Playback
-          </h4>
-          <p style="font-size:.8rem;color:#6b7280;line-height:1.5">
-            A local token server runs in the background so yt-dlp can pass YouTube's "Sign in to confirm you're not a bot" check without cookies or a YouTube login — it just proves requests come from a real client. yt-dlp also auto-updates on launch.
-          </p>
-          <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:#111827;border-radius:8px">
-            <span id="pot-status-dot" style="width:9px;height:9px;border-radius:50%;background:#6b7280;flex-shrink:0;display:inline-block"></span>
-            <span id="pot-status-text" style="font-size:.8rem;color:#9ca3af">Checking…</span>
-          </div>
-          <div style="display:flex;flex-direction:column;gap:5px">
-            <label style="font-size:.75rem;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.05em">Cookies file (.txt) — optional fallback</label>
-            <div style="display:flex;gap:8px">
-              <input id="set-yt-cookies-file" type="text" readonly placeholder="No file selected" style="flex:1;font-size:.8rem">
-              <button class="btn btn-gray btn-sm" onclick="browseYtCookiesFile()"><i class="fa-solid fa-folder"></i></button>
-              <button class="btn btn-red btn-sm" onclick="clearYtCookiesFile()"><i class="fa-solid fa-xmark"></i></button>
-            </div>
-          </div>
-          <div style="display:flex;flex-direction:column;gap:5px">
-            <label style="font-size:.75rem;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.05em">Or: cookies from browser (ignored if a file is set above)</label>
-            <select id="set-yt-cookies-browser"
-              style="background:#111827;border:1.5px solid #374151;color:#f3f4f6;padding:8px 12px;border-radius:8px;font-size:.9rem"
-              onchange="autoSave('youtube_cookies_browser', this.value)">
-              <option value="">None</option>
-              <option value="chrome">Chrome</option>
-              <option value="edge">Edge</option>
-              <option value="firefox">Firefox</option>
-              <option value="brave">Brave</option>
-              <option value="opera">Opera</option>
-              <option value="vivaldi">Vivaldi</option>
-            </select>
-          </div>
-        </div>
-
         <div class="card" style="display:flex;flex-direction:column;gap:12px">
           <h4 style="font-size:.95rem;font-weight:600">
             <i class="fa-solid fa-wifi" style="color:#a78bfa;margin-right:6px"></i>Local Network Requests
@@ -905,6 +877,47 @@
         </button>
       </div>
 
+    </div>
+  </div>
+</div>
+
+<!-- ── YouTube Playback Modal ───────────────────────────────────────── -->
+<div id="yt-playback-modal" class="modal-overlay hidden">
+  <div class="modal" style="max-width:460px">
+    <div class="modal-header">
+      <h3 style="font-size:1.1rem;font-weight:600"><i class="fa-brands fa-youtube" style="color:#ff4444;margin-right:8px"></i>YouTube Playback</h3>
+      <button class="btn btn-gray btn-sm" onclick="closeYtPlaybackModal()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:16px">
+      <p style="font-size:.8rem;color:#6b7280;line-height:1.5">
+        A local token server runs in the background so yt-dlp can pass YouTube's "Sign in to confirm you're not a bot" check without cookies or a YouTube login — it just proves requests come from a real client. yt-dlp also auto-updates on launch.
+      </p>
+      <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:#111827;border-radius:8px">
+        <span id="pot-status-dot" style="width:9px;height:9px;border-radius:50%;background:#6b7280;flex-shrink:0;display:inline-block"></span>
+        <span id="pot-status-text" style="font-size:.8rem;color:#9ca3af">Checking…</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:5px">
+        <label style="font-size:.75rem;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.05em">Cookies file (.txt) — optional fallback</label>
+        <div style="display:flex;gap:8px">
+          <input id="set-yt-cookies-file" type="text" readonly placeholder="No file selected" style="flex:1;font-size:.8rem">
+          <button class="btn btn-gray btn-sm" onclick="browseYtCookiesFile()"><i class="fa-solid fa-folder"></i></button>
+          <button class="btn btn-red btn-sm" onclick="clearYtCookiesFile()"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:5px">
+        <label style="font-size:.75rem;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.05em">Or: cookies from browser (ignored if a file is set above)</label>
+        <select id="set-yt-cookies-browser"
+          style="background:#111827;border:1.5px solid #374151;color:#f3f4f6;padding:8px 12px;border-radius:8px;font-size:.9rem"
+          onchange="autoSave('youtube_cookies_browser', this.value)">
+          <option value="">None</option>
+          <option value="chrome">Chrome</option>
+          <option value="edge">Edge</option>
+          <option value="firefox">Firefox</option>
+          <option value="brave">Brave</option>
+          <option value="opera">Opera</option>
+          <option value="vivaldi">Vivaldi</option>
+        </select>
+      </div>
     </div>
   </div>
 </div>
@@ -2780,6 +2793,15 @@ function closeCastModal() {
   _castPollTimer = null;
 }
 
+function openYtPlaybackModal() {
+  show('yt-playback-modal');
+  _loadPotStatus();
+}
+
+function closeYtPlaybackModal() {
+  hide('yt-playback-modal');
+}
+
 async function castStart() {
   const url = await api.networkStart();
   document.getElementById('cast-url').value = url;
@@ -3261,7 +3283,7 @@ window.api.onRelayRequest(req => {
 const _origSwitchSettingsTab = switchSettingsTab;
 switchSettingsTab = function(tab) {
   _origSwitchSettingsTab(tab);
-  if (tab === 'online') { _relayLoadTab(); _loadPotStatus(); _startLocalReqPoll(); }
+  if (tab === 'online') { _relayLoadTab(); _startLocalReqPoll(); }
   else { _stopLocalReqPoll(); }
   if (tab === 'update') _loadUpdateVersion();
 };
