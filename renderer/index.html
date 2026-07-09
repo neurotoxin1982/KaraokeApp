@@ -2753,7 +2753,11 @@ document.getElementById('live-results').addEventListener('click', e=>{
 
   list.addEventListener('dragover', e => {
     e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
+    // A history row's dragstart declares effectAllowed='copy' (re-adding doesn't
+    // remove it from history); forcing 'move' here regardless mismatched that
+    // and made some browsers refuse the drop entirely. Match the source instead.
+    e.dataTransfer.dropEffect = window._histDrag ? 'copy' : 'move';
+    if (window._histDrag) return;
     const row = e.target.closest('.queue-row[draggable]');
     if (!row || row === _dragEl) { clearIndicators(); return; }
     const rect = row.getBoundingClientRect();
