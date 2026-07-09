@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, dialog, protocol, net, Menu } = require('el
 const path   = require('path');
 const fs     = require('fs');
 const crypto = require('crypto');
+const legacyFlag = require('./src/legacy-flag');
 
 // Disable GPU sandbox issues on some Windows systems
 app.commandLine.appendSwitch('--disable-gpu-sandbox');
@@ -146,11 +147,34 @@ function _broadcastToAll(msg) {
 
 // ── Windows ───────────────────────────────────────────────────────────────────
 // F12 still opens DevTools even with the app menu removed (that menu was the
-// only thing wiring up that accelerator).
+// only thing wiring up that accelerator). Ctrl+Shift+L is the KaraokeDisplay
+// rollback switch (see src/legacy-flag.js) -- caught here at the Electron
+// input level, not in page JS, so it still works if the page has crashed.
 function _registerDevToolsToggle(win) {
   win.webContents.on('before-input-event', (_event, input) => {
-    if (input.type === 'keyDown' && input.key === 'F12') win.webContents.toggleDevTools();
+    if (input.type !== 'keyDown') return;
+    if (input.key === 'F12') { win.webContents.toggleDevTools(); return; }
+    if (input.key.toLowerCase() === 'l' && input.control && input.shift) _toggleLegacyRenderer(win);
   });
+}
+
+function _toggleLegacyRenderer(win) {
+  const goingLegacy = !legacyFlag.isLegacyMode();
+  const choice = dialog.showMessageBoxSync(win, {
+    type: 'question',
+    buttons: ['Cancel', goingLegacy ? 'Switch to legacy renderer' : 'Switch to normal renderer'],
+    defaultId: 1,
+    cancelId: 0,
+    title: 'KaraokeDisplay rollback',
+    message: goingLegacy
+      ? 'Switch back to the old (pre-KaraokeDisplay) display renderer?'
+      : 'Switch back to the normal (KaraokeDisplay) display renderer?',
+    detail: 'The app will restart. Press Ctrl+Shift+L again afterwards to switch back.',
+  });
+  if (choice !== 1) return;
+  legacyFlag.setLegacyMode(goingLegacy);
+  app.relaunch();
+  app.exit(0);
 }
 
 function createMainWindow() {
@@ -164,7 +188,7 @@ function createMainWindow() {
       nodeIntegration: false,
     },
   });
-  mainWindow.loadFile('renderer/index.html');
+  mainWindow.loadFile(legacyFlag.isLegacyMode() ? 'renderer/index.legacy.html' : 'renderer/index.html');
   mainWindow.on('closed', () => { mainWindow = null; app.quit(); });
   _registerDevToolsToggle(mainWindow);
 }
@@ -180,7 +204,7 @@ function openPlayerWindow() {
       nodeIntegration: false,
     },
   });
-  playerWindow.loadFile('renderer/player.html');
+  playerWindow.loadFile(legacyFlag.isLegacyMode() ? 'renderer/player.legacy.html' : 'renderer/player.html');
   playerWindow.on('closed', () => { playerWindow = null; });
   _registerDevToolsToggle(playerWindow);
 }

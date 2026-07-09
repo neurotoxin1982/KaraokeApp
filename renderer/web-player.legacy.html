@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Karaoke Display</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 100%; height: 100%; background: #000; overflow: hidden; font-family: system-ui, sans-serif; }
+
+    /* Fixed virtual canvas: always exactly 1920x1080 internally, scaled and
+       centered as one unit (via JS transform) to fit whatever the real
+       screen looks like. Letterbox/pillarbox bars are just #tv-viewport's
+       own black background showing through around the scaled stage. */
+    #tv-viewport { position: absolute; inset: 0; background: #000; overflow: hidden; }
+    #tv-stage {
+      position: absolute; top: 0; left: 0;
+      width: 1920px; height: 1080px;
+      transform-origin: top left;
+      overflow: hidden;
+    }
+    /* 5% overscan margin, applied locally within whichever screen needs it.
+       inset:5% resolves top/bottom against the parent's height and left/right
+       against its width, so this is a true 5% on every edge, no per-axis math. */
+    .safe-area { position: absolute; inset: 5%; }
+
+    #canvas-wrap {
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      background: #000;
+    }
+    #cdg-canvas { image-rendering: pixelated; image-rendering: crisp-edges; display: block; }
+
+    #video-el {
+      position: absolute; inset: 0;
+      width: 100%; height: 100%;
+      object-fit: contain; display: none;
+    }
+
+    #info-bar {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      background: linear-gradient(transparent, rgba(0,0,0,0.85));
+      padding: 24px 96px 20px; display: none; /* 96px = 5% of the 1920px stage */
+    }
+    #song-title  { font-size: 2rem; font-weight: 700; color: #fff; line-height: 1.2; }
+    #song-artist { font-size: 1.2rem; color: #a78bfa; margin-top: 4px; }
+    #singer-name { font-size: 1rem; color: #9ca3af; margin-top: 4px; }
+
+    #idle-screen {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      color: #4b5563; gap: 16px;
+    }
+    #idle-screen .logo { font-size: 3rem; }
+    #idle-screen p { font-size: 1.1rem; }
+
+    #idle-custom-text {
+      position: absolute; top: 0; left: 0; right: 0;
+      padding: 28px 40px 40px; font-weight: 700;
+      color: #fff; text-shadow: 0 2px 8px rgba(0,0,0,.8);
+      text-align: center; z-index: 2;
+    }
+    #idle-ticker-wrap, #pop-tr1-ticker-wrap {
+      display: none; position: absolute; bottom: 0; left: 0; right: 0;
+      background: rgba(124,58,237,0.92); padding: 28px 0; overflow: hidden;
+    }
+    #idle-ticker, #pop-tr1-ticker {
+      white-space: nowrap; display: inline-block;
+      animation: pop-ticker 18s linear infinite;
+      font-size: 2.8rem; font-weight: 700; color: #fff;
+    }
+    /* Positioned within a local .safe-area, so left:0/top:0 here already
+       means "5% inset from the real edge", not the true corner. */
+    #idle-next-up, #ad-next-up {
+      display: none; position: absolute; left: 0; top: 0;
+      background: rgba(0,0,0,0.72); border-radius: 14px; padding: 14px 16px;
+      backdrop-filter: blur(4px); min-width: 200px; max-width: 300px; z-index: 5;
+    }
+    .idle-qr-box {
+      position: absolute; display: flex; flex-direction: column; align-items: center;
+      padding: 6px; gap: 3px;
+    }
+    .idle-qr-img {
+      /* Actual size always comes from the inline style _showQrIn sets; this
+         is just a sane fallback, in fixed stage-px like everything else. */
+      height: 110px; width: auto; aspect-ratio: 1 / 1;
+      border-radius: 10px; image-rendering: pixelated;
+    }
+
+    /* Ad screen — shown instead of (or rotating with) idle; no banner/custom
+       text per spec, just full-size media + optional QR / Up Next */
+    #ad-screen {
+      position: absolute; inset: 0; display: none; background: #000; overflow: hidden; z-index: 1;
+    }
+    #ad-picture, #ad-video {
+      position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: none;
+    }
+
+    /* Playback banner (shown while a song is playing) */
+    #playback-banner-wrap {
+      display: none; position: absolute; bottom: 0; left: 0; right: 0; z-index: 19;
+      background: rgba(124,58,237,0.92); overflow: hidden;
+    }
+    #playback-banner-ticker {
+      white-space: nowrap; display: inline-block;
+      animation: pop-ticker 18s linear infinite;
+      font-size: 2.8rem; font-weight: 700; color: #fff;
+    }
+
+    #no-signal {
+      position: absolute; inset: 0;
+      display: none; flex-direction: column; align-items: center; justify-content: center;
+      color: #374151; gap: 12px; background: #000;
+    }
+    #no-signal .dot { font-size: 2rem; animation: pulse 1.5s infinite; }
+    @keyframes pulse { 0%,100%{opacity:.3} 50%{opacity:1} }
+
+    @keyframes pop-ticker { from{transform:translateX(0)} to{transform:translateX(-50%)} }
+
+    /* Phase 1: Thank you */
+    #pop-tr-thanks {
+      display: none; position: absolute; inset: 0; background: #000; z-index: 60;
+      flex-direction: column; align-items: center; justify-content: center; gap: 16px; text-align: center;
+    }
+    /* Phase 2: Background + banner */
+    #pop-tr-bg {
+      display: none; position: absolute; inset: 0; background: #000; z-index: 60; flex-direction: column;
+    }
+    #pop-tr-img-wrap {
+      flex: 1; display: flex; align-items: stretch; justify-content: center; overflow: hidden; min-height: 0; position: relative;
+    }
+    #pop-tr-venue { width: 100%; height: 100%; object-fit: contain; display: none; }
+    #pop-tr-countdown {
+      position: absolute; top: 0; right: 0;
+      background: rgba(0,0,0,0.72); border-radius: 14px; padding: 12px 20px;
+      text-align: center; backdrop-filter: blur(4px); min-width: 140px;
+    }
+    #pop-tr-countdown-label { font-size: .6rem; color: #a78bfa; letter-spacing: .1em; font-weight: 600; margin-bottom: 4px; }
+    #pop-tr-next-singer-name { font-size: 1.3rem; font-weight: 700; color: #fff; margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
+    #pop-tr-ready-label { font-size: .55rem; color: #6b7280; letter-spacing: .08em; margin-bottom: 3px; }
+    #pop-tr-countdown-num   { font-size: 2.2rem; font-weight: 700; color: #fff; font-variant-numeric: tabular-nums; line-height: 1; }
+    #pop-tr-ticker-wrap {
+      background: rgba(124,58,237,0.92); padding: 28px 0; overflow: hidden; flex-shrink: 0;
+    }
+    #pop-tr-ticker {
+      white-space: nowrap; display: inline-block;
+      animation: pop-ticker 18s linear infinite;
+      font-size: 2.8rem; font-weight: 700; color: #fff;
+    }
+  </style>
+</head>
+<body>
+
+<div id="tv-viewport">
+<div id="tv-stage">
+
+<div id="canvas-wrap">
+  <canvas id="cdg-canvas"></canvas>
+</div>
+<video id="video-el" autoplay muted playsinline></video>
+
+<!-- QR shown while a song is actively playing (Karaoke Screen) -->
+<div class="safe-area">
+  <div id="karaoke-qr-box-a" class="idle-qr-box" style="display:none">
+    <img id="karaoke-qr-img" class="idle-qr-img" src="" alt="QR Code">
+  </div>
+  <div id="karaoke-qr-box-b" class="idle-qr-box" style="display:none">
+    <img id="karaoke-qr-img-b" class="idle-qr-img" src="" alt="QR Code">
+  </div>
+</div>
+
+<!-- Banner shown while a song is playing -->
+<div id="playback-banner-wrap">
+  <div id="playback-banner-ticker"></div>
+</div>
+
+<div id="info-bar">
+  <div id="song-title"></div>
+  <div id="song-artist"></div>
+  <div id="singer-name"></div>
+</div>
+
+<div id="idle-screen">
+  <div id="idle-default">
+    <div class="logo">🎤</div>
+    <p>Waiting for next song…</p>
+  </div>
+  <div id="idle-ticker-wrap"><div id="idle-ticker"></div></div>
+  <div class="safe-area">
+    <p id="idle-custom-text"></p>
+    <div id="idle-next-up"></div>
+    <div id="idle-qr-box-a" class="idle-qr-box" style="display:none">
+      <img id="idle-qr-img" class="idle-qr-img" src="" alt="QR Code">
+    </div>
+    <div id="idle-qr-box-b" class="idle-qr-box" style="display:none">
+      <img id="idle-qr-img-b" class="idle-qr-img" src="" alt="QR Code">
+    </div>
+  </div>
+</div>
+
+<!-- Ad screen -->
+<div id="ad-screen">
+  <img id="ad-picture" alt="">
+  <video id="ad-video" muted loop></video>
+  <div class="safe-area">
+    <div id="ad-next-up"></div>
+    <div id="ad-qr-box-a" class="idle-qr-box" style="display:none">
+      <img id="ad-qr-img" class="idle-qr-img" src="" alt="QR Code">
+    </div>
+    <div id="ad-qr-box-b" class="idle-qr-box" style="display:none">
+      <img id="ad-qr-img-b" class="idle-qr-img" src="" alt="QR Code">
+    </div>
+  </div>
+</div>
+
+<div id="no-signal">
+  <div class="dot">📡</div>
+  <p style="color:#4b5563;font-size:1rem">Connecting…</p>
+</div>
+
+<!-- Phase 1: Thank you -->
+<div id="pop-tr-thanks">
+  <div style="font-size:8rem">👏</div>
+  <div style="font-size:3.5rem;font-weight:700;color:#fff">Thank You!</div>
+  <div id="pop-tr-singer" style="font-size:2.5rem;color:#a78bfa;margin-top:8px"></div>
+  <div id="pop-tr1-ticker-wrap"><div id="pop-tr1-ticker"></div></div>
+  <div class="safe-area">
+    <div id="pop-tr1-qr-box-a" class="idle-qr-box" style="display:none">
+      <img id="pop-tr1-qr-img" class="idle-qr-img" src="" alt="QR Code">
+    </div>
+    <div id="pop-tr1-qr-box-b" class="idle-qr-box" style="display:none">
+      <img id="pop-tr1-qr-img-b" class="idle-qr-img" src="" alt="QR Code">
+    </div>
+  </div>
+</div>
+
+<!-- Phase 2: Background + banner -->
+<div id="pop-tr-bg">
+  <div id="pop-tr-img-wrap">
+    <img id="pop-tr-venue" alt="">
+    <div class="safe-area">
+      <div id="pop-tr-countdown">
+        <div id="pop-tr-countdown-label">NEXT SINGER</div>
+        <div id="pop-tr-next-singer-name"></div>
+        <div id="pop-tr-ready-label">GET READY IN</div>
+        <div id="pop-tr-countdown-num"></div>
+      </div>
+      <div id="pop-tr2-qr-box-a" class="idle-qr-box" style="display:none">
+        <img id="pop-tr2-qr-img" class="idle-qr-img" src="" alt="QR Code">
+      </div>
+      <div id="pop-tr2-qr-box-b" class="idle-qr-box" style="display:none">
+        <img id="pop-tr2-qr-img-b" class="idle-qr-img" src="" alt="QR Code">
+      </div>
+    </div>
+  </div>
+  <div id="pop-tr-ticker-wrap">
+    <div id="pop-tr-ticker"></div>
+  </div>
+</div>
+
+</div><!-- /#tv-stage -->
+</div><!-- /#tv-viewport -->
+
+<script src="/js/cdg-player.js"></script>
+
+<script>
+const STAGE_W = 1920, STAGE_H = 1080;
+const tvViewport = document.getElementById('tv-viewport');
+const tvStage    = document.getElementById('tv-stage');
+const canvas     = document.getElementById('cdg-canvas');
+const videoEl    = document.getElementById('video-el');
+const infoBar    = document.getElementById('info-bar');
+const idleScreen = document.getElementById('idle-screen');
+const noSignal   = document.getElementById('no-signal');
+
+// Scale+center the fixed 1920x1080 stage to fit #tv-viewport, whatever shape
+// it is -- letterboxed/pillarboxed as needed, never stretched or cropped.
+// Watching the viewport ELEMENT (not window.resize) is what makes this
+// identical for both an embedded preview panel and a full-screen window.
+function fitStage() {
+  const vw = tvViewport.clientWidth, vh = tvViewport.clientHeight;
+  if (!vw || !vh) return;
+  const scale   = Math.min(vw / STAGE_W, vh / STAGE_H);
+  const offsetX = (vw - STAGE_W * scale) / 2;
+  const offsetY = (vh - STAGE_H * scale) / 2;
+  tvStage.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scale})`;
+}
+new ResizeObserver(fitStage).observe(tvViewport);
+fitStage();
+
+let cdgPlayer = null;
+let _position = 0, _elapsed = 0, _playing = false;
+let _cntTimer = null;
+
+// One-way network latency estimate (seconds), applied to any position value
+// we receive over the WebSocket. Unlike the Electron popout (which gets the
+// same broadcasts via same-machine IPC, effectively instant), this client is
+// a real network hop away -- often WiFi -- so by the time a "position"
+// message arrives, the true position has already moved on. Left uncompensated,
+// this reads as the wireless screen being permanently behind the audio.
+let _latencyComp = 0;
+let _pingTimer = null;
+function _sendPing() {
+  if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'ping', t: performance.now() }));
+}
+
+// Screen Wake Lock: without this, a backgrounded/asleep tab or display can
+// have its rAF/timers throttled by the OS (macOS Safari/Chrome do this more
+// aggressively than Windows), which stalls the CDG follower loop entirely
+// until the screen wakes up again -- visible as a sudden catch-up jump.
+let _wakeLock = null;
+async function _requestWakeLock() {
+  try {
+    if ('wakeLock' in navigator) {
+      _wakeLock = await navigator.wakeLock.request('screen');
+      _wakeLock.addEventListener('release', () => { _wakeLock = null; });
+    }
+  } catch {}
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') _requestWakeLock();
+});
+// Some browsers only grant the lock after a user gesture -- if the initial
+// no-gesture request is refused, a first click/tap retries it.
+document.addEventListener('click', () => _requestWakeLock(), { once: true });
+_requestWakeLock();
+
+// CDG canvas sizing — fitted against the fixed stage size, not the window.
+// The stage's own transform (see fitStage above) handles all responsiveness
+// uniformly, so this only ever needs to run once.
+function resizeCanvas() {
+  const scale = Math.min(STAGE_W / 300, STAGE_H / 216);
+  canvas.style.width  = (300 * scale) + 'px';
+  canvas.style.height = (216 * scale) + 'px';
+}
+resizeCanvas();
+
+function getPos() {
+  if (!_playing) return _position;
+  return _position + (performance.now() - _elapsed) / 1000;
+}
+
+function showIdle() {
+  document.getElementById('pop-tr-thanks').style.display = 'none';
+  document.getElementById('pop-tr-bg').style.display     = 'none';
+  document.getElementById('ad-screen').style.display     = 'none';
+  _hideQrIn('karaoke-qr-box-a', 'karaoke-qr-box-b');
+  canvas.parentElement.style.display = 'flex';
+  videoEl.style.display   = 'none';
+  idleScreen.style.display = 'flex';
+  infoBar.style.display    = 'none';
+}
+
+// ── Shared banner/QR helpers (same logic as the Electron popout) ──────────────
+const QR_SIZE_SCALE    = [0, 0.65, 0.85, 1, 1.3, 1.65]; // index 1-5 -> XS..XL
+const QR_POS_DEFAULT_X = 50, QR_POS_DEFAULT_Y = 85;
+
+function _qrBoxStyleAt(x, y) {
+  return `left:${x}%;top:${y}%;transform:translate(-50%,-50%);`;
+}
+function _qrSizeStyle(sizeLevel) {
+  // Fixed stage-px, not vw -- vw is measured against the real window,
+  // bypassing the stage's own scale transform entirely, so it would size
+  // inconsistently with everything else once the stage is scaled down/up.
+  const scale = QR_SIZE_SCALE[sizeLevel] || 1;
+  return `height:${Math.round(90 * scale)}px;`;
+}
+function _hexToRgba(hex, opacityPct) {
+  const h = (hex || '#7c3aed').replace('#', '');
+  const r = parseInt(h.substring(0, 2), 16) || 0;
+  const g = parseInt(h.substring(2, 4), 16) || 0;
+  const b = parseInt(h.substring(4, 6), 16) || 0;
+  const a = Math.max(0, Math.min(100, parseInt(opacityPct, 10) ?? 92)) / 100;
+  return `rgba(${r},${g},${b},${a})`;
+}
+
+// z-index is included here (not left to the static HTML) because
+// .style.cssText replaces the whole style attribute -- an inline z-index in
+// the markup would otherwise be silently wiped the first time this runs.
+function _showQrIn(boxAId, imgAId, boxBId, imgBId, msg) {
+  const boxA = document.getElementById(boxAId), imgA = document.getElementById(imgAId);
+  const boxB = document.getElementById(boxBId), imgB = document.getElementById(imgBId);
+  if (!boxA || !boxB) return;
+  const x = msg.qrX ?? QR_POS_DEFAULT_X, y = msg.qrY ?? QR_POS_DEFAULT_Y;
+  const sizeStyle = _qrSizeStyle(msg.qrSize);
+  boxA.style.cssText = 'z-index:10;' + _qrBoxStyleAt(x, y);
+  imgA.style.cssText = sizeStyle;
+  imgA.src = msg.qrDataUrl;
+  boxA.style.display = 'flex';
+  if (msg.qrBoth) {
+    boxB.style.cssText = 'z-index:10;' + _qrBoxStyleAt(100 - x, y);
+    imgB.style.cssText = sizeStyle;
+    imgB.src = msg.qrDataUrl;
+    boxB.style.display = 'flex';
+  } else {
+    boxB.style.display = 'none';
+  }
+}
+function _hideQrIn(boxAId, boxBId) {
+  const boxA = document.getElementById(boxAId), boxB = document.getElementById(boxBId);
+  if (boxA) boxA.style.display = 'none';
+  if (boxB) boxB.style.display = 'none';
+}
+
+function _setupScrollTicker(el, text, singleAnimSec) {
+  const gap = '     ';
+  el.textContent = text + gap;
+  const singleW    = el.scrollWidth;
+  const containerW = el.parentElement ? el.parentElement.offsetWidth : STAGE_W;
+  const effectiveW = containerW > 0 ? containerW : STAGE_W;
+  const halfReps   = singleW > 0
+    ? Math.min(20, Math.max(1, Math.ceil(effectiveW / singleW) + 1))
+    : 4;
+  const half       = Array(halfReps).fill(text).join(gap);
+  el.textContent   = half + gap + half;
+  el.style.animationDuration = (singleAnimSec * halfReps) + 's';
+}
+
+function _renderTicker(tickerId, text, animSec, bannerScale, color, bgColor) {
+  const ticker = document.getElementById(tickerId);
+  if (!ticker) return;
+  ticker.style.fontSize = (2.8 * (bannerScale || 1)).toFixed(2) + 'rem';
+  ticker.style.color    = color || '#fff';
+  ticker.parentElement.style.padding = Math.round(28 * (bannerScale || 1)) + 'px 0';
+  if (bgColor) ticker.parentElement.style.background = bgColor;
+  _setupScrollTicker(ticker, text || '', animSec || 18);
+}
+
+// ── WebSocket connection ──────────────────────────────────────────────────────
+let ws = null;
+function connect() {
+  noSignal.style.display  = 'flex';
+  idleScreen.style.display = 'none';
+
+  ws = new WebSocket(`ws://${location.host}`);
+
+  ws.onopen = () => {
+    noSignal.style.display   = 'none';
+    idleScreen.style.display = 'flex';
+    if (_pingTimer) clearInterval(_pingTimer);
+    _sendPing();
+    _pingTimer = setInterval(_sendPing, 5000);
+  };
+
+  ws.onmessage = e => {
+    try { handleMsg(JSON.parse(e.data)); } catch {}
+  };
+
+  ws.onclose = () => {
+    if (_pingTimer) { clearInterval(_pingTimer); _pingTimer = null; }
+    noSignal.style.display   = 'flex';
+    idleScreen.style.display = 'none';
+    // Reconnect after 2s
+    setTimeout(connect, 2000);
+  };
+
+  ws.onerror = () => ws.close();
+}
+connect();
+
+// ── Message handler ───────────────────────────────────────────────────────────
+function handleMsg(msg) {
+  switch (msg.type) {
+
+    case 'song_info': {
+      document.getElementById('song-title').textContent  = msg.title  || '';
+      document.getElementById('song-artist').textContent = msg.artist || '';
+      document.getElementById('singer-name').textContent = msg.singer_name ? '♪ ' + msg.singer_name : '';
+      infoBar.style.display = 'block';
+      idleScreen.style.display = 'none';
+      clearTimeout(window._infoTimer);
+      window._infoTimer = setTimeout(() => { infoBar.style.display = 'none'; }, 8000);
+      break;
+    }
+
+    case 'cdg_path': {
+      if (cdgPlayer) { cdgPlayer.stop(); cdgPlayer = null; }
+      videoEl.style.display = 'none';
+      canvas.parentElement.style.display = 'flex';
+      idleScreen.style.display = 'none';
+      document.getElementById('pop-tr-thanks').style.display = 'none';
+      document.getElementById('pop-tr-bg').style.display     = 'none';
+      _position = (msg.pos || 0) + _latencyComp;
+      _elapsed  = performance.now();
+      _playing  = true;
+      fetch(msg.path)
+        .then(r => r.arrayBuffer())
+        .then(buf => {
+          cdgPlayer = new CdgPlayer(canvas);
+          cdgPlayer.loadFromBuffer(buf);
+          cdgPlayer.startFollower(getPos);
+          if (_position > 0) cdgPlayer.seekTo(_position);
+        })
+        .catch(err => console.error('CDG load error:', err));
+      break;
+    }
+
+    case 'video_path': {
+      if (cdgPlayer) { cdgPlayer.stop(); cdgPlayer = null; }
+      canvas.parentElement.style.display = 'none';
+      videoEl.style.display = 'block';
+      document.getElementById('pop-tr-thanks').style.display = 'none';
+      document.getElementById('pop-tr-bg').style.display     = 'none';
+      idleScreen.style.display = 'none';
+      videoEl.src = msg.path; // served from /media?p=...
+      videoEl.currentTime = (msg.pos || 0) + _latencyComp;
+      videoEl.play().catch(() => {});
+      _playing = true;
+      break;
+    }
+
+    case 'video_url': {
+      if (cdgPlayer) { cdgPlayer.stop(); cdgPlayer = null; }
+      canvas.parentElement.style.display = 'none';
+      videoEl.style.display = 'block';
+      document.getElementById('pop-tr-thanks').style.display = 'none';
+      document.getElementById('pop-tr-bg').style.display     = 'none';
+      idleScreen.style.display = 'none';
+      videoEl.src = msg.url;
+      if (msg.pos) videoEl.currentTime = msg.pos + _latencyComp;
+      videoEl.play().catch(() => {});
+      _playing = true;
+      break;
+    }
+
+    case 'position': {
+      const prevPos  = getPos();
+      const compPos  = msg.pos + _latencyComp;
+      _position = compPos;
+      _elapsed  = performance.now();
+      _playing  = msg.playing;
+      if (cdgPlayer) {
+        const drift = Math.abs(prevPos - compPos);
+        if (msg.seek || drift > 1.5) cdgPlayer.seekTo(compPos);
+      }
+      // Drift correction for video
+      if (videoEl.src && !videoEl.paused && Math.abs(videoEl.currentTime - compPos) > 0.8) {
+        videoEl.currentTime = compPos;
+      }
+      break;
+    }
+
+    case 'pong': {
+      const rtt    = performance.now() - msg.t;
+      const oneWay = Math.max(0, rtt / 2) / 1000;
+      _latencyComp = _latencyComp === 0 ? oneWay : (_latencyComp * 0.7 + oneWay * 0.3);
+      break;
+    }
+
+    case 'pause': {
+      _playing = false;
+      if (cdgPlayer) cdgPlayer.pause();
+      videoEl.pause();
+      break;
+    }
+
+    case 'resume': {
+      _playing  = true;
+      if (msg.pos != null) _position = msg.pos + _latencyComp;
+      _elapsed  = performance.now();
+      if (cdgPlayer) cdgPlayer.resume();
+      videoEl.play().catch(() => {});
+      break;
+    }
+
+    case 'tr_phase1': {
+      idleScreen.style.display = 'none';
+      canvas.parentElement.style.display = 'none';
+      videoEl.style.display = 'none';
+      document.getElementById('pop-tr-bg').style.display = 'none';
+      document.getElementById('pop-tr-singer').textContent = msg.prevSinger || '';
+
+      document.getElementById('pop-tr1-ticker-wrap').style.display = msg.showBanner ? 'block' : 'none';
+      if (msg.showBanner) _renderTicker('pop-tr1-ticker', msg.bannerText, msg.animSec, msg.bannerScale, msg.bannerColor, msg.bannerBgColor);
+
+      if (msg.showQr && msg.qrDataUrl) _showQrIn('pop-tr1-qr-box-a', 'pop-tr1-qr-img', 'pop-tr1-qr-box-b', 'pop-tr1-qr-img-b', msg);
+      else _hideQrIn('pop-tr1-qr-box-a', 'pop-tr1-qr-box-b');
+
+      document.getElementById('pop-tr-thanks').style.display = 'flex';
+      _playing = false;
+      break;
+    }
+
+    case 'tr_phase2': {
+      document.getElementById('pop-tr-thanks').style.display = 'none';
+      idleScreen.style.display = 'none';
+      canvas.parentElement.style.display = 'none';
+      videoEl.style.display = 'none';
+      // Venue image
+      const ptv = document.getElementById('pop-tr-venue');
+      ptv.style.display = 'none';
+      if (msg.venuePath) {
+        ptv.src = msg.venuePath; // already a /media?p=... URL
+        ptv.onload = () => { ptv.style.display = 'block'; };
+      }
+      // Banner
+      document.getElementById('pop-tr-ticker-wrap').style.display = msg.showBanner === false ? 'none' : 'block';
+      if (msg.showBanner !== false) _renderTicker('pop-tr-ticker', msg.bannerText, msg.animSec, msg.bannerScale, msg.bannerColor, msg.bannerBgColor);
+
+      if (msg.showQr && msg.qrDataUrl) _showQrIn('pop-tr2-qr-box-a', 'pop-tr2-qr-img', 'pop-tr2-qr-box-b', 'pop-tr2-qr-img-b', msg);
+      else _hideQrIn('pop-tr2-qr-box-a', 'pop-tr2-qr-box-b');
+
+      // Next singer name
+      document.getElementById('pop-tr-next-singer-name').textContent = msg.nextSinger || '';
+      // Countdown
+      if (_cntTimer) { clearInterval(_cntTimer); _cntTimer = null; }
+      const cntEl = document.getElementById('pop-tr-countdown-num');
+      const fmtSec = s => s >= 60 ? `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}` : `${s}`;
+      if (msg.bgMs > 0) {
+        let remaining = Math.ceil(msg.bgMs / 1000);
+        cntEl.textContent = fmtSec(remaining);
+        _cntTimer = setInterval(() => {
+          remaining = Math.max(0, remaining - 1);
+          cntEl.textContent = fmtSec(remaining);
+        }, 1000);
+      } else {
+        cntEl.textContent = '';
+      }
+      document.getElementById('pop-tr-bg').style.display = 'flex';
+      _playing = false;
+      break;
+    }
+
+    case 'transition_end': {
+      if (_cntTimer) { clearInterval(_cntTimer); _cntTimer = null; }
+      document.getElementById('pop-tr-thanks').style.display = 'none';
+      document.getElementById('pop-tr-bg').style.display     = 'none';
+      document.getElementById('pop-tr1-ticker-wrap').style.display = 'none';
+      _hideQrIn('pop-tr1-qr-box-a', 'pop-tr1-qr-box-b');
+      _hideQrIn('pop-tr2-qr-box-a', 'pop-tr2-qr-box-b');
+      idleScreen.style.display = 'flex';
+      break;
+    }
+
+    case 'idle_config': {
+      const defaultEl  = document.getElementById('idle-default');
+      const tickerWrap = document.getElementById('idle-ticker-wrap');
+      const customText = document.getElementById('idle-custom-text');
+      const showQr     = !!(msg.showQr && msg.qrDataUrl);
+      const showBanner = !!msg.showBanner;
+      const showText   = msg.showText !== false;
+
+      // Idle only ever shows once the queue is confirmed empty, so there's
+      // never a real "up next" to list -- see the matching comment in
+      // index.html. The setting exists for consistency with other screens.
+      const nuEl = document.getElementById('idle-next-up');
+      if (nuEl) nuEl.style.display = 'none';
+
+      if (showQr || showBanner || showText) {
+        if (customText) {
+          customText.style.display  = showText ? '' : 'none';
+          customText.textContent    = msg.text || '';
+          customText.style.color    = msg.textColor || '#fff';
+          customText.style.fontSize = msg.textSize ? (msg.textSize + 'rem') : '1.8rem';
+        }
+        if (showBanner) {
+          _renderTicker('idle-ticker', msg.bannerText, msg.animSec, msg.bannerScale, msg.bannerColor, msg.bannerBgColor);
+          tickerWrap.style.display = 'block';
+        } else {
+          tickerWrap.style.display = 'none';
+        }
+        if (showQr) _showQrIn('idle-qr-box-a', 'idle-qr-img', 'idle-qr-box-b', 'idle-qr-img-b', msg);
+        else _hideQrIn('idle-qr-box-a', 'idle-qr-box-b');
+        if (defaultEl) defaultEl.style.display = 'none';
+      } else {
+        tickerWrap.style.display = 'none';
+        _hideQrIn('idle-qr-box-a', 'idle-qr-box-b');
+        if (defaultEl) defaultEl.style.display = 'flex';
+      }
+      break;
+    }
+
+    case 'karaoke_qr': {
+      if (msg.showQr && msg.qrDataUrl) _showQrIn('karaoke-qr-box-a', 'karaoke-qr-img', 'karaoke-qr-box-b', 'karaoke-qr-img-b', msg);
+      else _hideQrIn('karaoke-qr-box-a', 'karaoke-qr-box-b');
+      break;
+    }
+
+    case 'show_ad': {
+      if (cdgPlayer) { cdgPlayer.stop(); cdgPlayer = null; }
+      videoEl.pause(); videoEl.src = '';
+      videoEl.style.display = 'none';
+      canvas.parentElement.style.display = 'none';
+      infoBar.style.display = 'none';
+      idleScreen.style.display = 'none';
+      _hideQrIn('karaoke-qr-box-a', 'karaoke-qr-box-b');
+      document.getElementById('ad-screen').style.display = 'block';
+      _playing = false;
+      break;
+    }
+
+    case 'ad_config': {
+      const nuEl = document.getElementById('ad-next-up');
+      if (nuEl) nuEl.style.display = 'none'; // see matching comment in index.html
+
+      const imgEl = document.getElementById('ad-picture');
+      const vidEl = document.getElementById('ad-video');
+      if (msg.mediaShowing === 'video' && msg.videoPath) {
+        imgEl.style.display = 'none';
+        if (vidEl.dataset.src !== msg.videoPath) {
+          vidEl.dataset.src = msg.videoPath;
+          vidEl.src = msg.videoPath;
+        }
+        vidEl.style.display = 'block';
+        vidEl.play().catch(() => {});
+      } else if (msg.picturePath) {
+        vidEl.pause(); vidEl.style.display = 'none';
+        if (imgEl.dataset.src !== msg.picturePath) {
+          imgEl.dataset.src = msg.picturePath;
+          imgEl.src = msg.picturePath;
+        }
+        imgEl.style.display = 'block';
+      }
+
+      if (msg.showQr && msg.qrDataUrl) _showQrIn('ad-qr-box-a', 'ad-qr-img', 'ad-qr-box-b', 'ad-qr-img-b', msg);
+      else _hideQrIn('ad-qr-box-a', 'ad-qr-box-b');
+      break;
+    }
+
+    case 'banner_bg': {
+      const rgba = _hexToRgba(msg.color, msg.opacity);
+      ['pop-tr-ticker-wrap', 'pop-tr1-ticker-wrap', 'idle-ticker-wrap', 'playback-banner-wrap'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.background = rgba;
+      });
+      break;
+    }
+
+    case 'playback_banner': {
+      const pbWrap   = document.getElementById('playback-banner-wrap');
+      const pbTicker = document.getElementById('playback-banner-ticker');
+      if (!pbWrap || !pbTicker) break;
+      if (!msg.visible) { pbWrap.style.display = 'none'; break; }
+      _renderTicker('playback-banner-ticker', msg.text, msg.animSec, msg.bannerScale, msg.bannerColor, msg.bgColor);
+      pbWrap.style.display = 'block';
+      break;
+    }
+
+    case 'stop': {
+      if (cdgPlayer) { cdgPlayer.stop(); cdgPlayer = null; }
+      videoEl.pause(); videoEl.src = '';
+      videoEl.style.display = 'none';
+      canvas.parentElement.style.display = 'flex';
+      infoBar.style.display = 'none';
+      document.getElementById('playback-banner-wrap').style.display = 'none';
+      showIdle();
+      _playing = false;
+      break;
+    }
+
+    case 'setting': {
+      if (msg.key === 'audio') videoEl.muted = !msg.value;
+      break;
+    }
+
+  }
+}
+</script>
+</body>
+</html>

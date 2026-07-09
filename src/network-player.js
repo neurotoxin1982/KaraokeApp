@@ -2,6 +2,7 @@ const http = require('http');
 const path = require('path');
 const fs   = require('fs');
 const os   = require('os');
+const legacyFlag = require('./legacy-flag');
 
 const PORT = 8765;
 let httpServer = null;
@@ -101,14 +102,21 @@ function handleRequest(req, res) {
   const url = new URL(req.url, 'http://localhost');
 
   if (url.pathname === '/') {
+    const file = legacyFlag.isLegacyMode() ? 'web-player.legacy.html' : 'web-player.html';
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    res.end(fs.readFileSync(path.join(__dirname, '..', 'renderer', 'web-player.html')));
+    res.end(fs.readFileSync(path.join(__dirname, '..', 'renderer', file)));
     return;
   }
 
   if (url.pathname === '/js/cdg-player.js') {
     res.writeHead(200, { 'Content-Type': 'application/javascript' });
     res.end(fs.readFileSync(path.join(__dirname, '..', 'renderer', 'js', 'cdg-player.js')));
+    return;
+  }
+
+  if (url.pathname === '/js/karaoke-display.js') {
+    res.writeHead(200, { 'Content-Type': 'application/javascript' });
+    res.end(fs.readFileSync(path.join(__dirname, '..', 'renderer', 'js', 'karaoke-display.js')));
     return;
   }
 

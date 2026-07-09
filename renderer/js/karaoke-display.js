@@ -144,7 +144,8 @@
     .kd-ticker { white-space: nowrap; display: inline-block; font-size: 2.8rem; font-weight: 700; color: #fff; animation: kd-scroll 18s linear infinite; }
     @keyframes kd-scroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 
-    #kd-canvas-wrap { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+    #kd-canvas-wrap { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; }
+    #kd-canvas-wrap.kd-shown { display: flex; }
     #kd-cdg-canvas { image-rendering: pixelated; image-rendering: crisp-edges; display: block; }
 
     #kd-info-bar {
@@ -389,6 +390,11 @@
   // off/empty. There is no partial-patch mode.
   function _renderKaraoke(cfg, appearance, playbackBanner) {
     if (!cfg) return;
+    // Which of the two playback surfaces is visible -- the host still owns
+    // actually driving whichever one is active (CdgPlayer vs. <video>.src).
+    els.canvasWrap.classList.toggle('kd-shown', cfg.mediaType === 'cdg');
+    els.video.classList.toggle('kd-shown', cfg.mediaType === 'video');
+
     _showQrIn(_qrPair('kd-karaoke-qr'), cfg.showQr ? { ...appearance?.qr, dataUrl: cfg.qrDataUrl } : null);
 
     const info = els.stage.querySelector('#kd-info-bar');
