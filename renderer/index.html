@@ -2876,7 +2876,7 @@ async function _libSongsLoad() {
   listEl.innerHTML = '<p style="padding:10px 12px;font-size:.85rem;color:#6b7280">Loading…</p>';
 
   const { songs, total, page, pages } = await api.getSongs({
-    q: _libSongsQuery, sort: 'artist', page: _libSongsPageNum, pageSize: 50,
+    q: _libSongsQuery, sort: 'artist', page: _libSongsPageNum, pageSize: 50, localOnly: true,
   });
 
   // If a filter/page change left us past the last page, snap back instead of showing blank.

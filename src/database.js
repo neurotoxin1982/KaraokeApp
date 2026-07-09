@@ -107,7 +107,7 @@ function searchSongs(q = '', limit = 20) {
 }
 
 function getSongs({ q='', genre='', language='', decade='', fmt='', rating=0,
-                    favorites=false, sort='artist', page=1, pageSize=50 } = {}) {
+                    favorites=false, localOnly=false, sort='artist', page=1, pageSize=50 } = {}) {
   const where = ['is_active=1'];
   const params = [];
   if (q)         { where.push('(title LIKE ? OR artist LIKE ?)'); const l=`%${q}%`; params.push(l,l); }
@@ -117,6 +117,9 @@ function getSongs({ q='', genre='', language='', decade='', fmt='', rating=0,
   if (fmt)       { where.push('file_format = ?'); params.push(fmt); }
   if (rating)    { where.push('rating >= ?');     params.push(+rating); }
   if (favorites) { where.push('is_favorite = 1'); }
+  // YouTube songs get cached into the same table (so replaying one doesn't
+  // need a new search) -- exclude them here since this view is local-only.
+  if (localOnly) { where.push("file_format != 'youtube'"); }
 
   const orderMap = { artist:'artist', title:'title', date_added:'date_added DESC',
                      play_count:'play_count DESC', rating:'rating DESC' };
