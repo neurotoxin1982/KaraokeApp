@@ -82,6 +82,14 @@ async function start() {
     clients.add(ws);
     ws.on('close', () => clients.delete(ws));
     ws.on('error', () => clients.delete(ws));
+    // Echo pings straight back so the client can measure its own network
+    // latency to us and compensate the position sync for it.
+    ws.on('message', data => {
+      try {
+        const msg = JSON.parse(data);
+        if (msg.type === 'ping') _send(ws, { type: 'pong', t: msg.t });
+      } catch {}
+    });
     // Push current playback state to the new client
     _sendState(ws);
   });

@@ -238,6 +238,39 @@ let cdgPlayer = null;
 let _position = 0, _elapsed = 0, _playing = false;
 let _cntTimer = null;
 
+// One-way network latency estimate (seconds), applied to any position value
+// we receive over the WebSocket. Unlike the Electron popout (which gets the
+// same broadcasts via same-machine IPC, effectively instant), this client is
+// a real network hop away -- often WiFi -- so by the time a "position"
+// message arrives, the true position has already moved on. Left uncompensated,
+// this reads as the wireless screen being permanently behind the audio.
+let _latencyComp = 0;
+let _pingTimer = null;
+function _sendPing() {
+  if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'ping', t: performance.now() }));
+}
+
+// Screen Wake Lock: without this, a backgrounded/asleep tab or display can
+// have its rAF/timers throttled by the OS (macOS Safari/Chrome do this more
+// aggressively than Windows), which stalls the CDG follower loop entirely
+// until the screen wakes up again -- visible as a sudden catch-up jump.
+let _wakeLock = null;
+async function _requestWakeLock() {
+  try {
+    if ('wakeLock' in navigator) {
+      _wakeLock = await navigator.wakeLock.request('screen');
+      _wakeLock.addEventListener('release', () => { _wakeLock = null; });
+    }
+  } catch {}
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') _requestWakeLock();
+});
+// Some browsers only grant the lock after a user gesture -- if the initial
+// no-gesture request is refused, a first click/tap retries it.
+document.addEventListener('click', () => _requestWakeLock(), { once: true });
+_requestWakeLock();
+
 // CDG canvas sizing
 function resizeCanvas() {
   const W = window.innerWidth, H = window.innerHeight;
@@ -348,6 +381,9 @@ function connect() {
   ws.onopen = () => {
     noSignal.style.display   = 'none';
     idleScreen.style.display = 'flex';
+    if (_pingTimer) clearInterval(_pingTimer);
+    _sendPing();
+    _pingTimer = setInterval(_sendPing, 5000);
   };
 
   ws.onmessage = e => {
@@ -355,6 +391,7 @@ function connect() {
   };
 
   ws.onclose = () => {
+    if (_pingTimer) { clearInterval(_pingTimer); _pingTimer = null; }
     noSignal.style.display   = 'flex';
     idleScreen.style.display = 'none';
     // Reconnect after 2s
@@ -387,7 +424,7 @@ function handleMsg(msg) {
       idleScreen.style.display = 'none';
       document.getElementById('pop-tr-thanks').style.display = 'none';
       document.getElementById('pop-tr-bg').style.display     = 'none';
-      _position = msg.pos || 0;
+      _position = (msg.pos || 0) + _latencyComp;
       _elapsed  = performance.now();
       _playing  = true;
       fetch(msg.path)
@@ -410,7 +447,7 @@ function handleMsg(msg) {
       document.getElementById('pop-tr-bg').style.display     = 'none';
       idleScreen.style.display = 'none';
       videoEl.src = msg.path; // served from /media?p=...
-      videoEl.currentTime = msg.pos || 0;
+      videoEl.currentTime = (msg.pos || 0) + _latencyComp;
       videoEl.play().catch(() => {});
       _playing = true;
       break;
@@ -424,25 +461,33 @@ function handleMsg(msg) {
       document.getElementById('pop-tr-bg').style.display     = 'none';
       idleScreen.style.display = 'none';
       videoEl.src = msg.url;
-      if (msg.pos) videoEl.currentTime = msg.pos;
+      if (msg.pos) videoEl.currentTime = msg.pos + _latencyComp;
       videoEl.play().catch(() => {});
       _playing = true;
       break;
     }
 
     case 'position': {
-      const prevPos = getPos();
-      _position = msg.pos;
+      const prevPos  = getPos();
+      const compPos  = msg.pos + _latencyComp;
+      _position = compPos;
       _elapsed  = performance.now();
       _playing  = msg.playing;
       if (cdgPlayer) {
-        const drift = Math.abs(prevPos - msg.pos);
-        if (msg.seek || drift > 1.5) cdgPlayer.seekTo(msg.pos);
+        const drift = Math.abs(prevPos - compPos);
+        if (msg.seek || drift > 1.5) cdgPlayer.seekTo(compPos);
       }
       // Drift correction for video
-      if (videoEl.src && !videoEl.paused && Math.abs(videoEl.currentTime - msg.pos) > 0.8) {
-        videoEl.currentTime = msg.pos;
+      if (videoEl.src && !videoEl.paused && Math.abs(videoEl.currentTime - compPos) > 0.8) {
+        videoEl.currentTime = compPos;
       }
+      break;
+    }
+
+    case 'pong': {
+      const rtt    = performance.now() - msg.t;
+      const oneWay = Math.max(0, rtt / 2) / 1000;
+      _latencyComp = _latencyComp === 0 ? oneWay : (_latencyComp * 0.7 + oneWay * 0.3);
       break;
     }
 
@@ -455,7 +500,7 @@ function handleMsg(msg) {
 
     case 'resume': {
       _playing  = true;
-      _position = msg.pos || _position;
+      if (msg.pos != null) _position = msg.pos + _latencyComp;
       _elapsed  = performance.now();
       if (cdgPlayer) cdgPlayer.resume();
       videoEl.play().catch(() => {});
