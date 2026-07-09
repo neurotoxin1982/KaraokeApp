@@ -96,13 +96,13 @@
         <!-- QR + custom text — text pinned top; QR box position/size set by JS -->
         <div id="player-idle-qr" style="display:none;position:absolute;inset:0;z-index:1;">
           <p id="player-idle-custom-text" style="position:absolute;top:0;left:0;right:0;margin:0;padding:28px 40px 40px;font-weight:700;color:#fff;text-shadow:0 2px 8px rgba(0,0,0,.8);text-align:center;text-wrap:balance;background:linear-gradient(180deg,rgba(8,6,14,.6),transparent);"></p>
-          <div id="player-idle-qr-box-a" style="position:absolute;display:flex;flex-direction:column;align-items:center;padding:16px 18px;gap:8px;background:rgba(250,248,253,.97);border-radius:16px;box-shadow:0 16px 32px -10px rgba(0,0,0,.55);">
-            <img id="player-idle-qr-img" src="" alt="QR" style="width:auto;border-radius:6px;image-rendering:pixelated">
-            <p id="player-idle-qr-url" style="margin:0;font-size:.65rem;color:#6b6478;max-width:200px;word-break:break-all;text-align:center;"></p>
+          <div id="player-idle-qr-box-a" style="position:absolute;display:flex;flex-direction:column;align-items:center;padding:6px;gap:6px;">
+            <img id="player-idle-qr-img" src="" alt="QR" style="width:auto;border-radius:10px;image-rendering:pixelated">
+            <p id="player-idle-qr-url" style="display:none;margin:0;font-size:.65rem;color:#6b6478;max-width:200px;word-break:break-all;text-align:center;"></p>
           </div>
-          <div id="player-idle-qr-box-b" style="display:none;position:absolute;flex-direction:column;align-items:center;padding:16px 18px;gap:8px;background:rgba(250,248,253,.97);border-radius:16px;box-shadow:0 16px 32px -10px rgba(0,0,0,.55);">
-            <img id="player-idle-qr-img-b" src="" alt="QR" style="width:auto;border-radius:6px;image-rendering:pixelated">
-            <p id="player-idle-qr-url-b" style="margin:0;font-size:.65rem;color:#6b6478;max-width:200px;word-break:break-all;text-align:center;"></p>
+          <div id="player-idle-qr-box-b" style="display:none;position:absolute;flex-direction:column;align-items:center;padding:6px;gap:6px;">
+            <img id="player-idle-qr-img-b" src="" alt="QR" style="width:auto;border-radius:10px;image-rendering:pixelated">
+            <p id="player-idle-qr-url-b" style="display:none;margin:0;font-size:.65rem;color:#6b6478;max-width:200px;word-break:break-all;text-align:center;"></p>
           </div>
         </div>
       </div>
@@ -3179,14 +3179,14 @@ function _applyIdleConfig() {
     custEl.style.fontSize = textSize + 'rem';
     if (showQr) {
       const sizeStyle = _qrSizeStyle(qrSize);
-      boxA.style.cssText = 'position:absolute;display:flex;flex-direction:column;align-items:center;padding:16px 18px;gap:8px;background:rgba(250,248,253,.97);border-radius:16px;box-shadow:0 16px 32px -10px rgba(0,0,0,.55);' + _qrBoxStyleAt(_qrPos.x, _qrPos.y);
-      document.getElementById('player-idle-qr-img').style.cssText = 'width:auto;border-radius:6px;image-rendering:pixelated;' + sizeStyle;
+      boxA.style.cssText = 'position:absolute;display:flex;flex-direction:column;align-items:center;padding:6px;gap:6px;' + _qrBoxStyleAt(_qrPos.x, _qrPos.y);
+      document.getElementById('player-idle-qr-img').style.cssText = 'width:auto;border-radius:10px;image-rendering:pixelated;' + sizeStyle;
       document.getElementById('player-idle-qr-img').src = _relayQrDataUrl;
       document.getElementById('player-idle-qr-url').textContent = _relayPublicUrl;
       boxA.style.display = 'flex';
       if (qrBoth) {
-        boxB.style.cssText = 'position:absolute;display:flex;flex-direction:column;align-items:center;padding:16px 18px;gap:8px;background:rgba(250,248,253,.97);border-radius:16px;box-shadow:0 16px 32px -10px rgba(0,0,0,.55);' + _qrBoxStyleAt(100 - _qrPos.x, _qrPos.y);
-        document.getElementById('player-idle-qr-img-b').style.cssText = 'width:auto;border-radius:6px;image-rendering:pixelated;' + sizeStyle;
+        boxB.style.cssText = 'position:absolute;display:flex;flex-direction:column;align-items:center;padding:6px;gap:6px;' + _qrBoxStyleAt(100 - _qrPos.x, _qrPos.y);
+        document.getElementById('player-idle-qr-img-b').style.cssText = 'width:auto;border-radius:10px;image-rendering:pixelated;' + sizeStyle;
         document.getElementById('player-idle-qr-img-b').src = _relayQrDataUrl;
         document.getElementById('player-idle-qr-url-b').textContent = _relayPublicUrl;
         boxB.style.display = 'flex';
