@@ -310,8 +310,12 @@
     el.textContent   = half + gap + half;
     el.style.animationDuration = (singleAnimSec * halfReps) + 's';
   }
+  // `appearance.scale` is an already-resolved multiplier (e.g. 1.35), not a
+  // raw 1-5 level -- unlike QR size below, the host resolves the banner-size
+  // setting to a multiplier itself (it also has to combine it with color/bg
+  // in one place), so this only ever applies it, it doesn't look it up.
   function _renderTicker(wrapEl, tickerEl, text, animSec, appearance) {
-    const scale = BANNER_SCALE[parseInt(appearance?.scale ?? 3, 10)] ?? 1;
+    const scale = appearance?.scale ?? 1;
     tickerEl.style.fontSize = (2.8 * scale).toFixed(2) + 'rem';
     tickerEl.style.color    = appearance?.color || '#fff';
     wrapEl.style.padding    = Math.round(28 * scale) + 'px 0';
@@ -536,6 +540,10 @@
   global.KaraokeDisplay = {
     mount, applyState, tickCountdown,
     STAGE_W, STAGE_H,
+    // Single source of truth for resolving a settings-UI level (1-5) to the
+    // actual multiplier/px, so hosts building state.appearance don't each
+    // keep their own copy of these tables.
+    BANNER_SCALE, QR_SIZE_SCALE,
     els, // exposed so hosts can drive CDG/video playback directly
   };
 })(typeof window !== 'undefined' ? window : globalThis);
