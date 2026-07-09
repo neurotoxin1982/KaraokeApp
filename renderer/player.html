@@ -332,12 +332,16 @@ function _showQrIn(boxAId, imgAId, boxBId, imgBId, msg) {
   if (!boxA || !boxB) return;
   const x = msg.qrX ?? QR_POS_DEFAULT_X, y = msg.qrY ?? QR_POS_DEFAULT_Y;
   const sizeStyle = _qrSizeStyle(msg.qrSize);
-  boxA.style.cssText = _qrBoxStyleAt(x, y);
+  // z-index included here, not left to each element's static HTML -- .style.cssText
+  // replaces the whole style attribute, so any inline z-index in the markup would
+  // otherwise be silently wiped the first time this runs (see index.html for the
+  // same fix) -- leaving some screens' QR with no z-index and others with none.
+  boxA.style.cssText = 'z-index:10;' + _qrBoxStyleAt(x, y);
   imgA.style.cssText = sizeStyle;
   imgA.src = msg.qrDataUrl;
   boxA.style.display = 'flex';
   if (msg.qrBoth) {
-    boxB.style.cssText = _qrBoxStyleAt(100 - x, y);
+    boxB.style.cssText = 'z-index:10;' + _qrBoxStyleAt(100 - x, y);
     imgB.style.cssText = sizeStyle;
     imgB.src = msg.qrDataUrl;
     boxB.style.display = 'flex';

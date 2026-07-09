@@ -16,6 +16,9 @@ const state = {
   transition:       null,
   transitionPhaseEnd: 0,
   venue_path:       null,
+  idle_config:      null,
+  adActive:         false,
+  ad_config:        null,
 };
 
 const MIMES = {
@@ -156,6 +159,16 @@ function _sendState(ws) {
     if (state.position) mediaMsg.pos = state.position.pos;
     _send(ws, mediaMsg);
     if (state.position) _send(ws, state.position);
+  } else if (state.adActive) {
+    // Neither a transition nor a song is active, and the Ad Screen was the
+    // last thing shown -- replay it so a client joining mid-ad sees it
+    // immediately instead of the default idle screen for up to a full
+    // rotation interval.
+    _send(ws, { type: 'show_ad' });
+    if (state.ad_config) _send(ws, state.ad_config);
+  } else {
+    // Default "nothing playing" state.
+    if (state.idle_config) _send(ws, state.idle_config);
   }
 }
 
@@ -164,26 +177,34 @@ function broadcast(msg) {
   switch (msg.type) {
     case 'song_info':                                   state.song_info  = msg; break;
     case 'cdg_path': case 'video_path': case 'video_url':
-      state.media = msg; state.transition = null;       break;
+      state.media = msg; state.transition = null; state.adActive = false; break;
     case 'position':                                    state.position   = msg; break;
-    case 'tr_phase1':  state.transition = msg; break;
-    case 'tr_phase2':  state.transition = msg; state.transitionPhaseEnd = Date.now() + (msg.bgMs || 0); break;
+    case 'tr_phase1':  state.transition = msg; state.adActive = false; break;
+    case 'tr_phase2':  state.transition = msg; state.transitionPhaseEnd = Date.now() + (msg.bgMs || 0); state.adActive = false; break;
     case 'transition_end': state.transition = null; state.transitionPhaseEnd = 0; break;
     case 'venue_path':                                  state.venue_path = msg; break;
+    case 'idle_config':                                 state.idle_config = msg; break;
+    case 'ad_config':                                   state.ad_config  = msg; break;
+    case 'show_ad':    state.adActive = true; break;
     case 'stop':
       state.song_info = null; state.media = null;
-      state.position  = null; state.transition = null;  break;
+      state.position  = null; state.transition = null; state.adActive = false; break;
   }
   if (!wss || clients.size === 0) return;
   const data = JSON.stringify(toWebMsg(msg));
   clients.forEach(ws => { if (ws.readyState === 1) try { ws.send(data); } catch {} });
 }
 
+// Only non-empty paths get rewritten -- an empty string means "not set" to
+// the sender (e.g. ad_config with no picture uploaded), and turning that into
+// a non-empty "/media?p=" URL would make the client think one exists.
 function toWebMsg(msg) {
   const m = { ...msg };
-  if (m.path)      m.path      = `/media?p=${encodeURIComponent(m.path)}`;
-  if (m.audioPath) m.audioPath = `/media?p=${encodeURIComponent(m.audioPath)}`;
-  if (m.venuePath) m.venuePath = `/media?p=${encodeURIComponent(m.venuePath)}`;
+  if (m.path)        m.path        = `/media?p=${encodeURIComponent(m.path)}`;
+  if (m.audioPath)   m.audioPath   = `/media?p=${encodeURIComponent(m.audioPath)}`;
+  if (m.venuePath)   m.venuePath   = `/media?p=${encodeURIComponent(m.venuePath)}`;
+  if (m.picturePath) m.picturePath = `/media?p=${encodeURIComponent(m.picturePath)}`;
+  if (m.videoPath)   m.videoPath   = `/media?p=${encodeURIComponent(m.videoPath)}`;
   return m;
 }
 

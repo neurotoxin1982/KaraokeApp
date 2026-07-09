@@ -3005,12 +3005,17 @@ function _showQrIn(boxAId, imgAId, boxBId, imgBId, qrBoth, sizeStyle) {
   const boxA = document.getElementById(boxAId), imgA = document.getElementById(imgAId);
   const boxB = document.getElementById(boxBId), imgB = document.getElementById(imgBId);
   if (!boxA || !boxB || !_relayQrDataUrl) { _hideQrIn(boxAId, boxBId); return; }
-  boxA.style.cssText = 'position:absolute;display:flex;flex-direction:column;align-items:center;padding:6px;gap:6px;' + _qrBoxStyleAt(_qrPos.x, _qrPos.y);
+  // z-index is included here (not left to each element's static HTML) because
+  // .style.cssText replaces the whole style attribute -- any inline z-index
+  // set in the markup would otherwise be silently wiped the first time this
+  // runs, leaving some screens' QR with no z-index and others with none at
+  // all, i.e. inconsistent stacking above the video/CDG/ad media behind it.
+  boxA.style.cssText = 'position:absolute;display:flex;flex-direction:column;align-items:center;padding:6px;gap:6px;z-index:10;' + _qrBoxStyleAt(_qrPos.x, _qrPos.y);
   imgA.style.cssText = 'width:auto;border-radius:10px;image-rendering:pixelated;' + sizeStyle;
   imgA.src = _relayQrDataUrl;
   boxA.style.display = 'flex';
   if (qrBoth) {
-    boxB.style.cssText = 'position:absolute;display:flex;flex-direction:column;align-items:center;padding:6px;gap:6px;' + _qrBoxStyleAt(100 - _qrPos.x, _qrPos.y);
+    boxB.style.cssText = 'position:absolute;display:flex;flex-direction:column;align-items:center;padding:6px;gap:6px;z-index:10;' + _qrBoxStyleAt(100 - _qrPos.x, _qrPos.y);
     imgB.style.cssText = 'width:auto;border-radius:10px;image-rendering:pixelated;' + sizeStyle;
     imgB.src = _relayQrDataUrl;
     boxB.style.display = 'flex';
