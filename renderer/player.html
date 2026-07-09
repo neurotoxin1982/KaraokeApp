@@ -560,13 +560,10 @@ api.onBroadcast((msg) => {
       const pbTicker = document.getElementById('playback-banner-ticker');
       if (!pbWrap || !pbTicker) break;
       if (!msg.visible) { pbWrap.style.display = 'none'; break; }
-      const bsc = msg.bannerScale || 1;
-      pbTicker.style.fontSize   = (2.0 * bsc).toFixed(2) + 'rem';
-      pbTicker.style.color      = msg.bannerColor || '#fff';
-      if (msg.bgColor) pbWrap.style.background = msg.bgColor;
-      pbWrap.style.padding      = Math.round(14 * bsc) + 'px 0';
-      pbWrap.style.display      = 'block';
-      _setupScrollTicker(pbTicker, msg.text || '', msg.animSec || 18);
+      // Same helper (and therefore the same size/color/background) as every
+      // other screen's banner here -- this used to hand-roll its own smaller styling.
+      _renderTicker('playback-banner-ticker', msg.text, msg.animSec, msg.bannerScale, msg.bannerColor, msg.bgColor);
+      pbWrap.style.display = 'block';
       break;
     }
 

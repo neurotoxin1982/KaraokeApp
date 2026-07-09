@@ -2888,32 +2888,23 @@ async function _updatePlaybackBanner() {
   if (key === _pbBannerKey && wrap.style.display === 'block') return;
   _pbBannerKey = key;
 
-  if (!pending.length) {
-    wrap.style.display = 'none';
-    document.getElementById('song-overlay').style.bottom = '8px';
-    broadcast({ type: 'playback_banner', visible: false });
-    _pbBannerMsg = null;
-    return;
-  }
-
   const remainingSec  = Math.max(30, _songDur > 0 ? Math.round(_songDur - getPos()) : 180);
   const thanksMs      = (parseInt(cfg.thanks_time || '5')  || 0) * 1000;
   const bgMs          = (parseInt(cfg.bg_time     || '10') || 0) * 1000;
   const transitionSec = (thanksMs + bgMs) / 1000;
 
-  const nextEntry    = pending[0];
+  // Same fallback as every other screen -- shows a generic message instead of
+  // hiding the banner entirely when there's nothing queued after this song.
+  const nextEntry    = pending[0] || null;
   const otherPending = pending.slice(1);
-  const bannerText   = _buildBanner(nextEntry, otherPending, remainingSec + transitionSec, transitionSec);
+  const bannerText   = _bannerTextOrFallback(nextEntry, otherPending, remainingSec + transitionSec, transitionSec);
 
+  // Same helper (and therefore the same size/color/background) as every
+  // other screen's banner -- this used to hand-roll its own smaller styling.
   const { bannerScale, color: bannerColor, bgColor } = _bannerAppearance(cfg);
   const animSec = _bannerAnimSec(cfg, bannerText);
-
-  ticker.style.fontSize = (1.2 * bannerScale).toFixed(2) + 'rem';
-  ticker.style.color    = bannerColor;
-  wrap.style.background = bgColor;
-  wrap.style.padding    = Math.round(6 * bannerScale) + 'px 0';
-  wrap.style.display    = 'block';
-  _setupScrollTicker(ticker, bannerText, animSec);
+  _renderTicker('playback-banner-ticker', bannerText, animSec, bannerScale, bannerColor, bgColor);
+  wrap.style.display = 'block';
 
   // Push song-overlay up so it sits above the banner
   setTimeout(() => {
