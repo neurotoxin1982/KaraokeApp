@@ -77,6 +77,7 @@ contextBridge.exposeInMainWorld('api', {
 
   // Dialogs
   openImageDialog: () => ipcRenderer.invoke('dialog:openImage'),
+  openVideoDialog: () => ipcRenderer.invoke('dialog:openVideo'),
   openCookiesFileDialog: () => ipcRenderer.invoke('dialog:openCookiesFile'),
 
   // Spotify native app — mute/unmute via Windows audio session API + SMTC track query

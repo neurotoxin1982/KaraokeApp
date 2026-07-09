@@ -94,6 +94,14 @@
 </div>
 <video id="video-el" autoplay muted></video>
 
+<!-- QR shown while a song is actively playing (Karaoke Screen) -->
+<div id="karaoke-qr-box-a" class="idle-qr-box" style="display:none;z-index:10">
+  <img id="karaoke-qr-img" class="idle-qr-img" src="" alt="QR Code">
+</div>
+<div id="karaoke-qr-box-b" class="idle-qr-box" style="display:none;z-index:10">
+  <img id="karaoke-qr-img-b" class="idle-qr-img" src="" alt="QR Code">
+</div>
+
 <div id="info-bar">
   <div id="song-title"></div>
   <div id="song-artist"></div>
@@ -122,6 +130,20 @@
       <img id="idle-qr-img-b" class="idle-qr-img" src="" alt="QR Code">
       <p id="idle-qr-sub-b" class="idle-qr-sub"></p>
     </div>
+  </div>
+</div>
+
+<!-- Ad screen — shown instead of (or rotating with) idle; no banner/custom
+     text per spec, just full-size media + optional QR / Up Next -->
+<div id="ad-screen" style="position:absolute;inset:0;display:none;background:#000;overflow:hidden;z-index:1">
+  <img id="ad-picture" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none">
+  <video id="ad-video" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none" muted loop></video>
+  <div id="ad-next-up" style="display:none;position:absolute;left:14px;top:14px;background:rgba(0,0,0,0.72);border-radius:14px;padding:14px 16px;backdrop-filter:blur(4px);min-width:200px;max-width:min(300px,38vw);z-index:5"></div>
+  <div id="ad-qr-box-a" class="idle-qr-box" style="display:none;z-index:5">
+    <img id="ad-qr-img" class="idle-qr-img" src="" alt="QR Code">
+  </div>
+  <div id="ad-qr-box-b" class="idle-qr-box" style="display:none;z-index:5">
+    <img id="ad-qr-img-b" class="idle-qr-img" src="" alt="QR Code">
   </div>
 </div>
 
@@ -258,6 +280,10 @@ let _elapsed    = 0;
 let _position   = 0;
 let _playing    = false;
 let _cntTimer   = null;
+let _adPicturePath    = null;
+let _adPictureBlobUrl = null;
+let _adVideoPath      = null;
+let _adVideoBlobUrl   = null;
 
 // Fit canvas to window preserving 300:216 aspect ratio
 function resizeCanvas() {
@@ -283,6 +309,14 @@ const QR_POS_DEFAULT_X = 50, QR_POS_DEFAULT_Y = 85;
 // left:{x}%;top:{y}% + translate(-50%,-50%) anchors the QR box's CENTER at (x,y).
 function _qrBoxStyleAt(x, y) {
   return `left:${x}%;top:${y}%;transform:translate(-50%,-50%);`;
+}
+function _hexToRgba(hex, opacityPct) {
+  const h = (hex || '#7c3aed').replace('#', '');
+  const r = parseInt(h.substring(0, 2), 16) || 0;
+  const g = parseInt(h.substring(2, 4), 16) || 0;
+  const b = parseInt(h.substring(4, 6), 16) || 0;
+  const a = Math.max(0, Math.min(100, parseInt(opacityPct, 10) ?? 92)) / 100;
+  return `rgba(${r},${g},${b},${a})`;
 }
 function _qrSizeStyle(sizeLevel) {
   const scale = QR_SIZE_SCALE[sizeLevel] || 1;
@@ -316,12 +350,13 @@ function _hideQrIn(boxAId, boxBId) {
   if (boxA) boxA.style.display = 'none';
   if (boxB) boxB.style.display = 'none';
 }
-function _renderTicker(tickerId, text, animSec, bannerScale, color) {
+function _renderTicker(tickerId, text, animSec, bannerScale, color, bgColor) {
   const ticker = document.getElementById(tickerId);
   if (!ticker) return;
   ticker.style.fontSize = (2.8 * (bannerScale || 1)).toFixed(2) + 'rem';
   ticker.style.color    = color || '#fff';
   ticker.parentElement.style.padding = Math.round(28 * (bannerScale || 1)) + 'px 0';
+  if (bgColor) ticker.parentElement.style.background = bgColor;
   _setupScrollTicker(ticker, text || '', animSec || 18);
 }
 
@@ -353,7 +388,7 @@ api.onBroadcast((msg) => {
           customText.style.fontSize = msg.textSize ? (msg.textSize + 'rem') : '1.8rem';
         }
         if (showBanner) {
-          _renderTicker('idle-ticker', msg.bannerText, msg.animSec, msg.bannerScale, msg.bannerColor);
+          _renderTicker('idle-ticker', msg.bannerText, msg.animSec, msg.bannerScale, msg.bannerColor, msg.bannerBgColor);
           tickerWrap.style.display = 'block';
         } else {
           tickerWrap.style.display = 'none';
@@ -454,7 +489,7 @@ api.onBroadcast((msg) => {
       document.getElementById('pop-tr1-thanks-inner').innerHTML = _getThanksHTML(msg.prevSinger || '', msg.thanksVariant || 0);
 
       document.getElementById('pop-tr1-ticker-wrap').style.display = msg.showBanner ? 'block' : 'none';
-      if (msg.showBanner) _renderTicker('pop-tr1-ticker', msg.bannerText, msg.animSec, msg.bannerScale, msg.bannerColor);
+      if (msg.showBanner) _renderTicker('pop-tr1-ticker', msg.bannerText, msg.animSec, msg.bannerScale, msg.bannerColor, msg.bannerBgColor);
 
       if (msg.showQr && msg.qrDataUrl) _showQrIn('pop-tr1-qr-box-a', 'pop-tr1-qr-img', 'pop-tr1-qr-box-b', 'pop-tr1-qr-img-b', msg);
       else _hideQrIn('pop-tr1-qr-box-a', 'pop-tr1-qr-box-b');
@@ -496,7 +531,7 @@ api.onBroadcast((msg) => {
       document.getElementById('pop-tr-bg').style.display = 'flex';
       // Banner (after container is visible so scrollWidth is correct)
       document.getElementById('pop-tr-ticker-wrap').style.display = msg.showBanner ? 'block' : 'none';
-      if (msg.showBanner) _renderTicker('pop-tr-ticker', msg.bannerText, msg.animSec, msg.bannerScale, msg.bannerColor);
+      if (msg.showBanner) _renderTicker('pop-tr-ticker', msg.bannerText, msg.animSec, msg.bannerScale, msg.bannerColor, msg.bannerBgColor);
 
       if (msg.showQr && msg.qrDataUrl) _showQrIn('pop-tr2-qr-box-a', 'pop-tr2-qr-img', 'pop-tr2-qr-box-b', 'pop-tr2-qr-img-b', msg);
       else _hideQrIn('pop-tr2-qr-box-a', 'pop-tr2-qr-box-b');
@@ -528,6 +563,7 @@ api.onBroadcast((msg) => {
       const bsc = msg.bannerScale || 1;
       pbTicker.style.fontSize   = (2.0 * bsc).toFixed(2) + 'rem';
       pbTicker.style.color      = msg.bannerColor || '#fff';
+      if (msg.bgColor) pbWrap.style.background = msg.bgColor;
       pbWrap.style.padding      = Math.round(14 * bsc) + 'px 0';
       pbWrap.style.display      = 'block';
       _setupScrollTicker(pbTicker, msg.text || '', msg.animSec || 18);
@@ -554,8 +590,81 @@ api.onBroadcast((msg) => {
       videoEl.style.display = 'none';
       canvas.parentElement.style.display = 'flex';
       infoBar.style.display = 'none';
+      document.getElementById('ad-screen').style.display = 'none';
+      _hideQrIn('karaoke-qr-box-a', 'karaoke-qr-box-b');
       idleScreen.style.display = 'flex';
       _playing = false;
+      break;
+    }
+
+    case 'karaoke_qr': {
+      if (msg.showQr && msg.qrDataUrl) _showQrIn('karaoke-qr-box-a', 'karaoke-qr-img', 'karaoke-qr-box-b', 'karaoke-qr-img-b', msg);
+      else _hideQrIn('karaoke-qr-box-a', 'karaoke-qr-box-b');
+      break;
+    }
+
+    case 'show_ad': {
+      if (cdgPlayer) { cdgPlayer.stop(); cdgPlayer = null; }
+      videoEl.pause(); videoEl.src = '';
+      videoEl.style.display = 'none';
+      canvas.parentElement.style.display = 'none';
+      infoBar.style.display = 'none';
+      idleScreen.style.display = 'none';
+      _hideQrIn('karaoke-qr-box-a', 'karaoke-qr-box-b');
+      document.getElementById('ad-screen').style.display = 'block';
+      _playing = false;
+      break;
+    }
+
+    case 'ad_config': {
+      const nuEl = document.getElementById('ad-next-up');
+      if (nuEl) nuEl.style.display = 'none'; // see matching comment in index.html
+
+      const imgEl = document.getElementById('ad-picture');
+      const vidEl = document.getElementById('ad-video');
+      if (msg.mediaShowing === 'video' && msg.videoPath) {
+        imgEl.style.display = 'none';
+        if (_adVideoPath !== msg.videoPath) {
+          _adVideoPath = msg.videoPath;
+          api.readFile(msg.videoPath).then(bytes => {
+            const blob = new Blob([bytes]);
+            if (_adVideoBlobUrl) URL.revokeObjectURL(_adVideoBlobUrl);
+            _adVideoBlobUrl = URL.createObjectURL(blob);
+            vidEl.src = _adVideoBlobUrl;
+            vidEl.style.display = 'block';
+            vidEl.play().catch(() => {});
+          }).catch(() => {});
+        } else {
+          vidEl.style.display = 'block';
+          vidEl.play().catch(() => {});
+        }
+      } else if (msg.picturePath) {
+        vidEl.pause(); vidEl.style.display = 'none';
+        if (_adPicturePath !== msg.picturePath) {
+          _adPicturePath = msg.picturePath;
+          api.readFile(msg.picturePath).then(bytes => {
+            const blob = new Blob([bytes]);
+            if (_adPictureBlobUrl) URL.revokeObjectURL(_adPictureBlobUrl);
+            _adPictureBlobUrl = URL.createObjectURL(blob);
+            imgEl.src = _adPictureBlobUrl;
+            imgEl.style.display = 'block';
+          }).catch(() => {});
+        } else {
+          imgEl.style.display = 'block';
+        }
+      }
+
+      if (msg.showQr && msg.qrDataUrl) _showQrIn('ad-qr-box-a', 'ad-qr-img', 'ad-qr-box-b', 'ad-qr-img-b', msg);
+      else _hideQrIn('ad-qr-box-a', 'ad-qr-box-b');
+      break;
+    }
+
+    case 'banner_bg': {
+      const rgba = _hexToRgba(msg.color, msg.opacity);
+      ['pop-tr-ticker-wrap', 'pop-tr1-ticker-wrap', 'idle-ticker-wrap', 'playback-banner-wrap'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.background = rgba;
+      });
       break;
     }
 

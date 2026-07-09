@@ -86,6 +86,13 @@
       <div id="sync-hud" style="position:absolute;top:4px;left:4px;z-index:99;background:rgba(0,0,0,.75);color:#0f0;font:11px monospace;padding:4px 6px;border-radius:4px;pointer-events:none"></div>
       <canvas id="cdg-canvas" class="hidden"></canvas>
       <video  id="video-player" class="hidden" style="width:100%;height:100%;object-fit:contain"></video>
+      <!-- QR shown while a song is actively playing (Karaoke Screen) -->
+      <div id="karaoke-qr-box-a" style="display:none;position:absolute;flex-direction:column;align-items:center;padding:6px;gap:6px;z-index:10;">
+        <img id="karaoke-qr-img" src="" alt="QR" style="width:auto;border-radius:10px;image-rendering:pixelated">
+      </div>
+      <div id="karaoke-qr-box-b" style="display:none;position:absolute;flex-direction:column;align-items:center;padding:6px;gap:6px;z-index:10;">
+        <img id="karaoke-qr-img-b" src="" alt="QR" style="width:auto;border-radius:10px;image-rendering:pixelated">
+      </div>
       <div id="player-idle" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;color:#374151;overflow:hidden;gap:10px">
         <img id="player-idle-bg" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:none;z-index:0">
         <!-- Default (no QR) -->
@@ -108,6 +115,19 @@
             <img id="player-idle-qr-img-b" src="" alt="QR" style="width:auto;border-radius:10px;image-rendering:pixelated">
             <p id="player-idle-qr-url-b" style="display:none;margin:0;font-size:.65rem;color:#6b6478;max-width:200px;word-break:break-all;text-align:center;"></p>
           </div>
+        </div>
+      </div>
+      <!-- Ad screen — shown instead of (or rotating with) idle; no banner/custom
+           text per spec, just full-size media + optional QR / Up Next -->
+      <div id="ad-screen" style="position:absolute;inset:0;display:none;background:#000;overflow:hidden;z-index:2">
+        <img id="ad-picture" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none">
+        <video id="ad-video" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none" muted loop></video>
+        <div id="ad-next-up" style="display:none;position:absolute;left:14px;top:14px;background:rgba(0,0,0,0.72);border-radius:14px;padding:14px 16px;backdrop-filter:blur(4px);min-width:200px;max-width:min(300px,38vw);z-index:5"></div>
+        <div id="ad-qr-box-a" style="display:none;position:absolute;flex-direction:column;align-items:center;padding:6px;gap:6px;z-index:5">
+          <img id="ad-qr-img" src="" alt="QR" style="width:auto;border-radius:10px;image-rendering:pixelated">
+        </div>
+        <div id="ad-qr-box-b" style="display:none;position:absolute;flex-direction:column;align-items:center;padding:6px;gap:6px;z-index:5">
+          <img id="ad-qr-img-b" src="" alt="QR" style="width:auto;border-radius:10px;image-rendering:pixelated">
         </div>
       </div>
       <!-- Between-song transition screen -->
@@ -547,6 +567,38 @@
               </div>
             </div>
           </div>
+
+          <div style="border-top:1px solid #374151;padding-top:12px">
+            <div style="font-size:.75rem;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Karaoke Screen (while a song plays)</div>
+            <div style="display:flex;flex-wrap:wrap;gap:16px 24px">
+              <div style="display:flex;align-items:center;gap:8px">
+                <input type="checkbox" id="set-show-playback-banner" style="width:16px;height:16px;accent-color:#7c3aed;cursor:pointer"
+                  onchange="autoSave('show_playback_banner', this.checked.toString())">
+                <label for="set-show-playback-banner" style="font-size:.85rem;color:#d1d5db;cursor:pointer">Running banner</label>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px">
+                <input type="checkbox" id="set-karaoke-show-qr" style="width:16px;height:16px;accent-color:#7c3aed;cursor:pointer"
+                  onchange="autoSave('karaoke_show_qr', this.checked.toString())">
+                <label for="set-karaoke-show-qr" style="font-size:.85rem;color:#d1d5db;cursor:pointer">QR code</label>
+              </div>
+            </div>
+          </div>
+
+          <div style="border-top:1px solid #374151;padding-top:12px">
+            <div style="font-size:.75rem;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Ad Screen</div>
+            <div style="display:flex;flex-wrap:wrap;gap:16px 24px">
+              <div style="display:flex;align-items:center;gap:8px">
+                <input type="checkbox" id="set-ad-show-qr" style="width:16px;height:16px;accent-color:#7c3aed;cursor:pointer"
+                  onchange="autoSave('ad_show_qr', this.checked.toString()); _refreshAdScreenIfShowing()">
+                <label for="set-ad-show-qr" style="font-size:.85rem;color:#d1d5db;cursor:pointer">QR code</label>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px">
+                <input type="checkbox" id="set-ad-show-next-up" style="width:16px;height:16px;accent-color:#7c3aed;cursor:pointer"
+                  onchange="autoSave('ad_show_next_up', this.checked.toString()); _refreshAdScreenIfShowing()">
+                <label for="set-ad-show-next-up" style="font-size:.85rem;color:#d1d5db;cursor:pointer">Up Next list</label>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div class="card" style="display:flex;flex-direction:column;gap:10px">
@@ -582,15 +634,19 @@
           <h4 style="font-size:.95rem;font-weight:600"><i class="fa-solid fa-rectangle-ad" style="color:#a78bfa;margin-right:6px"></i>Banner Appearance</h4>
           <p style="font-size:.8rem;color:#6b7280;line-height:1.5;margin-top:-6px">Applies everywhere the running banner is turned on above.</p>
           <div style="display:flex;align-items:center;gap:10px">
-            <input type="checkbox" id="set-show-playback-banner" style="width:16px;height:16px;accent-color:#7c3aed;cursor:pointer"
-              onchange="autoSave('show_playback_banner', this.checked.toString())">
-            <label for="set-show-playback-banner" style="font-size:.85rem;color:#d1d5db;cursor:pointer">Also show while a song is playing</label>
-          </div>
-          <div style="display:flex;align-items:center;gap:10px">
-            <label style="font-size:.8rem;color:#9ca3af;min-width:70px">Color</label>
+            <label style="font-size:.8rem;color:#9ca3af;min-width:70px">Text color</label>
             <input type="color" id="set-banner-color" value="#ffffff"
               style="width:36px;height:28px;padding:2px;background:none;border:1.5px solid #374151;border-radius:6px;cursor:pointer;flex-shrink:0"
               onchange="autoSave('banner_color', this.value)">
+          </div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <label style="font-size:.8rem;color:#9ca3af;min-width:70px">Background</label>
+            <input type="color" id="set-banner-bg-color" value="#7c3aed"
+              style="width:36px;height:28px;padding:2px;background:none;border:1.5px solid #374151;border-radius:6px;cursor:pointer;flex-shrink:0"
+              onchange="_updateBannerBg()">
+            <input type="range" id="set-banner-bg-opacity" min="0" max="100" step="1" value="92" style="flex:1"
+              oninput="document.getElementById('banner-bg-opacity-val').textContent=this.value+'%'; _updateBannerBg()">
+            <span id="banner-bg-opacity-val" style="font-size:.8rem;color:#a78bfa;min-width:38px;text-align:right">92%</span>
           </div>
           <div style="display:flex;align-items:center;gap:10px">
             <label style="font-size:.85rem;color:#d1d5db;white-space:nowrap;width:70px">Speed</label>
@@ -626,13 +682,13 @@
           </div>
           <div style="display:flex;align-items:center;gap:10px">
             <input type="checkbox" id="set-idle-qr-both" style="width:16px;height:16px;accent-color:#7c3aed;cursor:pointer"
-              onchange="autoSave('idle_qr_both', this.checked.toString()); _broadcastIdleConfig()">
+              onchange="autoSave('idle_qr_both', this.checked.toString()); _broadcastIdleConfig(); _refreshAdScreenIfShowing()">
             <label for="set-idle-qr-both" style="font-size:.85rem;color:#d1d5db;cursor:pointer;flex:1">Also show mirrored on the opposite side</label>
           </div>
           <div style="display:flex;align-items:center;gap:10px">
             <label style="font-size:.85rem;color:#d1d5db;white-space:nowrap;width:70px">Size</label>
             <input type="range" id="set-idle-qr-size" min="1" max="5" step="1" value="3" style="flex:1;accent-color:#7c3aed"
-              oninput="document.getElementById('idle-qr-size-val').textContent=['XS','S','M','L','XL'][this.value-1];autoSave('idle_qr_size',this.value,300);_broadcastIdleConfig()">
+              oninput="document.getElementById('idle-qr-size-val').textContent=['XS','S','M','L','XL'][this.value-1];autoSave('idle_qr_size',this.value,300);_broadcastIdleConfig();_refreshAdScreenIfShowing()">
             <span id="idle-qr-size-val" style="font-size:.8rem;color:#a78bfa;min-width:22px;text-align:center">M</span>
           </div>
         </div>
@@ -646,6 +702,51 @@
               oninput="document.getElementById('next-up-size-val').textContent=['XS','S','M','L','XL'][this.value-1];autoSave('next_up_size',this.value,300)">
             <span id="next-up-size-val" style="font-size:.8rem;color:#a78bfa;min-width:22px;text-align:center">M</span>
           </div>
+        </div>
+
+        <div class="card" style="display:flex;flex-direction:column;gap:12px">
+          <h4 style="font-size:.95rem;font-weight:600"><i class="fa-solid fa-photo-film" style="color:#a78bfa;margin-right:6px"></i>Ad Screen</h4>
+          <p style="font-size:.8rem;color:#6b7280;line-height:1.5;margin-top:-6px">Shown instead of — or rotating with — the idle screen whenever nothing is queued. As soon as a song is added, the app switches straight to the Between Songs screen either way.</p>
+
+          <div style="display:flex;flex-direction:column;gap:5px">
+            <label style="font-size:.75rem;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.05em">Mode</label>
+            <select id="set-idle-screen-mode"
+              style="background:#111827;border:1.5px solid #374151;color:#f3f4f6;padding:8px 12px;border-radius:8px;font-size:.9rem"
+              onchange="autoSave('idle_screen_mode', this.value); _updateAdModeUI(); _restartIdleAdRotation()">
+              <option value="idle">Idle screen only</option>
+              <option value="ad">Ad screen only</option>
+              <option value="rotate">Rotate between both</option>
+            </select>
+          </div>
+
+          <div id="ad-rotate-seconds-row" style="display:none;align-items:center;gap:10px">
+            <label style="font-size:.85rem;color:#d1d5db;white-space:nowrap;flex:1">Switch every</label>
+            <input type="number" id="set-idle-ad-rotate-sec" min="3" max="600" value="15"
+              style="width:65px;text-align:center;padding:5px"
+              onchange="autoSave('idle_ad_rotate_sec', String(parseInt(this.value)||15)); _restartIdleAdRotation()">
+            <span style="font-size:.8rem;color:#6b7280">sec</span>
+          </div>
+
+          <div style="border-top:1px solid #374151;padding-top:12px">
+            <h4 style="font-size:.85rem;font-weight:600;color:#9ca3af;margin-bottom:10px">Picture</h4>
+            <div style="display:flex;gap:8px">
+              <input id="set-ad-picture-path" type="text" readonly placeholder="No picture selected" style="flex:1;font-size:.8rem">
+              <button class="btn btn-gray btn-sm" onclick="browseAdPicture()"><i class="fa-solid fa-folder"></i></button>
+              <button class="btn btn-red btn-sm" onclick="clearAdPicture()"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <img id="set-ad-picture-preview" style="display:none;margin-top:8px;max-height:80px;border-radius:6px;object-fit:cover">
+          </div>
+
+          <div style="border-top:1px solid #374151;padding-top:12px">
+            <h4 style="font-size:.85rem;font-weight:600;color:#9ca3af;margin-bottom:10px">Video</h4>
+            <div style="display:flex;gap:8px">
+              <input id="set-ad-video-path" type="text" readonly placeholder="No video selected" style="flex:1;font-size:.8rem">
+              <button class="btn btn-gray btn-sm" onclick="browseAdVideo()"><i class="fa-solid fa-folder"></i></button>
+              <button class="btn btn-red btn-sm" onclick="clearAdVideo()"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+          </div>
+
+          <p style="font-size:.73rem;color:#4b5563">If both a picture and a video are set, the Ad Screen alternates between them using the interval above.</p>
         </div>
       </div>
 
@@ -1423,7 +1524,7 @@ async function checkAndPlay() {
     // Peek at the queue before marking anything as playing
     const queue = await api.getQueue();
     const nextPending = queue.find(e => e.status === 'pending');
-    if (!nextPending) { showIdle(); return; }
+    if (!nextPending) { _enterIdleOrAd(); return; }
 
     // Always show the background/countdown transition when coming from idle
     await doTransition(null, nextPending); // no "Thank You", just background
@@ -1432,7 +1533,7 @@ async function checkAndPlay() {
     song = await api.nextSong();
     if (song) await renderQueue();
   }
-  if (!song) { showIdle(); return; }
+  if (!song) { _enterIdleOrAd(); return; }
   if (currentSong && currentSong.queue_id === song.queue_id) return;
   currentSong = song;
   stopCurrent();
@@ -1450,11 +1551,161 @@ function showIdle() {
   if (_bgSource === 'spotify') _bgStart();
   else _bgStop();
   show('player-idle'); hide('cdg-canvas'); hide('video-player'); hide('song-overlay');
+  document.getElementById('ad-screen').style.display = 'none';
   document.getElementById('ctrl-title').textContent = '—';
   document.getElementById('ctrl-meta').textContent  = '';
   broadcast({ type: 'stop' });
   _applyIdleConfig();
   _broadcastIdleConfig();
+}
+
+// ── Ad Screen + Idle/Ad rotation ────────────────────────────────────────────
+// _idleAdShowing tracks which of the two is currently on screen ('idle'/'ad'),
+// or null once a song starts playing / a transition takes over (see
+// doTransition(), which clears it) -- that's how we know whether a live
+// settings change should re-render immediately or just wait for next time.
+let _idleAdShowing      = null;
+let _idleAdRotateTimer  = null;
+let _adMediaShowing     = 'picture';
+let _adMediaRotateTimer = null;
+let _adScreenPictureBlobUrl = null;
+let _adScreenVideoBlobUrl   = null;
+
+function _updateAdModeUI() {
+  const mode = document.getElementById('set-idle-screen-mode')?.value || 'idle';
+  const row  = document.getElementById('ad-rotate-seconds-row');
+  if (row) row.style.display = mode === 'rotate' ? 'flex' : 'none';
+}
+
+function _stopIdleAdTimers() {
+  if (_idleAdRotateTimer)  { clearInterval(_idleAdRotateTimer);  _idleAdRotateTimer  = null; }
+  if (_adMediaRotateTimer) { clearInterval(_adMediaRotateTimer); _adMediaRotateTimer = null; }
+}
+
+// Entry point whenever there's nothing to play -- used instead of calling
+// showIdle() directly, so the Idle/Ad Screen mode setting gets honored.
+function _enterIdleOrAd() {
+  _stopIdleAdTimers();
+  const mode = document.getElementById('set-idle-screen-mode')?.value || 'idle';
+  if (mode === 'ad') {
+    _idleAdShowing = 'ad';
+    showAdScreen();
+  } else if (mode === 'rotate') {
+    _idleAdShowing = _idleAdShowing === 'ad' ? 'ad' : 'idle';
+    if (_idleAdShowing === 'ad') showAdScreen(); else showIdle();
+    const sec = Math.max(3, parseInt(document.getElementById('set-idle-ad-rotate-sec')?.value || '15') || 15);
+    _idleAdRotateTimer = setInterval(() => {
+      _idleAdShowing = _idleAdShowing === 'idle' ? 'ad' : 'idle';
+      if (_idleAdShowing === 'ad') showAdScreen(); else showIdle();
+    }, sec * 1000);
+  } else {
+    _idleAdShowing = 'idle';
+    showIdle();
+  }
+}
+
+// Settings changes (mode, rotation seconds) call this so they take effect
+// immediately if we're actually sitting on idle/ad right now.
+function _restartIdleAdRotation() {
+  _updateAdModeUI();
+  if (_idleAdShowing !== null) _enterIdleOrAd();
+}
+
+function showAdScreen() {
+  stopCurrent(); currentSong = null;
+  if (_bgSource === 'spotify') _bgStart();
+  else _bgStop();
+  hide('player-idle'); hide('cdg-canvas'); hide('video-player'); hide('song-overlay');
+  document.getElementById('ad-screen').style.display = 'block';
+  document.getElementById('ctrl-title').textContent = '—';
+  document.getElementById('ctrl-meta').textContent  = '';
+  broadcast({ type: 'show_ad' });
+  _applyAdScreen();
+}
+
+async function _applyAdScreen() {
+  const picturePath = document.getElementById('set-ad-picture-path')?.value || '';
+  const videoPath    = document.getElementById('set-ad-video-path')?.value || '';
+
+  if (!picturePath && !videoPath) {
+    // Nothing uploaded yet -- fall back to idle rather than a blank black screen.
+    _idleAdShowing = 'idle';
+    showIdle();
+    return;
+  }
+
+  const hasBoth = !!picturePath && !!videoPath;
+  if (!hasBoth) _adMediaShowing = picturePath ? 'picture' : 'video';
+  await _setAdMedia(_adMediaShowing, picturePath, videoPath);
+
+  if (hasBoth && !_adMediaRotateTimer) {
+    const sec = Math.max(3, parseInt(document.getElementById('set-idle-ad-rotate-sec')?.value || '15') || 15);
+    _adMediaRotateTimer = setInterval(() => {
+      _adMediaShowing = _adMediaShowing === 'picture' ? 'video' : 'picture';
+      _setAdMedia(_adMediaShowing, picturePath, videoPath);
+      _broadcastAdConfig();
+    }, sec * 1000);
+  }
+
+  // Up Next list -- same "always empty in practice" situation as idle: the ad
+  // screen only ever shows once the queue is confirmed empty.
+  const nuEl = document.getElementById('ad-next-up');
+  if (nuEl) nuEl.style.display = 'none';
+
+  const showQr = (document.getElementById('set-ad-show-qr')?.checked ?? true) && !!_relayQrDataUrl;
+  const qrBoth = document.getElementById('set-idle-qr-both')?.checked ?? false;
+  const qrSize = parseInt(document.getElementById('set-idle-qr-size')?.value || '3');
+  if (showQr) _showQrIn('ad-qr-box-a', 'ad-qr-img', 'ad-qr-box-b', 'ad-qr-img-b', qrBoth, _qrSizeStyle(qrSize));
+  else _hideQrIn('ad-qr-box-a', 'ad-qr-box-b');
+
+  _broadcastAdConfig();
+}
+
+async function _setAdMedia(which, picturePath, videoPath) {
+  const imgEl = document.getElementById('ad-picture');
+  const vidEl = document.getElementById('ad-video');
+  if (which === 'video' && videoPath) {
+    imgEl.style.display = 'none';
+    try {
+      const bytes = await api.readFile(videoPath);
+      const blob  = new Blob([bytes]);
+      if (_adScreenVideoBlobUrl) URL.revokeObjectURL(_adScreenVideoBlobUrl);
+      _adScreenVideoBlobUrl = URL.createObjectURL(blob);
+      vidEl.src = _adScreenVideoBlobUrl;
+      vidEl.style.display = 'block';
+      vidEl.play().catch(() => {});
+    } catch {}
+  } else if (picturePath) {
+    vidEl.pause(); vidEl.style.display = 'none';
+    try {
+      const bytes = await api.readFile(picturePath);
+      const blob  = new Blob([bytes]);
+      if (_adScreenPictureBlobUrl) URL.revokeObjectURL(_adScreenPictureBlobUrl);
+      _adScreenPictureBlobUrl = URL.createObjectURL(blob);
+      imgEl.src = _adScreenPictureBlobUrl;
+      imgEl.style.display = 'block';
+    } catch {}
+  }
+}
+
+function _broadcastAdConfig() {
+  const showQr = (document.getElementById('set-ad-show-qr')?.checked ?? true) && !!_relayQrDataUrl;
+  const qrBoth = document.getElementById('set-idle-qr-both')?.checked ?? false;
+  const qrSize = parseInt(document.getElementById('set-idle-qr-size')?.value || '3');
+  broadcast({
+    type: 'ad_config',
+    picturePath: document.getElementById('set-ad-picture-path')?.value || '',
+    videoPath:   document.getElementById('set-ad-video-path')?.value || '',
+    mediaShowing: _adMediaShowing,
+    showQr, qrDataUrl: _relayQrDataUrl, qrX: _qrPos.x, qrY: _qrPos.y, qrBoth, qrSize,
+  });
+}
+
+// Used by the ad-media file pickers so an upload/clear while the ad screen
+// happens to already be showing updates it immediately, not just next time.
+function _refreshAdScreenIfShowing() {
+  if (_idleAdShowing === 'ad') _applyAdScreen();
+  else _broadcastAdConfig();
 }
 
 function setInfo(song) {
@@ -1637,7 +1888,7 @@ async function advanceQueue() {
     // Still say thank you to the last singer, but skip the "up next" waiting
     // screen (phase 2) — there's nothing queued to promote.
     await doTransition(prevSinger, null);
-    showIdle();
+    _enterIdleOrAd();
     return;
   }
   await doTransition(prevSinger, nextEntry);
@@ -2000,7 +2251,15 @@ async function openSettings(){
   document.getElementById('idle-text-size-val').textContent   = parseFloat(_idleSize).toFixed(2).replace(/\.?0+$/, '') + 'rem';
 
   document.getElementById('set-show-playback-banner').checked = settings.show_playback_banner === 'true';
+  document.getElementById('set-karaoke-show-qr').checked      = settings.karaoke_show_qr === 'true';
+  document.getElementById('set-ad-show-qr').checked           = settings.ad_show_qr !== 'false';
+  document.getElementById('set-ad-show-next-up').checked      = settings.ad_show_next_up !== 'false';
   document.getElementById('set-banner-color').value           = settings.banner_color || '#ffffff';
+  document.getElementById('set-banner-bg-color').value        = settings.banner_bg_color || '#7c3aed';
+  const _bannerBgOpacity = settings.banner_bg_opacity ?? '92';
+  document.getElementById('set-banner-bg-opacity').value       = _bannerBgOpacity;
+  document.getElementById('banner-bg-opacity-val').textContent = _bannerBgOpacity + '%';
+  _applyBannerBg(settings.banner_bg_color || '#7c3aed', _bannerBgOpacity);
   _loadQrPosition(settings);
   document.getElementById('set-idle-qr-both').checked         = settings.idle_qr_both === 'true';
   const _qrSize = settings.idle_qr_size || '3';
@@ -2011,6 +2270,13 @@ async function openSettings(){
   document.getElementById('set-yt-cookies-browser').value      = settings.youtube_cookies_browser || '';
   document.getElementById('set-venue-path').value             = settings.venue_image_path     || '';
   if (settings.venue_image_path) loadVenuePreview(settings.venue_image_path);
+
+  document.getElementById('set-idle-screen-mode').value       = settings.idle_screen_mode || 'idle';
+  document.getElementById('set-idle-ad-rotate-sec').value     = settings.idle_ad_rotate_sec || '15';
+  document.getElementById('set-ad-picture-path').value        = settings.ad_picture_path || '';
+  if (settings.ad_picture_path) loadAdPicturePreview(settings.ad_picture_path);
+  document.getElementById('set-ad-video-path').value          = settings.ad_video_path || '';
+  _updateAdModeUI();
   const nuSize = settings.next_up_size || '3';
   document.getElementById('set-next-up-size').value         = nuSize;
   document.getElementById('next-up-size-val').textContent   = ['XS','S','M','L','XL'][parseInt(nuSize)-1] || 'M';
@@ -2238,6 +2504,7 @@ function onBgVolChange(v) {
 
 // ── Venue image helpers ───────────────────────────────────────────────────────
 let _venueBlobUrl = null;
+let _adPictureBlobUrl = null;
 
 async function loadVenuePreview(path) {
   try {
@@ -2269,6 +2536,48 @@ function clearVenueImage() {
   _applyIdleBg('');
   broadcast({ type: 'venue_path', path: '' });
   api.setSetting('venue_image_path', '').catch(() => {});
+}
+
+async function loadAdPicturePreview(path) {
+  try {
+    const bytes = await api.readFile(path);
+    const blob  = new Blob([bytes]);
+    if (_adPictureBlobUrl) URL.revokeObjectURL(_adPictureBlobUrl);
+    _adPictureBlobUrl = URL.createObjectURL(blob);
+    const img = document.getElementById('set-ad-picture-preview');
+    img.src = _adPictureBlobUrl; img.style.display = 'block';
+  } catch {}
+}
+
+async function browseAdPicture() {
+  const p = await api.openImageDialog();
+  if (!p) return;
+  document.getElementById('set-ad-picture-path').value = p;
+  loadAdPicturePreview(p);
+  api.setSetting('ad_picture_path', p).catch(() => {});
+  _refreshAdScreenIfShowing();
+}
+
+function clearAdPicture() {
+  document.getElementById('set-ad-picture-path').value = '';
+  const img = document.getElementById('set-ad-picture-preview');
+  img.src = ''; img.style.display = 'none';
+  api.setSetting('ad_picture_path', '').catch(() => {});
+  _refreshAdScreenIfShowing();
+}
+
+async function browseAdVideo() {
+  const p = await api.openVideoDialog();
+  if (!p) return;
+  document.getElementById('set-ad-video-path').value = p;
+  api.setSetting('ad_video_path', p).catch(() => {});
+  _refreshAdScreenIfShowing();
+}
+
+function clearAdVideo() {
+  document.getElementById('set-ad-video-path').value = '';
+  api.setSetting('ad_video_path', '').catch(() => {});
+  _refreshAdScreenIfShowing();
 }
 
 async function browseYtCookiesFile() {
@@ -2596,11 +2905,12 @@ async function _updatePlaybackBanner() {
   const otherPending = pending.slice(1);
   const bannerText   = _buildBanner(nextEntry, otherPending, remainingSec + transitionSec, transitionSec);
 
-  const { bannerScale, color: bannerColor } = _bannerAppearance(cfg);
+  const { bannerScale, color: bannerColor, bgColor } = _bannerAppearance(cfg);
   const animSec = _bannerAnimSec(cfg, bannerText);
 
   ticker.style.fontSize = (1.2 * bannerScale).toFixed(2) + 'rem';
   ticker.style.color    = bannerColor;
+  wrap.style.background = bgColor;
   wrap.style.padding    = Math.round(6 * bannerScale) + 'px 0';
   wrap.style.display    = 'block';
   _setupScrollTicker(ticker, bannerText, animSec);
@@ -2611,8 +2921,27 @@ async function _updatePlaybackBanner() {
     if (ov) ov.style.bottom = (wrap.offsetHeight + 8) + 'px';
   }, 0);
 
-  _pbBannerMsg = { type: 'playback_banner', visible: true, text: bannerText, animSec, bannerScale, bannerColor };
+  _pbBannerMsg = { type: 'playback_banner', visible: true, text: bannerText, animSec, bannerScale, bannerColor, bgColor };
   broadcast(_pbBannerMsg);
+}
+
+// QR overlay shown while a song is actively playing (Karaoke Screen). Polled
+// on the same 3s interval as the playback banner above, rather than a
+// separate live-broadcast path, since that cadence is already the precedent
+// for "what's currently showing on top of the video/CDG".
+function _updateKaraokeQr() {
+  const showQr = (document.getElementById('set-karaoke-show-qr')?.checked ?? false)
+    && isPlaying && !_transitioning && !!_relayQrDataUrl;
+  const qrBoth = document.getElementById('set-idle-qr-both')?.checked ?? false;
+  const qrSize = parseInt(document.getElementById('set-idle-qr-size')?.value || '3');
+
+  if (showQr) _showQrIn('karaoke-qr-box-a', 'karaoke-qr-img', 'karaoke-qr-box-b', 'karaoke-qr-img-b', qrBoth, _qrSizeStyle(qrSize));
+  else _hideQrIn('karaoke-qr-box-a', 'karaoke-qr-box-b');
+
+  broadcast({
+    type: 'karaoke_qr', showQr, qrDataUrl: _relayQrDataUrl,
+    qrX: _qrPos.x, qrY: _qrPos.y, qrBoth, qrSize,
+  });
 }
 
 // Used on any screen when nothing is actually queued (_buildBanner would just
@@ -2626,12 +2955,42 @@ function _bannerTextOrFallback(nextEntry, pending, bgSec, transitionSec) {
 
 // Color/size are shared across every screen the banner appears on; speed
 // also factors in the specific text being shown, so it's computed separately.
+function _hexToRgba(hex, opacityPct) {
+  const h = (hex || '#7c3aed').replace('#', '');
+  const r = parseInt(h.substring(0, 2), 16) || 0;
+  const g = parseInt(h.substring(2, 4), 16) || 0;
+  const b = parseInt(h.substring(4, 6), 16) || 0;
+  const a = Math.max(0, Math.min(100, parseInt(opacityPct, 10) ?? 92)) / 100;
+  return `rgba(${r},${g},${b},${a})`;
+}
+
 function _bannerAppearance(cfg) {
   const BANNER_SCALE = [0, 0.55, 0.75, 1.00, 1.35, 1.75];
   return {
     bannerScale: BANNER_SCALE[parseInt(cfg.banner_size || '3')] ?? 1.00,
     color: cfg.banner_color || '#ffffff',
+    bgColor: _hexToRgba(cfg.banner_bg_color || '#7c3aed', cfg.banner_bg_opacity ?? '92'),
   };
+}
+
+// Applies the banner background to every ticker wrap that exists in this
+// window (main window has tr-*/idle-*/playback-*; the popout is updated via
+// the 'banner_bg' broadcast below).
+function _applyBannerBg(hexColor, opacityPct) {
+  const rgba = _hexToRgba(hexColor, opacityPct);
+  ['tr-ticker-wrap', 'tr1-ticker-wrap', 'idle-ticker-wrap', 'playback-banner-wrap'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.background = rgba;
+  });
+}
+
+function _updateBannerBg() {
+  const color   = document.getElementById('set-banner-bg-color')?.value || '#7c3aed';
+  const opacity = document.getElementById('set-banner-bg-opacity')?.value ?? '92';
+  autoSave('banner_bg_color', color, 300);
+  autoSave('banner_bg_opacity', opacity, 300);
+  _applyBannerBg(color, opacity);
+  broadcast({ type: 'banner_bg', color, opacity });
 }
 function _bannerAnimSec(cfg, text) {
   const speedLevel = parseInt(cfg.banner_speed || '4') || 4;
@@ -2639,12 +2998,13 @@ function _bannerAnimSec(cfg, text) {
   const speedMult   = SPEED_MAP[speedLevel] ?? 0.22; // 1=langsam(0.80) … 10=sehr schnell(0.03)
   return Math.max(4, text.length * speedMult * 2);
 }
-function _renderTicker(tickerId, text, animSec, bannerScale, color) {
+function _renderTicker(tickerId, text, animSec, bannerScale, color, bgColor) {
   const ticker = document.getElementById(tickerId);
   if (!ticker) return;
   ticker.style.fontSize = (1.9 * bannerScale).toFixed(2) + 'rem';
   ticker.style.color    = color;
   ticker.parentElement.style.padding = Math.round(20 * bannerScale) + 'px 0';
+  if (bgColor) ticker.parentElement.style.background = bgColor;
   _setupScrollTicker(ticker, text, animSec);
 }
 
@@ -2767,6 +3127,11 @@ function _setupScrollTicker(el, text, singleAnimSec) {
 }
 
 async function doTransition(prevSinger, nextEntry) {
+  // A song is on its way in one form or another -- stop any Idle/Ad rotation
+  // immediately rather than waiting for it to (maybe) fire mid-transition.
+  _stopIdleAdTimers();
+  _idleAdShowing = null;
+
   const cfg      = await api.getSettings();
   const thanksMs = (parseInt(cfg.thanks_time || '5')  || 0) * 1000;
   const bgMs     = (parseInt(cfg.bg_time     || '10') || 0) * 1000;
@@ -2798,7 +3163,7 @@ async function doTransition(prevSinger, nextEntry) {
   const queue          = await api.getQueue();
   const pending        = queue.filter(e => e.status === 'pending' && e.id !== nextEntry?.id);
   const transitionSec  = (thanksMs + bgMs) / 1000;
-  const { bannerScale, color: bannerColor } = _bannerAppearance(cfg);
+  const { bannerScale, color: bannerColor, bgColor: bannerBgColor } = _bannerAppearance(cfg);
   const qrBothCfg      = cfg.idle_qr_both === 'true';
   const qrSizeLevel    = parseInt(cfg.idle_qr_size || '3');
   const qrSizeStyleCfg = _qrSizeStyle(qrSizeLevel);
@@ -2816,14 +3181,14 @@ async function doTransition(prevSinger, nextEntry) {
     const animSec1    = _bannerAnimSec(cfg, bannerText1);
 
     document.getElementById('tr1-ticker-wrap').style.display = showBanner1 ? 'block' : 'none';
-    if (showBanner1) _renderTicker('tr1-ticker', bannerText1, animSec1, bannerScale, bannerColor);
+    if (showBanner1) _renderTicker('tr1-ticker', bannerText1, animSec1, bannerScale, bannerColor, bannerBgColor);
 
     if (showQr1) _showQrIn('tr1-qr-box-a', 'tr1-qr-img', 'tr1-qr-box-b', 'tr1-qr-img-b', qrBothCfg, qrSizeStyleCfg);
     else _hideQrIn('tr1-qr-box-a', 'tr1-qr-box-b');
 
     _lastTransitionMsg = {
       type: 'tr_phase1', prevSinger, thanksMs, thanksVariant,
-      showBanner: showBanner1, bannerText: bannerText1, animSec: animSec1, bannerScale, bannerColor,
+      showBanner: showBanner1, bannerText: bannerText1, animSec: animSec1, bannerScale, bannerColor, bannerBgColor,
       showQr: showQr1, qrDataUrl: _relayQrDataUrl, qrX: _qrPos.x, qrY: _qrPos.y, qrBoth: qrBothCfg, qrSize: qrSizeLevel,
     };
     broadcast(_lastTransitionMsg);
@@ -2851,7 +3216,7 @@ async function doTransition(prevSinger, nextEntry) {
     const animSec2    = _bannerAnimSec(cfg, bannerText2);
 
     document.getElementById('tr-ticker-wrap').style.display = showBanner2 ? 'block' : 'none';
-    if (showBanner2) _renderTicker('tr-ticker', bannerText2, animSec2, bannerScale, bannerColor);
+    if (showBanner2) _renderTicker('tr-ticker', bannerText2, animSec2, bannerScale, bannerColor, bannerBgColor);
 
     if (showQr2) _showQrIn('tr2-qr-box-a', 'tr2-qr-img', 'tr2-qr-box-b', 'tr2-qr-img-b', qrBothCfg, qrSizeStyleCfg);
     else _hideQrIn('tr2-qr-box-a', 'tr2-qr-box-b');
@@ -2877,7 +3242,7 @@ async function doTransition(prevSinger, nextEntry) {
 
     _lastTransitionMsg = {
       type: 'tr_phase2', venuePath, bgMs, nextSinger, nextUpList, nextUpScale,
-      showBanner: showBanner2, bannerText: bannerText2, animSec: animSec2, bannerScale, bannerColor,
+      showBanner: showBanner2, bannerText: bannerText2, animSec: animSec2, bannerScale, bannerColor, bannerBgColor,
       showQr: showQr2, qrDataUrl: _relayQrDataUrl, qrX: _qrPos.x, qrY: _qrPos.y, qrBoth: qrBothCfg, qrSize: qrSizeLevel,
     };
     _transitionPhaseEnd = phaseEnd;
@@ -3229,7 +3594,7 @@ async function startApp() {
   renderQueue();
   renderHistory();
   checkAndPlay();
-  setInterval(() => { renderQueue(); renderHistory(); checkAndPlay(); _updatePlaybackBanner(); }, 3000);
+  setInterval(() => { renderQueue(); renderHistory(); checkAndPlay(); _updatePlaybackBanner(); _updateKaraokeQr(); }, 3000);
   const s = await api.getSettings();
   _venuePath = s.venue_image_path || '';
   _applyIdleBg(_venuePath);
@@ -3328,6 +3693,7 @@ function _nudgeQr(dx, dy) {
   autoSave('idle_qr_x', _qrPos.x.toString());
   autoSave('idle_qr_y', _qrPos.y.toString());
   _broadcastIdleConfig();
+  _refreshAdScreenIfShowing();
 }
 
 function _resetQrPosition() {
@@ -3336,6 +3702,7 @@ function _resetQrPosition() {
   autoSave('idle_qr_x', _qrPos.x.toString());
   autoSave('idle_qr_y', _qrPos.y.toString());
   _broadcastIdleConfig();
+  _refreshAdScreenIfShowing();
 }
 
 // left:{x}%;top:{y}% + translate(-50%,-50%) anchors the QR box's CENTER at (x,y),
@@ -3353,9 +3720,11 @@ function _qrSizeStyle(sizeLevel) {
 // (not the DB) so idle updates instantly, same as the QR fields below already did.
 function _idleBannerCfg() {
   return {
-    banner_size:  document.getElementById('set-banner-size')?.value,
-    banner_color: document.getElementById('set-banner-color')?.value,
-    banner_speed: document.getElementById('set-banner-speed')?.value,
+    banner_size:       document.getElementById('set-banner-size')?.value,
+    banner_color:      document.getElementById('set-banner-color')?.value,
+    banner_speed:      document.getElementById('set-banner-speed')?.value,
+    banner_bg_color:   document.getElementById('set-banner-bg-color')?.value,
+    banner_bg_opacity: document.getElementById('set-banner-bg-opacity')?.value,
   };
 }
 
@@ -3392,8 +3761,8 @@ function _applyIdleConfig() {
 
     if (showBanner) {
       const bannerCfg = _idleBannerCfg();
-      const { bannerScale, color } = _bannerAppearance(bannerCfg);
-      _renderTicker('idle-ticker', BANNER_FALLBACK_TEXT, _bannerAnimSec(bannerCfg, BANNER_FALLBACK_TEXT), bannerScale, color);
+      const { bannerScale, color, bgColor } = _bannerAppearance(bannerCfg);
+      _renderTicker('idle-ticker', BANNER_FALLBACK_TEXT, _bannerAnimSec(bannerCfg, BANNER_FALLBACK_TEXT), bannerScale, color, bgColor);
       tickerWrap.style.display = 'block';
     } else {
       tickerWrap.style.display = 'none';
@@ -3424,12 +3793,12 @@ async function _broadcastIdleConfig() {
   const qrUrl      = _relayQrDataUrl;
 
   const bannerCfg = _idleBannerCfg();
-  const { bannerScale, color: bannerColor } = _bannerAppearance(bannerCfg);
+  const { bannerScale, color: bannerColor, bgColor: bannerBgColor } = _bannerAppearance(bannerCfg);
   const animSec = _bannerAnimSec(bannerCfg, BANNER_FALLBACK_TEXT);
 
   api.broadcast({
     type: 'idle_config',
-    showBanner, bannerText: BANNER_FALLBACK_TEXT, animSec, bannerScale, bannerColor,
+    showBanner, bannerText: BANNER_FALLBACK_TEXT, animSec, bannerScale, bannerColor, bannerBgColor,
     showText, text, textColor, textSize,
     showQr: showQr && !!qrUrl, qrDataUrl: qrUrl, url: _relayPublicUrl, qrX: _qrPos.x, qrY: _qrPos.y, qrBoth, qrSize,
   });

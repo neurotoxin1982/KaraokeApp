@@ -305,6 +305,14 @@ function setupIPC() {
     return r.canceled ? null : r.filePaths[0];
   });
 
+  ipcMain.handle('dialog:openVideo', async () => {
+    const r = await dialog.showOpenDialog(mainWindow, {
+      properties: ['openFile'],
+      filters: [{ name: 'Videos', extensions: ['mp4','webm','mkv','avi','mov','m4v'] }]
+    });
+    return r.canceled ? null : r.filePaths[0];
+  });
+
   // Cookies file picker (Netscape format, for yt-dlp)
   ipcMain.handle('dialog:openCookiesFile', async () => {
     const r = await dialog.showOpenDialog(mainWindow, {
