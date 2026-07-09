@@ -61,6 +61,17 @@
       display: none;
       position: absolute; inset: 0; z-index: 1;
     }
+    #idle-custom-text {
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      padding: 28px 40px 40px;
+      font-weight: 700;
+      color: #fff; text-shadow: 0 2px 8px rgba(0,0,0,.8);
+      text-align: center;
+      text-wrap: balance;
+      background: linear-gradient(180deg, rgba(8,6,14,.6), transparent);
+      z-index: 2;
+    }
     .idle-qr-box {
       position: absolute;
       display: flex; flex-direction: column; align-items: center;
@@ -96,8 +107,9 @@
     <div class="logo">🎤</div>
     <p id="idle-text" style="margin-top:16px">Waiting for next song…</p>
   </div>
-  <!-- QR + banner — QR box position/size set by JS -->
+  <!-- Custom text + QR + banner — QR box position/size set by JS -->
   <div id="idle-qr-wrap" style="display:none;position:absolute;inset:0;z-index:1;">
+    <p id="idle-custom-text"></p>
     <div id="idle-ticker-wrap" style="display:none;position:absolute;bottom:0;left:0;right:0;background:rgba(124,58,237,0.92);padding:28px 0;overflow:hidden">
       <div id="idle-ticker" style="white-space:nowrap;display:inline-block;animation:pop-ticker 18s linear infinite;font-size:2.8rem;font-weight:700;color:#fff"></div>
     </div>
@@ -321,17 +333,25 @@ api.onBroadcast((msg) => {
       const defaultEl  = document.getElementById('idle-default');
       const qrWrap     = document.getElementById('idle-qr-wrap');
       const tickerWrap = document.getElementById('idle-ticker-wrap');
+      const customText = document.getElementById('idle-custom-text');
       const idleText   = document.getElementById('idle-text');
       const showQr     = !!(msg.showQr && msg.qrDataUrl);
       const showBanner = !!msg.showBanner;
+      const showText   = msg.showText !== false;
 
       // The idle screen only ever shows once the queue is empty, so there's
       // never a real "up next" to list — see the matching comment in index.html.
       const nuEl = document.getElementById('idle-next-up');
       if (nuEl) nuEl.style.display = 'none';
 
-      if (showQr || showBanner) {
+      if (showQr || showBanner || showText) {
         qrWrap.style.display = 'flex';
+        if (customText) {
+          customText.style.display  = showText ? '' : 'none';
+          customText.textContent    = msg.text || '';
+          customText.style.color    = msg.textColor || '#fff';
+          customText.style.fontSize = msg.textSize ? (msg.textSize + 'rem') : '1.8rem';
+        }
         if (showBanner) {
           _renderTicker('idle-ticker', msg.bannerText, msg.animSec, msg.bannerScale, msg.bannerColor);
           tickerWrap.style.display = 'block';

@@ -95,6 +95,7 @@
         </div>
         <!-- QR + custom text — text pinned top; QR box position/size set by JS -->
         <div id="player-idle-qr" style="display:none;position:absolute;inset:0;z-index:1;">
+          <p id="player-idle-custom-text" style="position:absolute;top:0;left:0;right:0;margin:0;padding:28px 40px 40px;font-weight:700;color:#fff;text-shadow:0 2px 8px rgba(0,0,0,.8);text-align:center;text-wrap:balance;background:linear-gradient(180deg,rgba(8,6,14,.6),transparent);z-index:2;"></p>
           <div id="idle-ticker-wrap" style="display:none;position:absolute;bottom:0;left:0;right:0;background:rgba(124,58,237,0.92);padding:20px 0;overflow:hidden">
             <div class="ticker-track" id="idle-ticker" style="font-size:1.9rem;font-weight:600;color:#fff;white-space:nowrap;display:inline-block"></div>
           </div>
@@ -545,6 +546,35 @@
                 <label for="set-thanks-show-qr" style="font-size:.85rem;color:#d1d5db;cursor:pointer">QR code</label>
               </div>
             </div>
+          </div>
+        </div>
+
+        <div class="card" style="display:flex;flex-direction:column;gap:10px">
+          <h4 style="font-size:.95rem;font-weight:600"><i class="fa-solid fa-font" style="color:#a78bfa;margin-right:6px"></i>Idle Custom Text</h4>
+          <p style="font-size:.8rem;color:#6b7280;line-height:1.5;margin-top:-6px">Idle screen only — shown alongside (or instead of) the running banner.</p>
+          <div style="display:flex;flex-direction:column;gap:5px">
+            <label style="font-size:.8rem;color:#9ca3af">Custom text</label>
+            <input type="text" id="set-idle-text" placeholder="e.g. Scan to request a song!"
+              style="background:#111827;border:1.5px solid #374151;color:#f3f4f6;padding:7px 10px;border-radius:7px;font-size:.85rem"
+              oninput="autoSave('idle_text', this.value, 600); _broadcastIdleConfig()">
+          </div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <input type="checkbox" id="set-idle-show-text" style="width:16px;height:16px;accent-color:#7c3aed;cursor:pointer"
+              onchange="autoSave('idle_show_text', this.checked.toString()); _broadcastIdleConfig()">
+            <label for="set-idle-show-text" style="font-size:.85rem;color:#d1d5db;cursor:pointer;flex:1">Show custom text on idle screen</label>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <label style="font-size:.8rem;color:#9ca3af;min-width:70px">Text color</label>
+            <input type="color" id="set-idle-text-color" value="#ffffff"
+              style="width:36px;height:28px;padding:2px;background:none;border:1.5px solid #374151;border-radius:6px;cursor:pointer;flex-shrink:0"
+              onchange="autoSave('idle_text_color', this.value); _broadcastIdleConfig()">
+          </div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <label style="font-size:.8rem;color:#9ca3af;min-width:70px">Text size</label>
+            <input type="range" id="set-idle-text-size" min="0.5" max="6" step="0.25" value="1.8"
+              style="flex:1;accent-color:#7c3aed"
+              oninput="document.getElementById('idle-text-size-val').textContent=parseFloat(this.value).toFixed(2).replace(/\.?0+$/,'')+'rem'; autoSave('idle_text_size', this.value, 200); _broadcastIdleConfig()">
+            <span id="idle-text-size-val" style="font-size:.8rem;color:#9ca3af;min-width:38px;text-align:right">1.8rem</span>
           </div>
         </div>
 
@@ -1961,6 +1991,14 @@ async function openSettings(){
   document.getElementById('set-thanks-show-banner').checked   = settings.thanks_show_banner !== 'false';
   document.getElementById('set-thanks-show-qr').checked       = settings.thanks_show_qr     !== 'false';
 
+  document.getElementById('set-idle-text').value              = settings.idle_text             || '';
+  document.getElementById('set-idle-show-text').checked       = settings.idle_show_text !== 'false';
+  const _idleColor = settings.idle_text_color || '#ffffff';
+  const _idleSize  = settings.idle_text_size  || '1.8';
+  document.getElementById('set-idle-text-color').value        = _idleColor;
+  document.getElementById('set-idle-text-size').value         = _idleSize;
+  document.getElementById('idle-text-size-val').textContent   = parseFloat(_idleSize).toFixed(2).replace(/\.?0+$/, '') + 'rem';
+
   document.getElementById('set-show-playback-banner').checked = settings.show_playback_banner === 'true';
   document.getElementById('set-banner-color').value           = settings.banner_color || '#ffffff';
   _loadQrPosition(settings);
@@ -3324,6 +3362,10 @@ function _idleBannerCfg() {
 function _applyIdleConfig() {
   const showBanner = document.getElementById('set-idle-show-banner')?.checked ?? true;
   const showQr     = (document.getElementById('set-idle-show-qr')?.checked ?? true) && !!_relayQrDataUrl;
+  const showText   = document.getElementById('set-idle-show-text')?.checked ?? true;
+  const text       = document.getElementById('set-idle-text')?.value || '';
+  const textColor  = document.getElementById('set-idle-text-color')?.value || '#ffffff';
+  const textSize   = parseFloat(document.getElementById('set-idle-text-size')?.value || '1.8');
   const qrBoth     = document.getElementById('set-idle-qr-both')?.checked ?? false;
   const qrSize     = parseInt(document.getElementById('set-idle-qr-size')?.value || '3');
 
@@ -3331,6 +3373,7 @@ function _applyIdleConfig() {
   const qrWrap     = document.getElementById('player-idle-qr');
   const tickerWrap = document.getElementById('idle-ticker-wrap');
   const nextUpEl   = document.getElementById('player-idle-next-up');
+  const custEl     = document.getElementById('player-idle-custom-text');
   if (!defEl || !qrWrap) return;
 
   // The idle screen only ever shows once the queue is confirmed empty (see
@@ -3339,7 +3382,14 @@ function _applyIdleConfig() {
   // always empty in practice.
   if (nextUpEl) nextUpEl.style.display = 'none';
 
-  if (showQr || showBanner) {
+  if (showQr || showBanner || showText) {
+    if (custEl) {
+      custEl.style.display  = showText ? '' : 'none';
+      custEl.textContent    = text;
+      custEl.style.color    = textColor;
+      custEl.style.fontSize = textSize + 'rem';
+    }
+
     if (showBanner) {
       const bannerCfg = _idleBannerCfg();
       const { bannerScale, color } = _bannerAppearance(bannerCfg);
@@ -3365,6 +3415,10 @@ function _applyIdleConfig() {
 async function _broadcastIdleConfig() {
   const showBanner = document.getElementById('set-idle-show-banner')?.checked ?? true;
   const showQr     = document.getElementById('set-idle-show-qr')?.checked ?? true;
+  const showText   = document.getElementById('set-idle-show-text')?.checked ?? true;
+  const text       = document.getElementById('set-idle-text')?.value || '';
+  const textColor  = document.getElementById('set-idle-text-color')?.value || '#ffffff';
+  const textSize   = parseFloat(document.getElementById('set-idle-text-size')?.value || '1.8');
   const qrBoth     = document.getElementById('set-idle-qr-both')?.checked ?? false;
   const qrSize     = parseInt(document.getElementById('set-idle-qr-size')?.value || '3');
   const qrUrl      = _relayQrDataUrl;
@@ -3376,6 +3430,7 @@ async function _broadcastIdleConfig() {
   api.broadcast({
     type: 'idle_config',
     showBanner, bannerText: BANNER_FALLBACK_TEXT, animSec, bannerScale, bannerColor,
+    showText, text, textColor, textSize,
     showQr: showQr && !!qrUrl, qrDataUrl: qrUrl, url: _relayPublicUrl, qrX: _qrPos.x, qrY: _qrPos.y, qrBoth, qrSize,
   });
   _applyIdleConfig();
@@ -3523,6 +3578,10 @@ window.api.relayStatus().then(status => {
       _relayQrDataUrl = dataUrl;
       // Wait briefly for settings to be available
       api.getSettings().then(s => {
+        document.getElementById('set-idle-text').value = s.idle_text || '';
+        document.getElementById('set-idle-show-text').checked = s.idle_show_text !== 'false';
+        document.getElementById('set-idle-text-color').value = s.idle_text_color || '#ffffff';
+        document.getElementById('set-idle-text-size').value  = s.idle_text_size  || '1.8';
         document.getElementById('set-idle-show-banner').checked = s.idle_show_banner !== 'false';
         document.getElementById('set-idle-show-qr').checked = s.idle_show_qr !== 'false';
         _loadQrPosition(s);
