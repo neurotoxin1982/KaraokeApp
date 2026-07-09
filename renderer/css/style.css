@@ -89,6 +89,7 @@ nav .logo {
 .btn-red     { background: #7f1d1d; color: #fca5a5; }
 .btn-red:hover { background: #991b1b; }
 .btn-sm { padding: 4px 10px; font-size: 0.8rem; }
+.btn:disabled { opacity: 0.4; cursor: default; pointer-events: none; }
 .btn-icon { width: 32px; height: 32px; border-radius: 50%; padding: 0; display: flex; align-items: center; justify-content: center; }
 .btn-icon-lg { width: 40px; height: 40px; border-radius: 50%; }
 

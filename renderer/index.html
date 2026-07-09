@@ -358,7 +358,10 @@
         <div class="card">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
             <h4 style="font-size:.95rem;font-weight:600"><i class="fa-solid fa-folder-open" style="color:#a78bfa;margin-right:6px"></i>Local Library</h4>
-            <button class="btn btn-gray btn-sm" id="add-lib-btn" onclick="addLibraryRow()"><i class="fa-solid fa-plus"></i> Add Library</button>
+            <div style="display:flex;gap:8px">
+              <button class="btn btn-gray btn-sm" onclick="openLibrarySongsModal()"><i class="fa-solid fa-list"></i> View Songs</button>
+              <button class="btn btn-gray btn-sm" id="add-lib-btn" onclick="addLibraryRow()"><i class="fa-solid fa-plus"></i> Add Library</button>
+            </div>
           </div>
           <div id="library-rows"></div>
         </div>
@@ -917,6 +920,30 @@
           <option value="opera">Opera</option>
           <option value="vivaldi">Vivaldi</option>
         </select>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Local Library Songs Modal ────────────────────────────────────── -->
+<div id="lib-songs-modal" class="modal-overlay hidden">
+  <div class="modal" style="max-width:560px">
+    <div class="modal-header">
+      <h3 style="font-size:1.1rem;font-weight:600"><i class="fa-solid fa-list" style="color:#a78bfa;margin-right:8px"></i>Local Library Songs</h3>
+      <button class="btn btn-gray btn-sm" onclick="closeLibrarySongsModal()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:12px">
+      <div style="position:relative">
+        <i class="fa-solid fa-magnifying-glass" style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:#6b7280;font-size:.875rem"></i>
+        <input id="lib-songs-search" type="text" placeholder="Filter by title or artist…"
+          style="padding-left:36px" oninput="_libSongsSearch(this.value)">
+      </div>
+      <div id="lib-songs-count" style="font-size:.78rem;color:#6b7280"></div>
+      <div id="lib-songs-list" style="max-height:400px;overflow-y:auto;display:flex;flex-direction:column;gap:2px"></div>
+      <div id="lib-songs-pager" style="display:flex;align-items:center;justify-content:center;gap:14px;padding-top:4px">
+        <button class="btn btn-gray btn-sm" onclick="_libSongsPage(-1)"><i class="fa-solid fa-chevron-left"></i> Prev</button>
+        <span id="lib-songs-page-label" style="font-size:.78rem;color:#9ca3af"></span>
+        <button class="btn btn-gray btn-sm" onclick="_libSongsPage(1)">Next <i class="fa-solid fa-chevron-right"></i></button>
       </div>
     </div>
   </div>
@@ -2800,6 +2827,82 @@ function openYtPlaybackModal() {
 
 function closeYtPlaybackModal() {
   hide('yt-playback-modal');
+}
+
+// ── Local Library Songs modal ───────────────────────────────────────────────
+let _libSongsPageNum = 1;
+let _libSongsQuery   = '';
+let _libSongsTimer   = null;
+
+function openLibrarySongsModal() {
+  show('lib-songs-modal');
+  document.getElementById('lib-songs-search').value = '';
+  _libSongsQuery = '';
+  _libSongsPageNum = 1;
+  _libSongsLoad();
+}
+
+function closeLibrarySongsModal() {
+  hide('lib-songs-modal');
+}
+
+function _libSongsSearch(q) {
+  clearTimeout(_libSongsTimer);
+  _libSongsTimer = setTimeout(() => {
+    _libSongsQuery = q.trim();
+    _libSongsPageNum = 1;
+    _libSongsLoad();
+  }, 200);
+}
+
+function _libSongsPage(delta) {
+  _libSongsPageNum = Math.max(1, _libSongsPageNum + delta);
+  _libSongsLoad();
+}
+
+function _libSongsFmtDur(sec) {
+  if (!sec) return '—';
+  const m = Math.floor(sec / 60), s = Math.floor(sec % 60);
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+async function _libSongsLoad() {
+  const listEl  = document.getElementById('lib-songs-list');
+  const countEl = document.getElementById('lib-songs-count');
+  const pagerEl = document.getElementById('lib-songs-pager');
+  const pageEl  = document.getElementById('lib-songs-page-label');
+  const esc     = s => (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+  listEl.innerHTML = '<p style="padding:10px 12px;font-size:.85rem;color:#6b7280">Loading…</p>';
+
+  const { songs, total, page, pages } = await api.getSongs({
+    q: _libSongsQuery, sort: 'artist', page: _libSongsPageNum, pageSize: 50,
+  });
+
+  // If a filter/page change left us past the last page, snap back instead of showing blank.
+  if (page > 1 && songs.length === 0) {
+    _libSongsPageNum = Math.max(1, pages);
+    return _libSongsLoad();
+  }
+
+  countEl.textContent = total === 0
+    ? (_libSongsQuery ? 'No songs match your filter.' : 'No songs imported yet.')
+    : `${total} song${total === 1 ? '' : 's'}${_libSongsQuery ? ` matching "${esc(_libSongsQuery)}"` : ''}`;
+
+  listEl.innerHTML = songs.map(s => `
+    <div class="result-item" style="cursor:default">
+      <span style="font-size:.875rem;color:#e5e7eb;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+        ${esc(s.artist)} <span style="color:#6b7280">—</span> ${esc(s.title)}
+      </span>
+      <span style="font-size:.75rem;color:#6b7280;margin-left:8px;flex-shrink:0">${_libSongsFmtDur(s.duration)} · ${s.file_format.toUpperCase()}</span>
+    </div>`).join('');
+
+  pagerEl.style.display = pages > 1 ? 'flex' : 'none';
+  if (pages > 1) {
+    pageEl.textContent = `Page ${page} of ${pages}`;
+    pagerEl.querySelector('button:first-child').disabled = page <= 1;
+    pagerEl.querySelector('button:last-child').disabled  = page >= pages;
+  }
 }
 
 async function castStart() {
