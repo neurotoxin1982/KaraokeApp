@@ -55,21 +55,11 @@
     #idle-screen .logo { font-size: 3rem; position: relative; }
     #idle-default p { font-size: 1.1rem; position: relative; text-shadow: 0 1px 6px #000; }
 
-    /* QR layout — text pinned top; QR box position/size are applied inline by JS
-       (see _qrBoxStyle/_qrSizeStyle) since they're user-configurable. */
+    /* QR layout — position/size are applied inline by JS (see _qrBoxStyle/
+       _qrSizeStyle) since they're user-configurable. */
     #idle-qr-wrap {
       display: none;
       position: absolute; inset: 0; z-index: 1;
-    }
-    #idle-custom-text {
-      position: absolute;
-      top: 0; left: 0; right: 0;
-      padding: 30px 40px 44px;
-      font-weight: 700;
-      color: #fff; text-shadow: 0 2px 12px rgba(0,0,0,.8);
-      text-align: center;
-      text-wrap: balance;
-      background: linear-gradient(180deg, rgba(8,6,14,.6), transparent);
     }
     .idle-qr-box {
       position: absolute;
@@ -106,9 +96,12 @@
     <div class="logo">🎤</div>
     <p id="idle-text" style="margin-top:16px">Waiting for next song…</p>
   </div>
-  <!-- QR + custom text — text pinned top; QR box position/size set by JS -->
+  <!-- QR + banner — QR box position/size set by JS -->
   <div id="idle-qr-wrap" style="display:none;position:absolute;inset:0;z-index:1;">
-    <p id="idle-custom-text" style="position:absolute;top:0;left:0;right:0;margin:0;padding:14px 40px;font-weight:700;color:#fff;text-shadow:0 2px 12px rgba(0,0,0,.8);text-align:center;font-size:1.8rem;"></p>
+    <div id="idle-ticker-wrap" style="display:none;position:absolute;bottom:0;left:0;right:0;background:rgba(124,58,237,0.92);padding:28px 0;overflow:hidden">
+      <div id="idle-ticker" style="white-space:nowrap;display:inline-block;animation:pop-ticker 18s linear infinite;font-size:2.8rem;font-weight:700;color:#fff"></div>
+    </div>
+    <div id="idle-next-up" style="display:none;position:absolute;left:14px;top:14px;background:rgba(0,0,0,0.72);border-radius:14px;padding:14px 16px;backdrop-filter:blur(4px);min-width:200px;max-width:min(300px,38vw);z-index:5"></div>
     <div id="idle-qr-box-a" class="idle-qr-box">
       <img id="idle-qr-img" class="idle-qr-img" src="" alt="QR Code">
       <p id="idle-qr-sub" class="idle-qr-sub"></p>
@@ -138,7 +131,20 @@
   @keyframes th-shimmer  { from{background-position:0% 50%} to{background-position:200% 50%} }
 </style>
 <!-- Phase 1: Thank you -->
-<div id="pop-tr-thanks" style="display:none;position:absolute;inset:0;background:#000;z-index:60;flex-direction:column;align-items:center;justify-content:center;overflow:hidden"></div>
+<div id="pop-tr-thanks" style="display:none;position:absolute;inset:0;background:#000;z-index:60;flex-direction:column;align-items:center;justify-content:center;overflow:hidden">
+  <!-- display:contents so _getThanksHTML()'s content still centers via the
+       parent's flex properties, without wiping out the siblings below -->
+  <div id="pop-tr1-thanks-inner" style="display:contents"></div>
+  <div id="pop-tr1-ticker-wrap" style="display:none;position:absolute;bottom:0;left:0;right:0;background:rgba(124,58,237,0.92);padding:28px 0;overflow:hidden">
+    <div id="pop-tr1-ticker" style="white-space:nowrap;display:inline-block;animation:pop-ticker 18s linear infinite;font-size:2.8rem;font-weight:700;color:#fff"></div>
+  </div>
+  <div id="pop-tr1-qr-box-a" class="idle-qr-box" style="display:none">
+    <img id="pop-tr1-qr-img" class="idle-qr-img" src="" alt="QR Code">
+  </div>
+  <div id="pop-tr1-qr-box-b" class="idle-qr-box" style="display:none">
+    <img id="pop-tr1-qr-img-b" class="idle-qr-img" src="" alt="QR Code">
+  </div>
+</div>
 <!-- Phase 2: Background + banner -->
 <div id="pop-tr-bg" style="display:none;position:absolute;inset:0;background:#000;z-index:60;flex-direction:column">
   <div style="flex:1;display:flex;align-items:stretch;justify-content:center;overflow:hidden;min-height:0;position:relative">
@@ -147,6 +153,12 @@
     <div id="pop-tr-countdown" style="position:absolute;top:14px;right:14px;background:rgba(0,0,0,0.72);border-radius:14px;padding:10px 18px;text-align:center;backdrop-filter:blur(4px)">
       <div style="font-size:.5rem;color:#6b7280;letter-spacing:.08em;margin-bottom:3px">GET READY IN</div>
       <div id="pop-tr-countdown-num" style="font-size:2.2rem;font-weight:700;color:#fff;font-variant-numeric:tabular-nums;line-height:1"></div>
+    </div>
+    <div id="pop-tr2-qr-box-a" class="idle-qr-box" style="display:none;z-index:5">
+      <img id="pop-tr2-qr-img" class="idle-qr-img" src="" alt="QR Code">
+    </div>
+    <div id="pop-tr2-qr-box-b" class="idle-qr-box" style="display:none;z-index:5">
+      <img id="pop-tr2-qr-img-b" class="idle-qr-img" src="" alt="QR Code">
     </div>
   </div>
   <div id="pop-tr-ticker-wrap" style="background:rgba(124,58,237,0.92);padding:28px 0;overflow:hidden;flex-shrink:0">
@@ -266,6 +278,41 @@ function _qrSizeStyle(sizeLevel) {
   return `height:clamp(${h1}px,${h2}vw,${h3}px);`;
 }
 
+// Shared QR rendering across idle / Thank You / Between Songs — same shape
+// as the equivalent helper in the main window's index.html.
+function _showQrIn(boxAId, imgAId, boxBId, imgBId, msg) {
+  const boxA = document.getElementById(boxAId), imgA = document.getElementById(imgAId);
+  const boxB = document.getElementById(boxBId), imgB = document.getElementById(imgBId);
+  if (!boxA || !boxB) return;
+  const x = msg.qrX ?? QR_POS_DEFAULT_X, y = msg.qrY ?? QR_POS_DEFAULT_Y;
+  const sizeStyle = _qrSizeStyle(msg.qrSize);
+  boxA.style.cssText = _qrBoxStyleAt(x, y);
+  imgA.style.cssText = sizeStyle;
+  imgA.src = msg.qrDataUrl;
+  boxA.style.display = 'flex';
+  if (msg.qrBoth) {
+    boxB.style.cssText = _qrBoxStyleAt(100 - x, y);
+    imgB.style.cssText = sizeStyle;
+    imgB.src = msg.qrDataUrl;
+    boxB.style.display = 'flex';
+  } else {
+    boxB.style.display = 'none';
+  }
+}
+function _hideQrIn(boxAId, boxBId) {
+  const boxA = document.getElementById(boxAId), boxB = document.getElementById(boxBId);
+  if (boxA) boxA.style.display = 'none';
+  if (boxB) boxB.style.display = 'none';
+}
+function _renderTicker(tickerId, text, animSec, bannerScale, color) {
+  const ticker = document.getElementById(tickerId);
+  if (!ticker) return;
+  ticker.style.fontSize = (2.8 * (bannerScale || 1)).toFixed(2) + 'rem';
+  ticker.style.color    = color || '#fff';
+  ticker.parentElement.style.padding = Math.round(28 * (bannerScale || 1)) + 'px 0';
+  _setupScrollTicker(ticker, text || '', animSec || 18);
+}
+
 // ── IPC broadcast (Electron) ──────────────────────────────────────────────────
 api.onBroadcast((msg) => {
   switch (msg.type) {
@@ -273,47 +320,31 @@ api.onBroadcast((msg) => {
     case 'idle_config': {
       const defaultEl  = document.getElementById('idle-default');
       const qrWrap     = document.getElementById('idle-qr-wrap');
-      const customText = document.getElementById('idle-custom-text');
-      const boxA       = document.getElementById('idle-qr-box-a');
-      const boxB       = document.getElementById('idle-qr-box-b');
-      const imgA       = document.getElementById('idle-qr-img');
-      const imgB       = document.getElementById('idle-qr-img-b');
-      const subA       = document.getElementById('idle-qr-sub');
-      const subB       = document.getElementById('idle-qr-sub-b');
+      const tickerWrap = document.getElementById('idle-ticker-wrap');
       const idleText   = document.getElementById('idle-text');
       const showQr     = !!(msg.showQr && msg.qrDataUrl);
-      const showText   = msg.showText !== false;
-      const sizeStyle  = _qrSizeStyle(msg.qrSize);
-      if (showQr || showText) {
-        qrWrap.style.display      = 'flex';
-        customText.style.display  = showText ? '' : 'none';
-        customText.textContent    = msg.text || '';
-        customText.style.color    = msg.textColor || '#fff';
-        customText.style.fontSize = msg.textSize ? (msg.textSize + 'rem') : '1.8rem';
-        if (showQr) {
-          const x = msg.qrX ?? QR_POS_DEFAULT_X, y = msg.qrY ?? QR_POS_DEFAULT_Y;
-          boxA.style.cssText = _qrBoxStyleAt(x, y);
-          imgA.style.cssText = sizeStyle;
-          imgA.src            = msg.qrDataUrl;
-          subA.textContent    = msg.url || '';
-          boxA.style.display  = 'flex';
-          if (msg.qrBoth) {
-            boxB.style.cssText = _qrBoxStyleAt(100 - x, y);
-            imgB.style.cssText = sizeStyle;
-            imgB.src           = msg.qrDataUrl;
-            subB.textContent   = msg.url || '';
-            boxB.style.display = 'flex';
-          } else {
-            boxB.style.display = 'none';
-          }
+      const showBanner = !!msg.showBanner;
+
+      // The idle screen only ever shows once the queue is empty, so there's
+      // never a real "up next" to list — see the matching comment in index.html.
+      const nuEl = document.getElementById('idle-next-up');
+      if (nuEl) nuEl.style.display = 'none';
+
+      if (showQr || showBanner) {
+        qrWrap.style.display = 'flex';
+        if (showBanner) {
+          _renderTicker('idle-ticker', msg.bannerText, msg.animSec, msg.bannerScale, msg.bannerColor);
+          tickerWrap.style.display = 'block';
         } else {
-          boxA.style.display = 'none';
-          boxB.style.display = 'none';
+          tickerWrap.style.display = 'none';
         }
+        if (showQr) _showQrIn('idle-qr-box-a', 'idle-qr-img', 'idle-qr-box-b', 'idle-qr-img-b', msg);
+        else _hideQrIn('idle-qr-box-a', 'idle-qr-box-b');
         defaultEl.style.display = 'none';
       } else {
         idleText.textContent = 'Waiting for next song…';
-        qrWrap.style.display    = 'none';
+        tickerWrap.style.display = 'none';
+        qrWrap.style.display = 'none';
         defaultEl.style.display = '';
       }
       break;
@@ -400,9 +431,15 @@ api.onBroadcast((msg) => {
       canvas.parentElement.style.display = 'none';
       videoEl.style.display = 'none';
       document.getElementById('pop-tr-bg').style.display = 'none';
-      const thanks = document.getElementById('pop-tr-thanks');
-      thanks.innerHTML = _getThanksHTML(msg.prevSinger || '', msg.thanksVariant || 0);
-      thanks.style.display = 'flex';
+      document.getElementById('pop-tr1-thanks-inner').innerHTML = _getThanksHTML(msg.prevSinger || '', msg.thanksVariant || 0);
+
+      document.getElementById('pop-tr1-ticker-wrap').style.display = msg.showBanner ? 'block' : 'none';
+      if (msg.showBanner) _renderTicker('pop-tr1-ticker', msg.bannerText, msg.animSec, msg.bannerScale, msg.bannerColor);
+
+      if (msg.showQr && msg.qrDataUrl) _showQrIn('pop-tr1-qr-box-a', 'pop-tr1-qr-img', 'pop-tr1-qr-box-b', 'pop-tr1-qr-img-b', msg);
+      else _hideQrIn('pop-tr1-qr-box-a', 'pop-tr1-qr-box-b');
+
+      document.getElementById('pop-tr-thanks').style.display = 'flex';
       _playing = false;
       break;
     }
@@ -438,11 +475,12 @@ api.onBroadcast((msg) => {
       // Show container first so ticker can measure its width
       document.getElementById('pop-tr-bg').style.display = 'flex';
       // Banner (after container is visible so scrollWidth is correct)
-      const pttk = document.getElementById('pop-tr-ticker');
-      const bsc  = msg.bannerScale || 1;
-      pttk.style.fontSize = (2.8 * bsc).toFixed(2) + 'rem';
-      pttk.parentElement.style.padding = Math.round(28 * bsc) + 'px 0';
-      _setupScrollTicker(pttk, msg.bannerText || '', msg.animSec || 18);
+      document.getElementById('pop-tr-ticker-wrap').style.display = msg.showBanner ? 'block' : 'none';
+      if (msg.showBanner) _renderTicker('pop-tr-ticker', msg.bannerText, msg.animSec, msg.bannerScale, msg.bannerColor);
+
+      if (msg.showQr && msg.qrDataUrl) _showQrIn('pop-tr2-qr-box-a', 'pop-tr2-qr-img', 'pop-tr2-qr-box-b', 'pop-tr2-qr-img-b', msg);
+      else _hideQrIn('pop-tr2-qr-box-a', 'pop-tr2-qr-box-b');
+
       // Next-up list
       _renderNextUp(msg.nextUpList || [], document.getElementById('pop-tr-next-up'), msg.nextUpScale || 1);
       _playing = false;
@@ -453,6 +491,9 @@ api.onBroadcast((msg) => {
       if (_cntTimer) { clearInterval(_cntTimer); _cntTimer = null; }
       document.getElementById('pop-tr-thanks').style.display = 'none';
       document.getElementById('pop-tr-bg').style.display = 'none';
+      document.getElementById('pop-tr1-ticker-wrap').style.display = 'none';
+      _hideQrIn('pop-tr1-qr-box-a', 'pop-tr1-qr-box-b');
+      _hideQrIn('pop-tr2-qr-box-a', 'pop-tr2-qr-box-b');
       const nuEl = document.getElementById('pop-tr-next-up');
       if (nuEl) nuEl.style.display = 'none';
       idleScreen.style.display = 'flex';
@@ -466,6 +507,7 @@ api.onBroadcast((msg) => {
       if (!msg.visible) { pbWrap.style.display = 'none'; break; }
       const bsc = msg.bannerScale || 1;
       pbTicker.style.fontSize   = (2.0 * bsc).toFixed(2) + 'rem';
+      pbTicker.style.color      = msg.bannerColor || '#fff';
       pbWrap.style.padding      = Math.round(14 * bsc) + 'px 0';
       pbWrap.style.display      = 'block';
       _setupScrollTicker(pbTicker, msg.text || '', msg.animSec || 18);

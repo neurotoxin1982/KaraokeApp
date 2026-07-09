@@ -95,7 +95,10 @@
         </div>
         <!-- QR + custom text — text pinned top; QR box position/size set by JS -->
         <div id="player-idle-qr" style="display:none;position:absolute;inset:0;z-index:1;">
-          <p id="player-idle-custom-text" style="position:absolute;top:0;left:0;right:0;margin:0;padding:28px 40px 40px;font-weight:700;color:#fff;text-shadow:0 2px 8px rgba(0,0,0,.8);text-align:center;text-wrap:balance;background:linear-gradient(180deg,rgba(8,6,14,.6),transparent);"></p>
+          <div id="idle-ticker-wrap" style="display:none;position:absolute;bottom:0;left:0;right:0;background:rgba(124,58,237,0.92);padding:20px 0;overflow:hidden">
+            <div class="ticker-track" id="idle-ticker" style="font-size:1.9rem;font-weight:600;color:#fff;white-space:nowrap;display:inline-block"></div>
+          </div>
+          <div id="player-idle-next-up" style="display:none;position:absolute;left:14px;top:14px;background:rgba(0,0,0,0.72);border-radius:14px;padding:14px 16px;backdrop-filter:blur(4px);min-width:200px;max-width:min(300px,38vw);z-index:5"></div>
           <div id="player-idle-qr-box-a" style="position:absolute;display:flex;flex-direction:column;align-items:center;padding:6px;gap:6px;">
             <img id="player-idle-qr-img" src="" alt="QR" style="width:auto;border-radius:10px;image-rendering:pixelated">
             <p id="player-idle-qr-url" style="display:none;margin:0;font-size:.65rem;color:#6b6478;max-width:200px;word-break:break-all;text-align:center;"></p>
@@ -109,7 +112,20 @@
       <!-- Between-song transition screen -->
       <div id="transition-overlay" style="display:none;position:absolute;inset:0;z-index:55">
         <!-- Phase 1: Thank you -->
-        <div id="tr-p1" style="display:none;position:absolute;inset:0;background:#000;flex-direction:column;align-items:center;justify-content:center;overflow:hidden"></div>
+        <div id="tr-p1" style="display:none;position:absolute;inset:0;background:#000;flex-direction:column;align-items:center;justify-content:center;overflow:hidden">
+          <!-- display:contents so _getThanksHTML()'s content still centers via tr-p1's own
+               flex properties, without wiping out the banner/QR siblings below on re-render -->
+          <div id="tr-p1-thanks-inner" style="display:contents"></div>
+          <div id="tr1-ticker-wrap" style="display:none;position:absolute;bottom:0;left:0;right:0;background:rgba(124,58,237,0.92);padding:20px 0;overflow:hidden">
+            <div class="ticker-track" id="tr1-ticker" style="font-size:1.9rem;font-weight:600;color:#fff;white-space:nowrap;display:inline-block"></div>
+          </div>
+          <div id="tr1-qr-box-a" style="display:none;position:absolute;flex-direction:column;align-items:center;padding:6px;gap:6px">
+            <img id="tr1-qr-img" src="" alt="QR" style="width:auto;border-radius:10px;image-rendering:pixelated">
+          </div>
+          <div id="tr1-qr-box-b" style="display:none;position:absolute;flex-direction:column;align-items:center;padding:6px;gap:6px">
+            <img id="tr1-qr-img-b" src="" alt="QR" style="width:auto;border-radius:10px;image-rendering:pixelated">
+          </div>
+        </div>
         <!-- Phase 2: Venue background + banner -->
         <div id="tr-p2" style="display:none;position:absolute;inset:0;background:#000;flex-direction:column">
           <div style="flex:1;display:flex;align-items:stretch;justify-content:center;overflow:hidden;min-height:0;position:relative">
@@ -118,6 +134,12 @@
             <div id="tr-countdown" style="position:absolute;top:14px;right:14px;background:rgba(0,0,0,0.72);border-radius:14px;padding:10px 18px;text-align:center;backdrop-filter:blur(4px)">
               <div style="font-size:.5rem;color:#6b7280;letter-spacing:.08em;margin-bottom:3px">GET READY IN</div>
               <div id="tr-countdown-num" style="font-size:2.2rem;font-weight:700;color:#fff;font-variant-numeric:tabular-nums;line-height:1"></div>
+            </div>
+            <div id="tr2-qr-box-a" style="display:none;position:absolute;flex-direction:column;align-items:center;padding:6px;gap:6px;z-index:5">
+              <img id="tr2-qr-img" src="" alt="QR" style="width:auto;border-radius:10px;image-rendering:pixelated">
+            </div>
+            <div id="tr2-qr-box-b" style="display:none;position:absolute;flex-direction:column;align-items:center;padding:6px;gap:6px;z-index:5">
+              <img id="tr2-qr-img-b" src="" alt="QR" style="width:auto;border-radius:10px;image-rendering:pixelated">
             </div>
           </div>
           <div id="tr-ticker-wrap" style="background:rgba(124,58,237,0.92);padding:20px 0;overflow:hidden;flex-shrink:0">
@@ -461,98 +483,138 @@
             <img id="set-venue-preview" style="display:none;margin-top:8px;max-height:80px;border-radius:6px;object-fit:cover">
           </div>
 
+        </div>
+
+        <div class="card" style="display:flex;flex-direction:column;gap:14px">
+          <h4 style="font-size:.95rem;font-weight:600"><i class="fa-solid fa-table-cells" style="color:#a78bfa;margin-right:6px"></i>Screen Elements</h4>
+          <p style="font-size:.8rem;color:#6b7280;line-height:1.5;margin-top:-6px">Choose which elements show on each screen. Their look — banner color/speed/size, QR position/size, Up Next size — is shared across every screen and set further down.</p>
+
+          <div>
+            <div style="font-size:.75rem;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Between Songs</div>
+            <div style="display:flex;flex-wrap:wrap;gap:16px 24px">
+              <div style="display:flex;align-items:center;gap:8px">
+                <input type="checkbox" id="set-bs-show-banner" style="width:16px;height:16px;accent-color:#7c3aed;cursor:pointer"
+                  onchange="autoSave('betweensongs_show_banner', this.checked.toString())">
+                <label for="set-bs-show-banner" style="font-size:.85rem;color:#d1d5db;cursor:pointer">Running banner</label>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px">
+                <input type="checkbox" id="set-bs-show-qr" style="width:16px;height:16px;accent-color:#7c3aed;cursor:pointer"
+                  onchange="autoSave('betweensongs_show_qr', this.checked.toString())">
+                <label for="set-bs-show-qr" style="font-size:.85rem;color:#d1d5db;cursor:pointer">QR code</label>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px">
+                <input type="checkbox" id="set-show-next-up" style="width:16px;height:16px;accent-color:#7c3aed;cursor:pointer"
+                  onchange="autoSave('show_next_up', this.checked.toString())">
+                <label for="set-show-next-up" style="font-size:.85rem;color:#d1d5db;cursor:pointer">Up Next list</label>
+              </div>
+            </div>
+          </div>
+
           <div style="border-top:1px solid #374151;padding-top:12px">
-            <h4 style="font-size:.85rem;font-weight:600;color:#9ca3af;margin-bottom:10px">Idle Screen</h4>
-            <div style="display:flex;flex-direction:column;gap:10px">
-              <div style="display:flex;flex-direction:column;gap:5px">
-                <label style="font-size:.8rem;color:#9ca3af">Custom text</label>
-                <input type="text" id="set-idle-text" placeholder="e.g. Scan to request a song!"
-                  style="background:#111827;border:1.5px solid #374151;color:#f3f4f6;padding:7px 10px;border-radius:7px;font-size:.85rem"
-                  oninput="autoSave('idle_text', this.value, 600); _broadcastIdleConfig()">
+            <div style="font-size:.75rem;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Idle</div>
+            <div style="display:flex;flex-wrap:wrap;gap:16px 24px">
+              <div style="display:flex;align-items:center;gap:8px">
+                <input type="checkbox" id="set-idle-show-banner" style="width:16px;height:16px;accent-color:#7c3aed;cursor:pointer"
+                  onchange="autoSave('idle_show_banner', this.checked.toString()); _broadcastIdleConfig()">
+                <label for="set-idle-show-banner" style="font-size:.85rem;color:#d1d5db;cursor:pointer">Running banner</label>
               </div>
-              <div style="display:flex;align-items:center;gap:10px">
-                <input type="checkbox" id="set-idle-show-text" style="width:16px;height:16px;accent-color:#7c3aed;cursor:pointer"
-                  onchange="autoSave('idle_show_text', this.checked.toString()); _broadcastIdleConfig()">
-                <label for="set-idle-show-text" style="font-size:.85rem;color:#d1d5db;cursor:pointer;flex:1">Show custom text on idle screen</label>
-              </div>
-              <div style="display:flex;align-items:center;gap:10px">
+              <div style="display:flex;align-items:center;gap:8px">
                 <input type="checkbox" id="set-idle-show-qr" style="width:16px;height:16px;accent-color:#7c3aed;cursor:pointer"
                   onchange="autoSave('idle_show_qr', this.checked.toString()); _broadcastIdleConfig()">
-                <label for="set-idle-show-qr" style="font-size:.85rem;color:#d1d5db;cursor:pointer;flex:1">Show QR code on idle screen</label>
+                <label for="set-idle-show-qr" style="font-size:.85rem;color:#d1d5db;cursor:pointer">QR code</label>
               </div>
-              <div style="display:flex;align-items:center;gap:14px">
-                <label style="font-size:.8rem;color:#9ca3af;min-width:70px">QR position</label>
-                <div style="display:grid;grid-template-columns:repeat(3,26px);grid-template-rows:repeat(3,26px);gap:2px">
-                  <div></div>
-                  <button type="button" class="btn btn-gray btn-sm" style="padding:0;min-width:0" onclick="_nudgeQr(0,-1)"><i class="fa-solid fa-chevron-up" style="font-size:.7rem"></i></button>
-                  <div></div>
-                  <button type="button" class="btn btn-gray btn-sm" style="padding:0;min-width:0" onclick="_nudgeQr(-1,0)"><i class="fa-solid fa-chevron-left" style="font-size:.7rem"></i></button>
-                  <button type="button" class="btn btn-gray btn-sm" style="padding:0;min-width:0" title="Reset to center-bottom" onclick="_resetQrPosition()"><i class="fa-solid fa-crosshairs" style="font-size:.65rem"></i></button>
-                  <button type="button" class="btn btn-gray btn-sm" style="padding:0;min-width:0" onclick="_nudgeQr(1,0)"><i class="fa-solid fa-chevron-right" style="font-size:.7rem"></i></button>
-                  <div></div>
-                  <button type="button" class="btn btn-gray btn-sm" style="padding:0;min-width:0" onclick="_nudgeQr(0,1)"><i class="fa-solid fa-chevron-down" style="font-size:.7rem"></i></button>
-                  <div></div>
-                </div>
-                <span id="idle-qr-pos-val" style="font-size:.75rem;color:#6b7280;white-space:nowrap">50%, 85%</span>
-              </div>
-              <div style="display:flex;align-items:center;gap:10px">
-                <input type="checkbox" id="set-idle-qr-both" style="width:16px;height:16px;accent-color:#7c3aed;cursor:pointer"
-                  onchange="autoSave('idle_qr_both', this.checked.toString()); _broadcastIdleConfig()">
-                <label for="set-idle-qr-both" style="font-size:.85rem;color:#d1d5db;cursor:pointer;flex:1">Also show mirrored on the opposite side</label>
-              </div>
-              <div style="display:flex;align-items:center;gap:10px">
-                <label style="font-size:.85rem;color:#d1d5db;white-space:nowrap;width:70px">QR size</label>
-                <input type="range" id="set-idle-qr-size" min="1" max="5" step="1" value="3" style="flex:1;accent-color:#7c3aed"
-                  oninput="document.getElementById('idle-qr-size-val').textContent=['XS','S','M','L','XL'][this.value-1];autoSave('idle_qr_size',this.value,300);_broadcastIdleConfig()">
-                <span id="idle-qr-size-val" style="font-size:.8rem;color:#a78bfa;min-width:22px;text-align:center">M</span>
-              </div>
-              <div style="display:flex;align-items:center;gap:10px">
-                <label style="font-size:.8rem;color:#9ca3af;min-width:70px">Text color</label>
-                <input type="color" id="set-idle-text-color" value="#ffffff"
-                  style="width:36px;height:28px;padding:2px;background:none;border:1.5px solid #374151;border-radius:6px;cursor:pointer;flex-shrink:0"
-                  onchange="autoSave('idle_text_color', this.value); _broadcastIdleConfig()">
-              </div>
-              <div style="display:flex;align-items:center;gap:10px">
-                <label style="font-size:.8rem;color:#9ca3af;min-width:70px">Text size</label>
-                <input type="range" id="set-idle-text-size" min="0.5" max="6" step="0.25" value="1.8"
-                  style="flex:1;accent-color:#7c3aed"
-                  oninput="document.getElementById('idle-text-size-val').textContent=parseFloat(this.value).toFixed(2).replace(/\.?0+$/,'')+'rem'; autoSave('idle_text_size', this.value, 200); _broadcastIdleConfig()">
-                <span id="idle-text-size-val" style="font-size:.8rem;color:#9ca3af;min-width:38px;text-align:right">1.8rem</span>
+              <div style="display:flex;align-items:center;gap:8px">
+                <input type="checkbox" id="set-idle-show-next-up" style="width:16px;height:16px;accent-color:#7c3aed;cursor:pointer"
+                  onchange="autoSave('idle_show_next_up', this.checked.toString()); _broadcastIdleConfig()">
+                <label for="set-idle-show-next-up" style="font-size:.85rem;color:#d1d5db;cursor:pointer">Up Next list</label>
               </div>
             </div>
           </div>
 
           <div style="border-top:1px solid #374151;padding-top:12px">
-            <h4 style="font-size:.85rem;font-weight:600;color:#9ca3af;margin-bottom:10px">Banner</h4>
-            <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
-              <input type="checkbox" id="set-show-playback-banner" style="width:16px;height:16px;accent-color:#7c3aed;cursor:pointer"
-                onchange="autoSave('show_playback_banner', this.checked.toString())">
-              <label for="set-show-playback-banner" style="font-size:.85rem;color:#d1d5db;cursor:pointer">Show banner while songs are playing</label>
-            </div>
-            <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-              <label style="font-size:.85rem;color:#d1d5db;white-space:nowrap;width:80px">Speed</label>
-              <input type="range" id="set-banner-speed" min="1" max="10" step="1" value="4" style="flex:1"
-                oninput="document.getElementById('banner-speed-val').textContent=this.value;autoSave('banner_speed',this.value,300)">
-              <span id="banner-speed-val" style="font-size:.8rem;color:#a78bfa;min-width:20px;text-align:center">4</span>
-            </div>
-            <div style="display:flex;align-items:center;gap:10px">
-              <label style="font-size:.85rem;color:#d1d5db;white-space:nowrap;width:80px">Size</label>
-              <input type="range" id="set-banner-size" min="1" max="5" step="1" value="3" style="flex:1"
-                oninput="document.getElementById('banner-size-val').textContent=['XS','S','M','L','XL'][this.value-1];autoSave('banner_size',this.value,300)">
-              <span id="banner-size-val" style="font-size:.8rem;color:#a78bfa;min-width:22px;text-align:center">M</span>
+            <div style="font-size:.75rem;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Thank You Screen</div>
+            <div style="display:flex;flex-wrap:wrap;gap:16px 24px">
+              <div style="display:flex;align-items:center;gap:8px">
+                <input type="checkbox" id="set-thanks-show-banner" style="width:16px;height:16px;accent-color:#7c3aed;cursor:pointer"
+                  onchange="autoSave('thanks_show_banner', this.checked.toString())">
+                <label for="set-thanks-show-banner" style="font-size:.85rem;color:#d1d5db;cursor:pointer">Running banner</label>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px">
+                <input type="checkbox" id="set-thanks-show-qr" style="width:16px;height:16px;accent-color:#7c3aed;cursor:pointer"
+                  onchange="autoSave('thanks_show_qr', this.checked.toString())">
+                <label for="set-thanks-show-qr" style="font-size:.85rem;color:#d1d5db;cursor:pointer">QR code</label>
+              </div>
             </div>
           </div>
+        </div>
 
-          <div style="border-top:1px solid #374151;padding-top:12px">
-            <h4 style="font-size:.85rem;font-weight:600;color:#9ca3af;margin-bottom:10px">Next Up</h4>
-            <div style="display:flex;align-items:center;gap:10px">
-              <input type="checkbox" id="set-show-next-up" style="width:16px;height:16px;accent-color:#7c3aed;cursor:pointer"
-                onchange="autoSave('show_next_up', this.checked.toString())">
-              <label for="set-show-next-up" style="font-size:.85rem;color:#d1d5db;cursor:pointer;flex:1">Show "Next Up" singer list</label>
-              <input type="range" id="set-next-up-size" min="1" max="5" step="1" value="3" style="width:72px"
-                oninput="document.getElementById('next-up-size-val').textContent=['XS','S','M','L','XL'][this.value-1];autoSave('next_up_size',this.value,300)">
-              <span id="next-up-size-val" style="font-size:.8rem;color:#a78bfa;min-width:22px;text-align:center">M</span>
+        <div class="card" style="display:flex;flex-direction:column;gap:12px">
+          <h4 style="font-size:.95rem;font-weight:600"><i class="fa-solid fa-rectangle-ad" style="color:#a78bfa;margin-right:6px"></i>Banner Appearance</h4>
+          <p style="font-size:.8rem;color:#6b7280;line-height:1.5;margin-top:-6px">Applies everywhere the running banner is turned on above.</p>
+          <div style="display:flex;align-items:center;gap:10px">
+            <input type="checkbox" id="set-show-playback-banner" style="width:16px;height:16px;accent-color:#7c3aed;cursor:pointer"
+              onchange="autoSave('show_playback_banner', this.checked.toString())">
+            <label for="set-show-playback-banner" style="font-size:.85rem;color:#d1d5db;cursor:pointer">Also show while a song is playing</label>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <label style="font-size:.8rem;color:#9ca3af;min-width:70px">Color</label>
+            <input type="color" id="set-banner-color" value="#ffffff"
+              style="width:36px;height:28px;padding:2px;background:none;border:1.5px solid #374151;border-radius:6px;cursor:pointer;flex-shrink:0"
+              onchange="autoSave('banner_color', this.value)">
+          </div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <label style="font-size:.85rem;color:#d1d5db;white-space:nowrap;width:70px">Speed</label>
+            <input type="range" id="set-banner-speed" min="1" max="10" step="1" value="4" style="flex:1"
+              oninput="document.getElementById('banner-speed-val').textContent=this.value;autoSave('banner_speed',this.value,300)">
+            <span id="banner-speed-val" style="font-size:.8rem;color:#a78bfa;min-width:20px;text-align:center">4</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <label style="font-size:.85rem;color:#d1d5db;white-space:nowrap;width:70px">Size</label>
+            <input type="range" id="set-banner-size" min="1" max="5" step="1" value="3" style="flex:1"
+              oninput="document.getElementById('banner-size-val').textContent=['XS','S','M','L','XL'][this.value-1];autoSave('banner_size',this.value,300)">
+            <span id="banner-size-val" style="font-size:.8rem;color:#a78bfa;min-width:22px;text-align:center">M</span>
+          </div>
+        </div>
+
+        <div class="card" style="display:flex;flex-direction:column;gap:12px">
+          <h4 style="font-size:.95rem;font-weight:600"><i class="fa-solid fa-qrcode" style="color:#a78bfa;margin-right:6px"></i>QR Code Appearance</h4>
+          <p style="font-size:.8rem;color:#6b7280;line-height:1.5;margin-top:-6px">Applies everywhere the QR code is turned on above.</p>
+          <div style="display:flex;align-items:center;gap:14px">
+            <label style="font-size:.8rem;color:#9ca3af;min-width:70px">Position</label>
+            <div style="display:grid;grid-template-columns:repeat(3,26px);grid-template-rows:repeat(3,26px);gap:2px">
+              <div></div>
+              <button type="button" class="btn btn-gray btn-sm" style="padding:0;min-width:0" onclick="_nudgeQr(0,-1)"><i class="fa-solid fa-chevron-up" style="font-size:.7rem"></i></button>
+              <div></div>
+              <button type="button" class="btn btn-gray btn-sm" style="padding:0;min-width:0" onclick="_nudgeQr(-1,0)"><i class="fa-solid fa-chevron-left" style="font-size:.7rem"></i></button>
+              <button type="button" class="btn btn-gray btn-sm" style="padding:0;min-width:0" title="Reset to center-bottom" onclick="_resetQrPosition()"><i class="fa-solid fa-crosshairs" style="font-size:.65rem"></i></button>
+              <button type="button" class="btn btn-gray btn-sm" style="padding:0;min-width:0" onclick="_nudgeQr(1,0)"><i class="fa-solid fa-chevron-right" style="font-size:.7rem"></i></button>
+              <div></div>
+              <button type="button" class="btn btn-gray btn-sm" style="padding:0;min-width:0" onclick="_nudgeQr(0,1)"><i class="fa-solid fa-chevron-down" style="font-size:.7rem"></i></button>
+              <div></div>
             </div>
+            <span id="idle-qr-pos-val" style="font-size:.75rem;color:#6b7280;white-space:nowrap">50%, 85%</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <input type="checkbox" id="set-idle-qr-both" style="width:16px;height:16px;accent-color:#7c3aed;cursor:pointer"
+              onchange="autoSave('idle_qr_both', this.checked.toString()); _broadcastIdleConfig()">
+            <label for="set-idle-qr-both" style="font-size:.85rem;color:#d1d5db;cursor:pointer;flex:1">Also show mirrored on the opposite side</label>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <label style="font-size:.85rem;color:#d1d5db;white-space:nowrap;width:70px">Size</label>
+            <input type="range" id="set-idle-qr-size" min="1" max="5" step="1" value="3" style="flex:1;accent-color:#7c3aed"
+              oninput="document.getElementById('idle-qr-size-val').textContent=['XS','S','M','L','XL'][this.value-1];autoSave('idle_qr_size',this.value,300);_broadcastIdleConfig()">
+            <span id="idle-qr-size-val" style="font-size:.8rem;color:#a78bfa;min-width:22px;text-align:center">M</span>
+          </div>
+        </div>
+
+        <div class="card" style="display:flex;flex-direction:column;gap:12px">
+          <h4 style="font-size:.95rem;font-weight:600"><i class="fa-solid fa-list" style="color:#a78bfa;margin-right:6px"></i>Up Next List Appearance</h4>
+          <p style="font-size:.8rem;color:#6b7280;line-height:1.5;margin-top:-6px">Applies everywhere the Up Next list is turned on above.</p>
+          <div style="display:flex;align-items:center;gap:10px">
+            <label style="font-size:.85rem;color:#d1d5db;white-space:nowrap;width:70px">Size</label>
+            <input type="range" id="set-next-up-size" min="1" max="5" step="1" style="flex:1"
+              oninput="document.getElementById('next-up-size-val').textContent=['XS','S','M','L','XL'][this.value-1];autoSave('next_up_size',this.value,300)">
+            <span id="next-up-size-val" style="font-size:.8rem;color:#a78bfa;min-width:22px;text-align:center">M</span>
           </div>
         </div>
       </div>
@@ -1887,21 +1949,25 @@ async function openSettings(){
   document.getElementById('set-thanks').checked               = settings.show_thanks          === 'true';
   document.getElementById('set-thanks-time').value            = settings.thanks_time          || '5';
   document.getElementById('set-bg-time').value                = settings.bg_time              || '10';
-  document.getElementById('set-show-playback-banner').checked = settings.show_playback_banner === 'true';
+
+  // Screen Elements matrix — new toggles default on (these features are meant
+  // to apply everywhere now); pre-existing toggles keep their original default.
+  document.getElementById('set-bs-show-banner').checked       = settings.betweensongs_show_banner !== 'false';
+  document.getElementById('set-bs-show-qr').checked           = settings.betweensongs_show_qr     !== 'false';
   document.getElementById('set-show-next-up').checked         = settings.show_next_up         === 'true';
-  document.getElementById('set-idle-text').value              = settings.idle_text             || '';
-  document.getElementById('set-idle-show-text').checked       = settings.idle_show_text !== 'false';
+  document.getElementById('set-idle-show-banner').checked     = settings.idle_show_banner  !== 'false';
   document.getElementById('set-idle-show-qr').checked         = settings.idle_show_qr !== 'false';
+  document.getElementById('set-idle-show-next-up').checked    = settings.idle_show_next_up !== 'false';
+  document.getElementById('set-thanks-show-banner').checked   = settings.thanks_show_banner !== 'false';
+  document.getElementById('set-thanks-show-qr').checked       = settings.thanks_show_qr     !== 'false';
+
+  document.getElementById('set-show-playback-banner').checked = settings.show_playback_banner === 'true';
+  document.getElementById('set-banner-color').value           = settings.banner_color || '#ffffff';
   _loadQrPosition(settings);
   document.getElementById('set-idle-qr-both').checked         = settings.idle_qr_both === 'true';
   const _qrSize = settings.idle_qr_size || '3';
   document.getElementById('set-idle-qr-size').value           = _qrSize;
   document.getElementById('idle-qr-size-val').textContent     = ['XS','S','M','L','XL'][_qrSize-1] || 'M';
-  const _idleColor = settings.idle_text_color || '#ffffff';
-  const _idleSize  = settings.idle_text_size  || '1.8';
-  document.getElementById('set-idle-text-color').value        = _idleColor;
-  document.getElementById('set-idle-text-size').value         = _idleSize;
-  document.getElementById('idle-text-size-val').textContent   = parseFloat(_idleSize).toFixed(2).replace(/\.?0+$/, '') + 'rem';
   _broadcastIdleConfig();
   document.getElementById('set-yt-cookies-file').value          = settings.youtube_cookies_file || '';
   document.getElementById('set-yt-cookies-browser').value      = settings.youtube_cookies_browser || '';
@@ -2492,14 +2558,11 @@ async function _updatePlaybackBanner() {
   const otherPending = pending.slice(1);
   const bannerText   = _buildBanner(nextEntry, otherPending, remainingSec + transitionSec, transitionSec);
 
-  const BANNER_SCALE = [0, 0.55, 0.75, 1.00, 1.35, 1.75];
-  const bannerScale  = BANNER_SCALE[parseInt(cfg.banner_size || '3')] ?? 1.00;
-  const speedLevel   = parseInt(cfg.banner_speed || '4') || 4;
-  const SPEED_MAP    = [0, 0.80, 0.60, 0.45, 0.32, 0.22, 0.15, 0.10, 0.07, 0.05, 0.03];
-  const speedMult    = SPEED_MAP[speedLevel] ?? 0.22;
-  const animSec      = Math.max(4, bannerText.length * speedMult * 2);
+  const { bannerScale, color: bannerColor } = _bannerAppearance(cfg);
+  const animSec = _bannerAnimSec(cfg, bannerText);
 
   ticker.style.fontSize = (1.2 * bannerScale).toFixed(2) + 'rem';
+  ticker.style.color    = bannerColor;
   wrap.style.padding    = Math.round(6 * bannerScale) + 'px 0';
   wrap.style.display    = 'block';
   _setupScrollTicker(ticker, bannerText, animSec);
@@ -2510,8 +2573,66 @@ async function _updatePlaybackBanner() {
     if (ov) ov.style.bottom = (wrap.offsetHeight + 8) + 'px';
   }, 0);
 
-  _pbBannerMsg = { type: 'playback_banner', visible: true, text: bannerText, animSec, bannerScale };
+  _pbBannerMsg = { type: 'playback_banner', visible: true, text: bannerText, animSec, bannerScale, bannerColor };
   broadcast(_pbBannerMsg);
+}
+
+// Used on any screen when nothing is actually queued (_buildBanner would just
+// return an empty string, which would show as a blank scrolling strip).
+const BANNER_FALLBACK_TEXT = 'No singer in the queue — scan the QR code to be next!';
+
+function _bannerTextOrFallback(nextEntry, pending, bgSec, transitionSec) {
+  if (!nextEntry && !pending.length) return BANNER_FALLBACK_TEXT;
+  return _buildBanner(nextEntry, pending, bgSec, transitionSec);
+}
+
+// Color/size are shared across every screen the banner appears on; speed
+// also factors in the specific text being shown, so it's computed separately.
+function _bannerAppearance(cfg) {
+  const BANNER_SCALE = [0, 0.55, 0.75, 1.00, 1.35, 1.75];
+  return {
+    bannerScale: BANNER_SCALE[parseInt(cfg.banner_size || '3')] ?? 1.00,
+    color: cfg.banner_color || '#ffffff',
+  };
+}
+function _bannerAnimSec(cfg, text) {
+  const speedLevel = parseInt(cfg.banner_speed || '4') || 4;
+  const SPEED_MAP   = [0, 0.80, 0.60, 0.45, 0.32, 0.22, 0.15, 0.10, 0.07, 0.05, 0.03];
+  const speedMult   = SPEED_MAP[speedLevel] ?? 0.22; // 1=langsam(0.80) … 10=sehr schnell(0.03)
+  return Math.max(4, text.length * speedMult * 2);
+}
+function _renderTicker(tickerId, text, animSec, bannerScale, color) {
+  const ticker = document.getElementById(tickerId);
+  if (!ticker) return;
+  ticker.style.fontSize = (1.9 * bannerScale).toFixed(2) + 'rem';
+  ticker.style.color    = color;
+  ticker.parentElement.style.padding = Math.round(20 * bannerScale) + 'px 0';
+  _setupScrollTicker(ticker, text, animSec);
+}
+
+// Shared QR rendering — same position/size settings, different element ids
+// per screen (tr1-*, tr2-*, player-idle-*).
+function _showQrIn(boxAId, imgAId, boxBId, imgBId, qrBoth, sizeStyle) {
+  const boxA = document.getElementById(boxAId), imgA = document.getElementById(imgAId);
+  const boxB = document.getElementById(boxBId), imgB = document.getElementById(imgBId);
+  if (!boxA || !boxB || !_relayQrDataUrl) { _hideQrIn(boxAId, boxBId); return; }
+  boxA.style.cssText = 'position:absolute;display:flex;flex-direction:column;align-items:center;padding:6px;gap:6px;' + _qrBoxStyleAt(_qrPos.x, _qrPos.y);
+  imgA.style.cssText = 'width:auto;border-radius:10px;image-rendering:pixelated;' + sizeStyle;
+  imgA.src = _relayQrDataUrl;
+  boxA.style.display = 'flex';
+  if (qrBoth) {
+    boxB.style.cssText = 'position:absolute;display:flex;flex-direction:column;align-items:center;padding:6px;gap:6px;' + _qrBoxStyleAt(100 - _qrPos.x, _qrPos.y);
+    imgB.style.cssText = 'width:auto;border-radius:10px;image-rendering:pixelated;' + sizeStyle;
+    imgB.src = _relayQrDataUrl;
+    boxB.style.display = 'flex';
+  } else {
+    boxB.style.display = 'none';
+  }
+}
+function _hideQrIn(boxAId, boxBId) {
+  const boxA = document.getElementById(boxAId), boxB = document.getElementById(boxBId);
+  if (boxA) boxA.style.display = 'none';
+  if (boxB) boxB.style.display = 'none';
 }
 
 function _buildBanner(nextEntry, pending, bgSec, transitionSec) {
@@ -2634,12 +2755,39 @@ async function doTransition(prevSinger, nextEntry) {
   p1.style.display = 'none';
   p2.style.display = 'none';
 
+  // Shared across both phases and the idle screen: who (if anyone) is up next,
+  // and the banner/QR appearance settings, which are the same everywhere.
+  const queue          = await api.getQueue();
+  const pending        = queue.filter(e => e.status === 'pending' && e.id !== nextEntry?.id);
+  const transitionSec  = (thanksMs + bgMs) / 1000;
+  const { bannerScale, color: bannerColor } = _bannerAppearance(cfg);
+  const qrBothCfg      = cfg.idle_qr_both === 'true';
+  const qrSizeLevel    = parseInt(cfg.idle_qr_size || '3');
+  const qrSizeStyleCfg = _qrSizeStyle(qrSizeLevel);
+  const haveQr         = !!_relayQrDataUrl;
+
   // ── Phase 1: Thank you ─────────────────────────────────────────────────
   if (cfg.show_thanks === 'true' && prevSinger && thanksMs > 0) {
     const thanksVariant = Math.floor(Math.random() * 10);
-    p1.innerHTML = _getThanksHTML(prevSinger, thanksVariant);
+    document.getElementById('tr-p1-thanks-inner').innerHTML = _getThanksHTML(prevSinger, thanksVariant);
     p1.style.display = 'flex';
-    _lastTransitionMsg = { type: 'tr_phase1', prevSinger, thanksMs, thanksVariant };
+
+    const showBanner1 = cfg.thanks_show_banner !== 'false';
+    const showQr1     = cfg.thanks_show_qr !== 'false' && haveQr;
+    const bannerText1 = _bannerTextOrFallback(nextEntry, pending, transitionSec, transitionSec);
+    const animSec1    = _bannerAnimSec(cfg, bannerText1);
+
+    document.getElementById('tr1-ticker-wrap').style.display = showBanner1 ? 'block' : 'none';
+    if (showBanner1) _renderTicker('tr1-ticker', bannerText1, animSec1, bannerScale, bannerColor);
+
+    if (showQr1) _showQrIn('tr1-qr-box-a', 'tr1-qr-img', 'tr1-qr-box-b', 'tr1-qr-img-b', qrBothCfg, qrSizeStyleCfg);
+    else _hideQrIn('tr1-qr-box-a', 'tr1-qr-box-b');
+
+    _lastTransitionMsg = {
+      type: 'tr_phase1', prevSinger, thanksMs, thanksVariant,
+      showBanner: showBanner1, bannerText: bannerText1, animSec: animSec1, bannerScale, bannerColor,
+      showQr: showQr1, qrDataUrl: _relayQrDataUrl, qrX: _qrPos.x, qrY: _qrPos.y, qrBoth: qrBothCfg, qrSize: qrSizeLevel,
+    };
     broadcast(_lastTransitionMsg);
     await new Promise(r => setTimeout(r, thanksMs));
     p1.style.display = 'none';
@@ -2659,20 +2807,16 @@ async function doTransition(prevSinger, nextEntry) {
       if (url) { trVenue.src = url; trVenue.style.display = 'block'; }
     });
 
-    const queue         = await api.getQueue();
-    const pending       = queue.filter(e => e.status === 'pending' && e.id !== nextEntry?.id);
-    const transitionSec = (thanksMs + bgMs) / 1000;
-    const bannerText    = _buildBanner(nextEntry, pending, bgMs / 1000, transitionSec);
-    const speedLevel    = parseInt(cfg.banner_speed || '4') || 4;
-    const SPEED_MAP     = [0, 0.80, 0.60, 0.45, 0.32, 0.22, 0.15, 0.10, 0.07, 0.05, 0.03];
-    const speedMult     = SPEED_MAP[speedLevel] ?? 0.22; // 1=langsam(0.80) … 10=sehr schnell(0.03)
-    const animSec       = Math.max(4, bannerText.length * speedMult * 2);
-    const BANNER_SCALE  = [0, 0.55, 0.75, 1.00, 1.35, 1.75];
-    const bannerScale   = BANNER_SCALE[parseInt(cfg.banner_size || '3')] ?? 1.00;
-    const ticker        = document.getElementById('tr-ticker');
-    ticker.style.fontSize = (1.9 * bannerScale).toFixed(2) + 'rem';
-    ticker.parentElement.style.padding = Math.round(20 * bannerScale) + 'px 0';
-    _setupScrollTicker(ticker, bannerText, animSec);
+    const showBanner2 = cfg.betweensongs_show_banner !== 'false';
+    const showQr2     = cfg.betweensongs_show_qr !== 'false' && haveQr;
+    const bannerText2 = _bannerTextOrFallback(nextEntry, pending, bgMs / 1000, transitionSec);
+    const animSec2    = _bannerAnimSec(cfg, bannerText2);
+
+    document.getElementById('tr-ticker-wrap').style.display = showBanner2 ? 'block' : 'none';
+    if (showBanner2) _renderTicker('tr-ticker', bannerText2, animSec2, bannerScale, bannerColor);
+
+    if (showQr2) _showQrIn('tr2-qr-box-a', 'tr2-qr-img', 'tr2-qr-box-b', 'tr2-qr-img-b', qrBothCfg, qrSizeStyleCfg);
+    else _hideQrIn('tr2-qr-box-a', 'tr2-qr-box-b');
 
     const showNextUp  = cfg.show_next_up === 'true';
     const nextUpList  = showNextUp ? _buildNextUp(nextEntry, pending, bgMs / 1000, transitionSec) : [];
@@ -2693,7 +2837,11 @@ async function doTransition(prevSinger, nextEntry) {
       cntEl.textContent = fmtSec(remaining);
     }, 1000);
 
-    _lastTransitionMsg = { type: 'tr_phase2', venuePath, bannerText, animSec, bgMs, nextSinger, nextUpList, nextUpScale, bannerScale };
+    _lastTransitionMsg = {
+      type: 'tr_phase2', venuePath, bgMs, nextSinger, nextUpList, nextUpScale,
+      showBanner: showBanner2, bannerText: bannerText2, animSec: animSec2, bannerScale, bannerColor,
+      showQr: showQr2, qrDataUrl: _relayQrDataUrl, qrX: _qrPos.x, qrY: _qrPos.y, qrBoth: qrBothCfg, qrSize: qrSizeLevel,
+    };
     _transitionPhaseEnd = phaseEnd;
     broadcast(_lastTransitionMsg);
     await new Promise(r => setTimeout(r, Math.max(0, phaseEnd - Date.now())));
@@ -2707,6 +2855,9 @@ async function doTransition(prevSinger, nextEntry) {
   _pbBannerKey = ''; // force rebuild after transition
   const nuEl = document.getElementById('tr-next-up');
   if (nuEl) nuEl.style.display = 'none';
+  document.getElementById('tr1-ticker-wrap').style.display = 'none';
+  _hideQrIn('tr1-qr-box-a', 'tr1-qr-box-b');
+  _hideQrIn('tr2-qr-box-a', 'tr2-qr-box-b');
   broadcast({ type: 'transition_end' });
 }
 
@@ -3160,66 +3311,73 @@ function _qrSizeStyle(sizeLevel) {
   return `height:clamp(${h1}px,${h2}vw,${h3}px);aspect-ratio:1/1;`;
 }
 
-function _applyIdleConfig() {
-  const text      = document.getElementById('set-idle-text')?.value || '';
-  const showText  = document.getElementById('set-idle-show-text')?.checked ?? true;
-  const showQr    = (document.getElementById('set-idle-show-qr')?.checked ?? true) && !!_relayQrDataUrl;
-  const textColor = document.getElementById('set-idle-text-color')?.value || '#ffffff';
-  const textSize  = parseFloat(document.getElementById('set-idle-text-size')?.value || '1.8');
-  const qrBoth    = document.getElementById('set-idle-qr-both')?.checked ?? false;
-  const qrSize    = parseInt(document.getElementById('set-idle-qr-size')?.value || '3');
+// Reads the shared banner appearance settings straight from their form fields
+// (not the DB) so idle updates instantly, same as the QR fields below already did.
+function _idleBannerCfg() {
+  return {
+    banner_size:  document.getElementById('set-banner-size')?.value,
+    banner_color: document.getElementById('set-banner-color')?.value,
+    banner_speed: document.getElementById('set-banner-speed')?.value,
+  };
+}
 
-  const defEl  = document.getElementById('player-idle-default');
-  const qrWrap = document.getElementById('player-idle-qr');
-  const custEl = document.getElementById('player-idle-custom-text');
-  const boxA   = document.getElementById('player-idle-qr-box-a');
-  const boxB   = document.getElementById('player-idle-qr-box-b');
+function _applyIdleConfig() {
+  const showBanner = document.getElementById('set-idle-show-banner')?.checked ?? true;
+  const showQr     = (document.getElementById('set-idle-show-qr')?.checked ?? true) && !!_relayQrDataUrl;
+  const qrBoth     = document.getElementById('set-idle-qr-both')?.checked ?? false;
+  const qrSize     = parseInt(document.getElementById('set-idle-qr-size')?.value || '3');
+
+  const defEl      = document.getElementById('player-idle-default');
+  const qrWrap     = document.getElementById('player-idle-qr');
+  const tickerWrap = document.getElementById('idle-ticker-wrap');
+  const nextUpEl   = document.getElementById('player-idle-next-up');
   if (!defEl || !qrWrap) return;
 
-  if (showQr || showText) {
-    custEl.style.display  = showText ? '' : 'none';
-    custEl.textContent    = text;
-    custEl.style.color    = textColor;
-    custEl.style.fontSize = textSize + 'rem';
-    if (showQr) {
-      const sizeStyle = _qrSizeStyle(qrSize);
-      boxA.style.cssText = 'position:absolute;display:flex;flex-direction:column;align-items:center;padding:6px;gap:6px;' + _qrBoxStyleAt(_qrPos.x, _qrPos.y);
-      document.getElementById('player-idle-qr-img').style.cssText = 'width:auto;border-radius:10px;image-rendering:pixelated;' + sizeStyle;
-      document.getElementById('player-idle-qr-img').src = _relayQrDataUrl;
-      document.getElementById('player-idle-qr-url').textContent = _relayPublicUrl;
-      boxA.style.display = 'flex';
-      if (qrBoth) {
-        boxB.style.cssText = 'position:absolute;display:flex;flex-direction:column;align-items:center;padding:6px;gap:6px;' + _qrBoxStyleAt(100 - _qrPos.x, _qrPos.y);
-        document.getElementById('player-idle-qr-img-b').style.cssText = 'width:auto;border-radius:10px;image-rendering:pixelated;' + sizeStyle;
-        document.getElementById('player-idle-qr-img-b').src = _relayQrDataUrl;
-        document.getElementById('player-idle-qr-url-b').textContent = _relayPublicUrl;
-        boxB.style.display = 'flex';
-      } else {
-        boxB.style.display = 'none';
-      }
+  // The idle screen only ever shows once the queue is confirmed empty (see
+  // advanceQueue/checkAndPlay), so there's never a real "up next" to list —
+  // the setting exists for consistency with the other screens, but this is
+  // always empty in practice.
+  if (nextUpEl) nextUpEl.style.display = 'none';
+
+  if (showQr || showBanner) {
+    if (showBanner) {
+      const bannerCfg = _idleBannerCfg();
+      const { bannerScale, color } = _bannerAppearance(bannerCfg);
+      _renderTicker('idle-ticker', BANNER_FALLBACK_TEXT, _bannerAnimSec(bannerCfg, BANNER_FALLBACK_TEXT), bannerScale, color);
+      tickerWrap.style.display = 'block';
     } else {
-      boxA.style.display = 'none';
-      boxB.style.display = 'none';
+      tickerWrap.style.display = 'none';
     }
+
+    if (showQr) _showQrIn('player-idle-qr-box-a', 'player-idle-qr-img', 'player-idle-qr-box-b', 'player-idle-qr-img-b', qrBoth, _qrSizeStyle(qrSize));
+    else _hideQrIn('player-idle-qr-box-a', 'player-idle-qr-box-b');
+
     defEl.style.display  = 'none';
     qrWrap.style.display = 'flex';
   } else {
     document.getElementById('player-idle-text').textContent = 'No song playing';
+    tickerWrap.style.display = 'none';
     qrWrap.style.display = 'none';
     defEl.style.display  = '';
   }
 }
 
 async function _broadcastIdleConfig() {
-  const text      = document.getElementById('set-idle-text')?.value || '';
-  const showText  = document.getElementById('set-idle-show-text')?.checked ?? true;
-  const showQr    = document.getElementById('set-idle-show-qr')?.checked ?? true;
-  const textColor = document.getElementById('set-idle-text-color')?.value || '#ffffff';
-  const textSize  = parseFloat(document.getElementById('set-idle-text-size')?.value || '1.8');
-  const qrBoth    = document.getElementById('set-idle-qr-both')?.checked ?? false;
-  const qrSize    = parseInt(document.getElementById('set-idle-qr-size')?.value || '3');
-  const qrUrl     = _relayQrDataUrl;
-  api.broadcast({ type: 'idle_config', text, showText, showQr: showQr && !!qrUrl, qrDataUrl: qrUrl, url: _relayPublicUrl, textColor, textSize, qrX: _qrPos.x, qrY: _qrPos.y, qrBoth, qrSize });
+  const showBanner = document.getElementById('set-idle-show-banner')?.checked ?? true;
+  const showQr     = document.getElementById('set-idle-show-qr')?.checked ?? true;
+  const qrBoth     = document.getElementById('set-idle-qr-both')?.checked ?? false;
+  const qrSize     = parseInt(document.getElementById('set-idle-qr-size')?.value || '3');
+  const qrUrl      = _relayQrDataUrl;
+
+  const bannerCfg = _idleBannerCfg();
+  const { bannerScale, color: bannerColor } = _bannerAppearance(bannerCfg);
+  const animSec = _bannerAnimSec(bannerCfg, BANNER_FALLBACK_TEXT);
+
+  api.broadcast({
+    type: 'idle_config',
+    showBanner, bannerText: BANNER_FALLBACK_TEXT, animSec, bannerScale, bannerColor,
+    showQr: showQr && !!qrUrl, qrDataUrl: qrUrl, url: _relayPublicUrl, qrX: _qrPos.x, qrY: _qrPos.y, qrBoth, qrSize,
+  });
   _applyIdleConfig();
 }
 
@@ -3365,8 +3523,7 @@ window.api.relayStatus().then(status => {
       _relayQrDataUrl = dataUrl;
       // Wait briefly for settings to be available
       api.getSettings().then(s => {
-        document.getElementById('set-idle-text').value     = s.idle_text || '';
-        document.getElementById('set-idle-show-text').checked = s.idle_show_text !== 'false';
+        document.getElementById('set-idle-show-banner').checked = s.idle_show_banner !== 'false';
         document.getElementById('set-idle-show-qr').checked = s.idle_show_qr !== 'false';
         _loadQrPosition(s);
         document.getElementById('set-idle-qr-both').checked = s.idle_qr_both === 'true';
