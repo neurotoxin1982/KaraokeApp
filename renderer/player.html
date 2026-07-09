@@ -12,6 +12,22 @@
       font-family: system-ui, -apple-system, sans-serif;
     }
 
+    /* Fixed virtual canvas: always exactly 1920x1080 internally, scaled and
+       centered as one unit (via JS transform) to fit whatever the real
+       window looks like. Letterbox/pillarbox bars are just #tv-viewport's
+       own black background showing through around the scaled stage. */
+    #tv-viewport { position: absolute; inset: 0; background: #000; overflow: hidden; }
+    #tv-stage {
+      position: absolute; top: 0; left: 0;
+      width: 1920px; height: 1080px;
+      transform-origin: top left;
+      overflow: hidden;
+    }
+    /* 5% overscan margin, applied locally within whichever screen needs it.
+       inset:5% resolves top/bottom against the parent's height and left/right
+       against its width, so this is a true 5% on every edge, no per-axis math. */
+    .safe-area { position: absolute; inset: 5%; }
+
     /* CDG canvas — pixel-perfect, fills screen with letterbox */
     #canvas-wrap {
       position: absolute; inset: 0;
@@ -36,7 +52,7 @@
     #info-bar {
       position: absolute; bottom: 0; left: 0; right: 0;
       background: linear-gradient(transparent, rgba(0,0,0,0.85));
-      padding: 24px 32px 20px;
+      padding: 24px 96px 20px; /* 96px = 5% of the 1920px stage */
       display: none;
       transition: opacity 0.5s;
     }
@@ -78,7 +94,9 @@
       padding: 6px; gap: 3px;
     }
     .idle-qr-img {
-      height: clamp(70px, 13vw, 110px); width: auto;
+      /* Actual size always comes from the inline style _showQrIn sets; this
+         is just a sane fallback, in fixed stage-px like everything else. */
+      height: 110px; width: auto;
       aspect-ratio: 1 / 1;
       border-radius: 10px; image-rendering: pixelated;
     }
@@ -89,17 +107,22 @@
 </head>
 <body>
 
+<div id="tv-viewport">
+<div id="tv-stage">
+
 <div id="canvas-wrap">
   <canvas id="cdg-canvas"></canvas>
 </div>
 <video id="video-el" autoplay muted></video>
 
 <!-- QR shown while a song is actively playing (Karaoke Screen) -->
-<div id="karaoke-qr-box-a" class="idle-qr-box" style="display:none;z-index:10">
-  <img id="karaoke-qr-img" class="idle-qr-img" src="" alt="QR Code">
-</div>
-<div id="karaoke-qr-box-b" class="idle-qr-box" style="display:none;z-index:10">
-  <img id="karaoke-qr-img-b" class="idle-qr-img" src="" alt="QR Code">
+<div class="safe-area">
+  <div id="karaoke-qr-box-a" class="idle-qr-box" style="display:none;z-index:10">
+    <img id="karaoke-qr-img" class="idle-qr-img" src="" alt="QR Code">
+  </div>
+  <div id="karaoke-qr-box-b" class="idle-qr-box" style="display:none;z-index:10">
+    <img id="karaoke-qr-img-b" class="idle-qr-img" src="" alt="QR Code">
+  </div>
 </div>
 
 <div id="info-bar">
@@ -117,18 +140,20 @@
   </div>
   <!-- Custom text + QR + banner — QR box position/size set by JS -->
   <div id="idle-qr-wrap" style="display:none;position:absolute;inset:0;z-index:1;">
-    <p id="idle-custom-text"></p>
     <div id="idle-ticker-wrap" style="display:none;position:absolute;bottom:0;left:0;right:0;background:rgba(124,58,237,0.92);padding:28px 0;overflow:hidden">
       <div id="idle-ticker" style="white-space:nowrap;display:inline-block;animation:pop-ticker 18s linear infinite;font-size:2.8rem;font-weight:700;color:#fff"></div>
     </div>
-    <div id="idle-next-up" style="display:none;position:absolute;left:14px;top:14px;background:rgba(0,0,0,0.72);border-radius:14px;padding:14px 16px;backdrop-filter:blur(4px);min-width:200px;max-width:min(300px,38vw);z-index:5"></div>
-    <div id="idle-qr-box-a" class="idle-qr-box">
-      <img id="idle-qr-img" class="idle-qr-img" src="" alt="QR Code">
-      <p id="idle-qr-sub" class="idle-qr-sub"></p>
-    </div>
-    <div id="idle-qr-box-b" class="idle-qr-box" style="display:none">
-      <img id="idle-qr-img-b" class="idle-qr-img" src="" alt="QR Code">
-      <p id="idle-qr-sub-b" class="idle-qr-sub"></p>
+    <div class="safe-area">
+      <p id="idle-custom-text"></p>
+      <div id="idle-next-up" style="display:none;position:absolute;left:0;top:0;background:rgba(0,0,0,0.72);border-radius:14px;padding:14px 16px;backdrop-filter:blur(4px);min-width:200px;max-width:300px;z-index:5"></div>
+      <div id="idle-qr-box-a" class="idle-qr-box">
+        <img id="idle-qr-img" class="idle-qr-img" src="" alt="QR Code">
+        <p id="idle-qr-sub" class="idle-qr-sub"></p>
+      </div>
+      <div id="idle-qr-box-b" class="idle-qr-box" style="display:none">
+        <img id="idle-qr-img-b" class="idle-qr-img" src="" alt="QR Code">
+        <p id="idle-qr-sub-b" class="idle-qr-sub"></p>
+      </div>
     </div>
   </div>
 </div>
@@ -138,12 +163,14 @@
 <div id="ad-screen" style="position:absolute;inset:0;display:none;background:#000;overflow:hidden;z-index:1">
   <img id="ad-picture" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none">
   <video id="ad-video" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none" muted loop></video>
-  <div id="ad-next-up" style="display:none;position:absolute;left:14px;top:14px;background:rgba(0,0,0,0.72);border-radius:14px;padding:14px 16px;backdrop-filter:blur(4px);min-width:200px;max-width:min(300px,38vw);z-index:5"></div>
-  <div id="ad-qr-box-a" class="idle-qr-box" style="display:none;z-index:5">
-    <img id="ad-qr-img" class="idle-qr-img" src="" alt="QR Code">
-  </div>
-  <div id="ad-qr-box-b" class="idle-qr-box" style="display:none;z-index:5">
-    <img id="ad-qr-img-b" class="idle-qr-img" src="" alt="QR Code">
+  <div class="safe-area">
+    <div id="ad-next-up" style="display:none;position:absolute;left:0;top:0;background:rgba(0,0,0,0.72);border-radius:14px;padding:14px 16px;backdrop-filter:blur(4px);min-width:200px;max-width:300px;z-index:5"></div>
+    <div id="ad-qr-box-a" class="idle-qr-box" style="display:none;z-index:5">
+      <img id="ad-qr-img" class="idle-qr-img" src="" alt="QR Code">
+    </div>
+    <div id="ad-qr-box-b" class="idle-qr-box" style="display:none;z-index:5">
+      <img id="ad-qr-img-b" class="idle-qr-img" src="" alt="QR Code">
+    </div>
   </div>
 </div>
 
@@ -172,27 +199,31 @@
   <div id="pop-tr1-ticker-wrap" style="display:none;position:absolute;bottom:0;left:0;right:0;background:rgba(124,58,237,0.92);padding:28px 0;overflow:hidden">
     <div id="pop-tr1-ticker" style="white-space:nowrap;display:inline-block;animation:pop-ticker 18s linear infinite;font-size:2.8rem;font-weight:700;color:#fff"></div>
   </div>
-  <div id="pop-tr1-qr-box-a" class="idle-qr-box" style="display:none">
-    <img id="pop-tr1-qr-img" class="idle-qr-img" src="" alt="QR Code">
-  </div>
-  <div id="pop-tr1-qr-box-b" class="idle-qr-box" style="display:none">
-    <img id="pop-tr1-qr-img-b" class="idle-qr-img" src="" alt="QR Code">
+  <div class="safe-area">
+    <div id="pop-tr1-qr-box-a" class="idle-qr-box" style="display:none">
+      <img id="pop-tr1-qr-img" class="idle-qr-img" src="" alt="QR Code">
+    </div>
+    <div id="pop-tr1-qr-box-b" class="idle-qr-box" style="display:none">
+      <img id="pop-tr1-qr-img-b" class="idle-qr-img" src="" alt="QR Code">
+    </div>
   </div>
 </div>
 <!-- Phase 2: Background + banner -->
 <div id="pop-tr-bg" style="display:none;position:absolute;inset:0;background:#000;z-index:60;flex-direction:column">
   <div style="flex:1;display:flex;align-items:stretch;justify-content:center;overflow:hidden;min-height:0;position:relative">
     <img id="pop-tr-venue" style="width:100%;height:100%;object-fit:contain;display:none">
-    <div id="pop-tr-next-up" style="display:none;position:absolute;left:14px;top:14px;background:rgba(0,0,0,0.72);border-radius:14px;padding:14px 16px;backdrop-filter:blur(4px);min-width:200px;max-width:min(300px,38vw);z-index:5"></div>
-    <div id="pop-tr-countdown" style="position:absolute;top:14px;right:14px;background:rgba(0,0,0,0.72);border-radius:14px;padding:10px 18px;text-align:center;backdrop-filter:blur(4px)">
-      <div style="font-size:.5rem;color:#6b7280;letter-spacing:.08em;margin-bottom:3px">GET READY IN</div>
-      <div id="pop-tr-countdown-num" style="font-size:2.2rem;font-weight:700;color:#fff;font-variant-numeric:tabular-nums;line-height:1"></div>
-    </div>
-    <div id="pop-tr2-qr-box-a" class="idle-qr-box" style="display:none;z-index:5">
-      <img id="pop-tr2-qr-img" class="idle-qr-img" src="" alt="QR Code">
-    </div>
-    <div id="pop-tr2-qr-box-b" class="idle-qr-box" style="display:none;z-index:5">
-      <img id="pop-tr2-qr-img-b" class="idle-qr-img" src="" alt="QR Code">
+    <div class="safe-area">
+      <div id="pop-tr-next-up" style="display:none;position:absolute;left:0;top:0;background:rgba(0,0,0,0.72);border-radius:14px;padding:14px 16px;backdrop-filter:blur(4px);min-width:200px;max-width:300px;z-index:5"></div>
+      <div id="pop-tr-countdown" style="position:absolute;top:0;right:0;background:rgba(0,0,0,0.72);border-radius:14px;padding:10px 18px;text-align:center;backdrop-filter:blur(4px)">
+        <div style="font-size:.5rem;color:#6b7280;letter-spacing:.08em;margin-bottom:3px">GET READY IN</div>
+        <div id="pop-tr-countdown-num" style="font-size:2.2rem;font-weight:700;color:#fff;font-variant-numeric:tabular-nums;line-height:1"></div>
+      </div>
+      <div id="pop-tr2-qr-box-a" class="idle-qr-box" style="display:none;z-index:5">
+        <img id="pop-tr2-qr-img" class="idle-qr-img" src="" alt="QR Code">
+      </div>
+      <div id="pop-tr2-qr-box-b" class="idle-qr-box" style="display:none;z-index:5">
+        <img id="pop-tr2-qr-img-b" class="idle-qr-img" src="" alt="QR Code">
+      </div>
     </div>
   </div>
   <div id="pop-tr-ticker-wrap" style="background:rgba(124,58,237,0.92);padding:28px 0;overflow:hidden;flex-shrink:0">
@@ -205,12 +236,33 @@
   <div id="playback-banner-ticker" style="white-space:nowrap;display:inline-block;animation:pop-ticker 18s linear infinite;font-size:2.0rem;font-weight:600;color:#fff"></div>
 </div>
 
+</div><!-- /#tv-stage -->
+</div><!-- /#tv-viewport -->
+
 <script src="js/cdg-player.js"></script>
 <script>
+const STAGE_W = 1920, STAGE_H = 1080;
+const tvViewport = document.getElementById('tv-viewport');
+const tvStage    = document.getElementById('tv-stage');
 const canvas    = document.getElementById('cdg-canvas');
 const videoEl   = document.getElementById('video-el');
 const infoBar   = document.getElementById('info-bar');
 const idleScreen= document.getElementById('idle-screen');
+
+// Scale+center the fixed 1920x1080 stage to fit #tv-viewport, whatever shape
+// it is -- letterboxed/pillarboxed as needed, never stretched or cropped.
+// Watching the viewport ELEMENT (not window.resize) is what makes this
+// identical for both the Electron popout and the main window's embedded preview.
+function fitStage() {
+  const vw = tvViewport.clientWidth, vh = tvViewport.clientHeight;
+  if (!vw || !vh) return;
+  const scale   = Math.min(vw / STAGE_W, vh / STAGE_H);
+  const offsetX = (vw - STAGE_W * scale) / 2;
+  const offsetY = (vh - STAGE_H * scale) / 2;
+  tvStage.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scale})`;
+}
+new ResizeObserver(fitStage).observe(tvViewport);
+fitStage();
 
 function _renderNextUp(list, el, scale = 1) {
   if (!el) return;
@@ -242,18 +294,18 @@ function _renderNextUp(list, el, scale = 1) {
 function _getThanksHTML(singer, v) {
   const esc = s => (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   const r = (a,b) => (a + Math.random()*(b-a)).toFixed(2);
-  const nm = singer ? `<div style="font-size:clamp(1.5rem,3.5vw,2.8rem);color:#a78bfa;font-weight:700;margin-top:4px;max-width:82%;text-overflow:ellipsis;white-space:nowrap;overflow:hidden">${esc(singer)}</div>` : '';
+  const nm = singer ? `<div style="font-size:2.8rem;color:#a78bfa;font-weight:700;margin-top:4px;max-width:82%;text-overflow:ellipsis;white-space:nowrap;overflow:hidden">${esc(singer)}</div>` : '';
   const C = [
-    { bg:'', icon:`<div style="font-size:clamp(5rem,12vw,9rem);animation:th-bounce .6s ease-in-out infinite">👏</div>`, title:`<div style="font-size:clamp(2rem,5vw,3.5rem);font-weight:800;color:#fff;animation:th-bounce .7s .1s ease-in-out infinite">Thank You!</div>`, ptcl:Array.from({length:8},(_,i)=>`<div style="position:absolute;left:50%;top:50%;font-size:2.5rem;--a:${i*45}deg;animation:th-radiate 1.2s ${(i*.08).toFixed(2)}s ease-out infinite">👏</div>`).join('') },
-    { bg:'', icon:`<div style="font-size:clamp(5rem,12vw,9rem);animation:th-bounce .75s ease-in-out infinite">🎉</div>`, title:`<div style="font-size:clamp(2rem,5vw,3.5rem);font-weight:800;color:#fff">Thank You!</div>`, ptcl:Array.from({length:28},(_,i)=>{const c=['#f55','#f90','#fd2','#4d4','#48f','#b4f','#f5c','#fff'][i%8];return`<div style="position:absolute;top:-4%;left:${r(1,99)}%;width:${r(8,15)}px;height:${r(8,15)}px;background:${c};border-radius:${i%3?'50%':'3px'};animation:th-fall ${r(1.5,2.8)}s ${r(0,1.8)}s linear infinite"></div>`}).join('') },
-    { bg:'', icon:`<div style="font-size:clamp(5rem,12vw,9rem);animation:th-spin 3s linear infinite">⭐</div>`, title:`<div style="font-size:clamp(2rem,5vw,3.5rem);font-weight:800;background:linear-gradient(90deg,#ffd700,#fff,#ffd700);background-size:200%;-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;animation:th-shimmer 2s linear infinite">Thank You!</div>`, ptcl:Array.from({length:12},(_,i)=>{const e=['⭐','🌟','✨','💫'][i%4];return`<div style="position:absolute;left:50%;top:50%;font-size:2rem;--a:${i*30}deg;animation:th-radiate 1.6s ${(i*.1).toFixed(1)}s ease-out infinite">${e}</div>`}).join('') },
-    { bg:`<div style="position:absolute;inset:0;background:radial-gradient(circle at 50% 100%,rgba(255,70,0,.4),transparent 65%);pointer-events:none"></div>`, icon:`<div style="font-size:clamp(5rem,12vw,9rem);animation:th-flame-big .4s ease-in-out infinite alternate">🔥</div>`, title:`<div style="font-size:clamp(2rem,5vw,3.5rem);font-weight:800;color:#ff6600;animation:th-glow-fire .9s ease-in-out infinite alternate">Thank You!</div>`, ptcl:Array.from({length:12},(_,i)=>`<div style="position:absolute;bottom:0;left:${(i*8.5+parseFloat(r(0,4))).toFixed(1)}%;font-size:${r(2,4)}rem;animation:th-flame ${r(.4,.8)}s ${r(0,.4)}s ease-in-out infinite alternate">🔥</div>`).join('') },
-    { bg:'', icon:`<div style="font-size:clamp(5rem,12vw,9rem);animation:th-bounce .8s ease-in-out infinite">🎵</div>`, title:`<div style="font-size:clamp(2rem,5vw,3.5rem);font-weight:800;color:#a78bfa">Thank You!</div>`, ptcl:Array.from({length:14},(_,i)=>{const e=['🎵','🎶','🎸','🎹','🎺','🎻','🎼'][i%7];return`<div style="position:absolute;left:${r(3,97)}%;bottom:${r(5,30)}%;font-size:${r(1.5,3)}rem;animation:th-float-up ${r(1.5,3)}s ${r(0,2)}s ease-out infinite">${e}</div>`}).join('') },
-    { bg:'', icon:`<div style="font-size:clamp(5rem,12vw,9rem);animation:th-bounce .6s ease-in-out infinite">🥳</div>`, title:`<div style="font-size:clamp(2rem,5vw,3.5rem);font-weight:800;color:#fff">Thank You!</div>`, ptcl:Array.from({length:12},(_,i)=>`<div style="position:absolute;bottom:-8%;left:${r(3,97)}%;font-size:${r(2.5,5)}rem;animation:th-float-up ${r(2,4)}s ${r(0,2.5)}s ease-in infinite">🎈</div>`).join('') },
-    { bg:`<div style="position:absolute;inset:0;background:radial-gradient(circle at center,rgba(255,215,0,.13),transparent 70%);pointer-events:none"></div>`, icon:`<div style="font-size:clamp(5rem,12vw,9rem);animation:th-bounce 1.1s ease-in-out infinite;position:relative;z-index:2">👑</div>`, title:`<div style="font-size:clamp(2rem,5vw,3.5rem);font-weight:800;background:linear-gradient(90deg,#ffd700,#fff8dc,#ffd700);background-size:200%;-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;animation:th-shimmer 2s linear infinite">Thank You!</div>`, ptcl:Array.from({length:10},(_,i)=>`<div style="position:absolute;left:50%;top:45%;font-size:1.8rem;transform:translate(-50%,-50%) rotate(${i*36}deg) translateY(-${r(80,140)}px);animation:th-pulse ${r(.8,1.2)}s ${(i*.1).toFixed(1)}s ease-in-out infinite">✨</div>`).join('') },
-    { bg:`<div style="position:absolute;inset:0;background:radial-gradient(circle at center,rgba(190,0,80,.25),transparent);pointer-events:none"></div>`, icon:`<div style="font-size:clamp(5rem,12vw,9rem);animation:th-pulse .6s ease-in-out infinite">❤️</div>`, title:`<div style="font-size:clamp(2rem,5vw,3.5rem);font-weight:800;color:#ff6899">Thank You!</div>`, ptcl:Array.from({length:16},(_,i)=>{const e=['❤️','💜','💙','💚','💛','🧡','🩷','🤍'][i%8];return`<div style="position:absolute;top:-8%;left:${r(1,99)}%;font-size:${r(1.5,3)}rem;animation:th-fall ${r(1.8,3.5)}s ${r(0,2.5)}s ease-in infinite">${e}</div>`}).join('') },
-    { bg:`<div style="position:absolute;inset:0;background:radial-gradient(circle at center,rgba(0,20,80,.7),#000 80%);pointer-events:none"></div>`, icon:`<div style="font-size:clamp(5rem,12vw,9rem);animation:th-rocket 1.5s ease-in-out infinite">🚀</div>`, title:`<div style="font-size:clamp(2rem,5vw,3.5rem);font-weight:800;color:#88ccff;text-shadow:0 0 20px #4488ff">Thank You!</div>`, ptcl:Array.from({length:35},(_,i)=>`<div style="position:absolute;left:${r(0,100)}%;top:${r(0,100)}%;width:${r(2,4)}px;height:${r(2,4)}px;background:#fff;border-radius:50%;animation:th-twinkle ${r(1,3)}s ${r(0,2)}s ease-in-out infinite"></div>`).join('') },
-    { bg:`<div style="position:absolute;inset:0;background:radial-gradient(circle at center,rgba(50,0,100,.85),#000 80%);pointer-events:none"></div>`, icon:`<div style="font-size:clamp(5rem,12vw,9rem);animation:th-spin 4s linear infinite">💿</div>`, title:`<div style="font-size:clamp(2rem,5vw,3.5rem);font-weight:800;animation:th-rainbow 1.5s linear infinite">Thank You!</div>`, ptcl:Array.from({length:6},(_,i)=>{const c=['#f04','#f80','#fd0','#0f8','#08f','#c0f'][i];return`<div style="position:absolute;left:50%;top:50%;width:3px;height:48%;transform-origin:0 0;transform:rotate(${i*60}deg);background:linear-gradient(${c},transparent);animation:th-spin 4s ${(i*.6).toFixed(1)}s linear infinite;opacity:.55"></div>`}).join('') },
+    { bg:'', icon:`<div style="font-size:9rem;animation:th-bounce .6s ease-in-out infinite">👏</div>`, title:`<div style="font-size:3.5rem;font-weight:800;color:#fff;animation:th-bounce .7s .1s ease-in-out infinite">Thank You!</div>`, ptcl:Array.from({length:8},(_,i)=>`<div style="position:absolute;left:50%;top:50%;font-size:2.5rem;--a:${i*45}deg;animation:th-radiate 1.2s ${(i*.08).toFixed(2)}s ease-out infinite">👏</div>`).join('') },
+    { bg:'', icon:`<div style="font-size:9rem;animation:th-bounce .75s ease-in-out infinite">🎉</div>`, title:`<div style="font-size:3.5rem;font-weight:800;color:#fff">Thank You!</div>`, ptcl:Array.from({length:28},(_,i)=>{const c=['#f55','#f90','#fd2','#4d4','#48f','#b4f','#f5c','#fff'][i%8];return`<div style="position:absolute;top:-4%;left:${r(1,99)}%;width:${r(8,15)}px;height:${r(8,15)}px;background:${c};border-radius:${i%3?'50%':'3px'};animation:th-fall ${r(1.5,2.8)}s ${r(0,1.8)}s linear infinite"></div>`}).join('') },
+    { bg:'', icon:`<div style="font-size:9rem;animation:th-spin 3s linear infinite">⭐</div>`, title:`<div style="font-size:3.5rem;font-weight:800;background:linear-gradient(90deg,#ffd700,#fff,#ffd700);background-size:200%;-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;animation:th-shimmer 2s linear infinite">Thank You!</div>`, ptcl:Array.from({length:12},(_,i)=>{const e=['⭐','🌟','✨','💫'][i%4];return`<div style="position:absolute;left:50%;top:50%;font-size:2rem;--a:${i*30}deg;animation:th-radiate 1.6s ${(i*.1).toFixed(1)}s ease-out infinite">${e}</div>`}).join('') },
+    { bg:`<div style="position:absolute;inset:0;background:radial-gradient(circle at 50% 100%,rgba(255,70,0,.4),transparent 65%);pointer-events:none"></div>`, icon:`<div style="font-size:9rem;animation:th-flame-big .4s ease-in-out infinite alternate">🔥</div>`, title:`<div style="font-size:3.5rem;font-weight:800;color:#ff6600;animation:th-glow-fire .9s ease-in-out infinite alternate">Thank You!</div>`, ptcl:Array.from({length:12},(_,i)=>`<div style="position:absolute;bottom:0;left:${(i*8.5+parseFloat(r(0,4))).toFixed(1)}%;font-size:${r(2,4)}rem;animation:th-flame ${r(.4,.8)}s ${r(0,.4)}s ease-in-out infinite alternate">🔥</div>`).join('') },
+    { bg:'', icon:`<div style="font-size:9rem;animation:th-bounce .8s ease-in-out infinite">🎵</div>`, title:`<div style="font-size:3.5rem;font-weight:800;color:#a78bfa">Thank You!</div>`, ptcl:Array.from({length:14},(_,i)=>{const e=['🎵','🎶','🎸','🎹','🎺','🎻','🎼'][i%7];return`<div style="position:absolute;left:${r(3,97)}%;bottom:${r(5,30)}%;font-size:${r(1.5,3)}rem;animation:th-float-up ${r(1.5,3)}s ${r(0,2)}s ease-out infinite">${e}</div>`}).join('') },
+    { bg:'', icon:`<div style="font-size:9rem;animation:th-bounce .6s ease-in-out infinite">🥳</div>`, title:`<div style="font-size:3.5rem;font-weight:800;color:#fff">Thank You!</div>`, ptcl:Array.from({length:12},(_,i)=>`<div style="position:absolute;bottom:-8%;left:${r(3,97)}%;font-size:${r(2.5,5)}rem;animation:th-float-up ${r(2,4)}s ${r(0,2.5)}s ease-in infinite">🎈</div>`).join('') },
+    { bg:`<div style="position:absolute;inset:0;background:radial-gradient(circle at center,rgba(255,215,0,.13),transparent 70%);pointer-events:none"></div>`, icon:`<div style="font-size:9rem;animation:th-bounce 1.1s ease-in-out infinite;position:relative;z-index:2">👑</div>`, title:`<div style="font-size:3.5rem;font-weight:800;background:linear-gradient(90deg,#ffd700,#fff8dc,#ffd700);background-size:200%;-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;animation:th-shimmer 2s linear infinite">Thank You!</div>`, ptcl:Array.from({length:10},(_,i)=>`<div style="position:absolute;left:50%;top:45%;font-size:1.8rem;transform:translate(-50%,-50%) rotate(${i*36}deg) translateY(-${r(80,140)}px);animation:th-pulse ${r(.8,1.2)}s ${(i*.1).toFixed(1)}s ease-in-out infinite">✨</div>`).join('') },
+    { bg:`<div style="position:absolute;inset:0;background:radial-gradient(circle at center,rgba(190,0,80,.25),transparent);pointer-events:none"></div>`, icon:`<div style="font-size:9rem;animation:th-pulse .6s ease-in-out infinite">❤️</div>`, title:`<div style="font-size:3.5rem;font-weight:800;color:#ff6899">Thank You!</div>`, ptcl:Array.from({length:16},(_,i)=>{const e=['❤️','💜','💙','💚','💛','🧡','🩷','🤍'][i%8];return`<div style="position:absolute;top:-8%;left:${r(1,99)}%;font-size:${r(1.5,3)}rem;animation:th-fall ${r(1.8,3.5)}s ${r(0,2.5)}s ease-in infinite">${e}</div>`}).join('') },
+    { bg:`<div style="position:absolute;inset:0;background:radial-gradient(circle at center,rgba(0,20,80,.7),#000 80%);pointer-events:none"></div>`, icon:`<div style="font-size:9rem;animation:th-rocket 1.5s ease-in-out infinite">🚀</div>`, title:`<div style="font-size:3.5rem;font-weight:800;color:#88ccff;text-shadow:0 0 20px #4488ff">Thank You!</div>`, ptcl:Array.from({length:35},(_,i)=>`<div style="position:absolute;left:${r(0,100)}%;top:${r(0,100)}%;width:${r(2,4)}px;height:${r(2,4)}px;background:#fff;border-radius:50%;animation:th-twinkle ${r(1,3)}s ${r(0,2)}s ease-in-out infinite"></div>`).join('') },
+    { bg:`<div style="position:absolute;inset:0;background:radial-gradient(circle at center,rgba(50,0,100,.85),#000 80%);pointer-events:none"></div>`, icon:`<div style="font-size:9rem;animation:th-spin 4s linear infinite">💿</div>`, title:`<div style="font-size:3.5rem;font-weight:800;animation:th-rainbow 1.5s linear infinite">Thank You!</div>`, ptcl:Array.from({length:6},(_,i)=>{const c=['#f04','#f80','#fd0','#0f8','#08f','#c0f'][i];return`<div style="position:absolute;left:50%;top:50%;width:3px;height:48%;transform-origin:0 0;transform:rotate(${i*60}deg);background:linear-gradient(${c},transparent);animation:th-spin 4s ${(i*.6).toFixed(1)}s linear infinite;opacity:.55"></div>`}).join('') },
   ];
   const cfg = C[v % 10];
   return `${cfg.bg}<div style="position:absolute;inset:0;overflow:hidden;pointer-events:none">${cfg.ptcl}</div><div style="position:relative;z-index:2;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;padding:16px;width:100%">${cfg.icon}${cfg.title}${nm}</div>`;
@@ -263,8 +315,8 @@ function _setupScrollTicker(el, text, singleAnimSec) {
   const gap = '     ';
   el.textContent = text + gap;
   const singleW    = el.scrollWidth;
-  const containerW = el.parentElement ? el.parentElement.offsetWidth : window.innerWidth;
-  const effectiveW = containerW > 0 ? containerW : window.innerWidth;
+  const containerW = el.parentElement ? el.parentElement.offsetWidth : STAGE_W;
+  const effectiveW = containerW > 0 ? containerW : STAGE_W;
   const halfReps   = singleW > 0
     ? Math.min(20, Math.max(1, Math.ceil(effectiveW / singleW) + 1))
     : 4;
@@ -285,15 +337,15 @@ let _adPictureBlobUrl = null;
 let _adVideoPath      = null;
 let _adVideoBlobUrl   = null;
 
-// Fit canvas to window preserving 300:216 aspect ratio
+// Fit canvas to the fixed stage (not the window), preserving 300:216 aspect
+// ratio. The stage's own transform (see fitStage above) handles all
+// responsiveness uniformly, so this only ever needs to run once.
 function resizeCanvas() {
-  const W = window.innerWidth, H = window.innerHeight;
-  const scale = Math.min(W / 300, H / 216);
+  const scale = Math.min(STAGE_W / 300, STAGE_H / 216);
   canvas.style.width  = (300 * scale) + 'px';
   canvas.style.height = (216 * scale) + 'px';
 }
 resizeCanvas();
-window.addEventListener('resize', resizeCanvas);
 
 // Position function for CDG follower mode
 function getPos() {
@@ -319,9 +371,11 @@ function _hexToRgba(hex, opacityPct) {
   return `rgba(${r},${g},${b},${a})`;
 }
 function _qrSizeStyle(sizeLevel) {
+  // Fixed stage-px, not vw -- vw is measured against the real window,
+  // bypassing the stage's own scale transform entirely, so it would size
+  // inconsistently with everything else once the stage is scaled down/up.
   const scale = QR_SIZE_SCALE[sizeLevel] || 1;
-  const h1 = Math.round(70 * scale), h2 = (13 * scale).toFixed(1), h3 = Math.round(110 * scale);
-  return `height:clamp(${h1}px,${h2}vw,${h3}px);`;
+  return `height:${Math.round(90 * scale)}px;`;
 }
 
 // Shared QR rendering across idle / Thank You / Between Songs — same shape

@@ -8,6 +8,22 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { width: 100%; height: 100%; background: #000; overflow: hidden; font-family: system-ui, sans-serif; }
 
+    /* Fixed virtual canvas: always exactly 1920x1080 internally, scaled and
+       centered as one unit (via JS transform) to fit whatever the real
+       screen looks like. Letterbox/pillarbox bars are just #tv-viewport's
+       own black background showing through around the scaled stage. */
+    #tv-viewport { position: absolute; inset: 0; background: #000; overflow: hidden; }
+    #tv-stage {
+      position: absolute; top: 0; left: 0;
+      width: 1920px; height: 1080px;
+      transform-origin: top left;
+      overflow: hidden;
+    }
+    /* 5% overscan margin, applied locally within whichever screen needs it.
+       inset:5% resolves top/bottom against the parent's height and left/right
+       against its width, so this is a true 5% on every edge, no per-axis math. */
+    .safe-area { position: absolute; inset: 5%; }
+
     #canvas-wrap {
       position: absolute; inset: 0;
       display: flex; align-items: center; justify-content: center;
@@ -24,7 +40,7 @@
     #info-bar {
       position: absolute; bottom: 0; left: 0; right: 0;
       background: linear-gradient(transparent, rgba(0,0,0,0.85));
-      padding: 24px 32px 20px; display: none;
+      padding: 24px 96px 20px; display: none; /* 96px = 5% of the 1920px stage */
     }
     #song-title  { font-size: 2rem; font-weight: 700; color: #fff; line-height: 1.2; }
     #song-artist { font-size: 1.2rem; color: #a78bfa; margin-top: 4px; }
@@ -53,17 +69,21 @@
       animation: pop-ticker 18s linear infinite;
       font-size: 2.8rem; font-weight: 700; color: #fff;
     }
+    /* Positioned within a local .safe-area, so left:0/top:0 here already
+       means "5% inset from the real edge", not the true corner. */
     #idle-next-up, #ad-next-up {
-      display: none; position: absolute; left: 14px; top: 14px;
+      display: none; position: absolute; left: 0; top: 0;
       background: rgba(0,0,0,0.72); border-radius: 14px; padding: 14px 16px;
-      backdrop-filter: blur(4px); min-width: 200px; max-width: min(300px, 38vw); z-index: 5;
+      backdrop-filter: blur(4px); min-width: 200px; max-width: 300px; z-index: 5;
     }
     .idle-qr-box {
       position: absolute; display: flex; flex-direction: column; align-items: center;
       padding: 6px; gap: 3px;
     }
     .idle-qr-img {
-      height: clamp(70px, 13vw, 110px); width: auto; aspect-ratio: 1 / 1;
+      /* Actual size always comes from the inline style _showQrIn sets; this
+         is just a sane fallback, in fixed stage-px like everything else. */
+      height: 110px; width: auto; aspect-ratio: 1 / 1;
       border-radius: 10px; image-rendering: pixelated;
     }
 
@@ -111,7 +131,7 @@
     }
     #pop-tr-venue { width: 100%; height: 100%; object-fit: contain; display: none; }
     #pop-tr-countdown {
-      position: absolute; top: 14px; right: 14px;
+      position: absolute; top: 0; right: 0;
       background: rgba(0,0,0,0.72); border-radius: 14px; padding: 12px 20px;
       text-align: center; backdrop-filter: blur(4px); min-width: 140px;
     }
@@ -131,17 +151,22 @@
 </head>
 <body>
 
+<div id="tv-viewport">
+<div id="tv-stage">
+
 <div id="canvas-wrap">
   <canvas id="cdg-canvas"></canvas>
 </div>
 <video id="video-el" autoplay muted playsinline></video>
 
 <!-- QR shown while a song is actively playing (Karaoke Screen) -->
-<div id="karaoke-qr-box-a" class="idle-qr-box" style="display:none">
-  <img id="karaoke-qr-img" class="idle-qr-img" src="" alt="QR Code">
-</div>
-<div id="karaoke-qr-box-b" class="idle-qr-box" style="display:none">
-  <img id="karaoke-qr-img-b" class="idle-qr-img" src="" alt="QR Code">
+<div class="safe-area">
+  <div id="karaoke-qr-box-a" class="idle-qr-box" style="display:none">
+    <img id="karaoke-qr-img" class="idle-qr-img" src="" alt="QR Code">
+  </div>
+  <div id="karaoke-qr-box-b" class="idle-qr-box" style="display:none">
+    <img id="karaoke-qr-img-b" class="idle-qr-img" src="" alt="QR Code">
+  </div>
 </div>
 
 <!-- Banner shown while a song is playing -->
@@ -160,14 +185,16 @@
     <div class="logo">🎤</div>
     <p>Waiting for next song…</p>
   </div>
-  <p id="idle-custom-text"></p>
   <div id="idle-ticker-wrap"><div id="idle-ticker"></div></div>
-  <div id="idle-next-up"></div>
-  <div id="idle-qr-box-a" class="idle-qr-box" style="display:none">
-    <img id="idle-qr-img" class="idle-qr-img" src="" alt="QR Code">
-  </div>
-  <div id="idle-qr-box-b" class="idle-qr-box" style="display:none">
-    <img id="idle-qr-img-b" class="idle-qr-img" src="" alt="QR Code">
+  <div class="safe-area">
+    <p id="idle-custom-text"></p>
+    <div id="idle-next-up"></div>
+    <div id="idle-qr-box-a" class="idle-qr-box" style="display:none">
+      <img id="idle-qr-img" class="idle-qr-img" src="" alt="QR Code">
+    </div>
+    <div id="idle-qr-box-b" class="idle-qr-box" style="display:none">
+      <img id="idle-qr-img-b" class="idle-qr-img" src="" alt="QR Code">
+    </div>
   </div>
 </div>
 
@@ -175,12 +202,14 @@
 <div id="ad-screen">
   <img id="ad-picture" alt="">
   <video id="ad-video" muted loop></video>
-  <div id="ad-next-up"></div>
-  <div id="ad-qr-box-a" class="idle-qr-box" style="display:none">
-    <img id="ad-qr-img" class="idle-qr-img" src="" alt="QR Code">
-  </div>
-  <div id="ad-qr-box-b" class="idle-qr-box" style="display:none">
-    <img id="ad-qr-img-b" class="idle-qr-img" src="" alt="QR Code">
+  <div class="safe-area">
+    <div id="ad-next-up"></div>
+    <div id="ad-qr-box-a" class="idle-qr-box" style="display:none">
+      <img id="ad-qr-img" class="idle-qr-img" src="" alt="QR Code">
+    </div>
+    <div id="ad-qr-box-b" class="idle-qr-box" style="display:none">
+      <img id="ad-qr-img-b" class="idle-qr-img" src="" alt="QR Code">
+    </div>
   </div>
 </div>
 
@@ -195,11 +224,13 @@
   <div style="font-size:3.5rem;font-weight:700;color:#fff">Thank You!</div>
   <div id="pop-tr-singer" style="font-size:2.5rem;color:#a78bfa;margin-top:8px"></div>
   <div id="pop-tr1-ticker-wrap"><div id="pop-tr1-ticker"></div></div>
-  <div id="pop-tr1-qr-box-a" class="idle-qr-box" style="display:none">
-    <img id="pop-tr1-qr-img" class="idle-qr-img" src="" alt="QR Code">
-  </div>
-  <div id="pop-tr1-qr-box-b" class="idle-qr-box" style="display:none">
-    <img id="pop-tr1-qr-img-b" class="idle-qr-img" src="" alt="QR Code">
+  <div class="safe-area">
+    <div id="pop-tr1-qr-box-a" class="idle-qr-box" style="display:none">
+      <img id="pop-tr1-qr-img" class="idle-qr-img" src="" alt="QR Code">
+    </div>
+    <div id="pop-tr1-qr-box-b" class="idle-qr-box" style="display:none">
+      <img id="pop-tr1-qr-img-b" class="idle-qr-img" src="" alt="QR Code">
+    </div>
   </div>
 </div>
 
@@ -207,17 +238,19 @@
 <div id="pop-tr-bg">
   <div id="pop-tr-img-wrap">
     <img id="pop-tr-venue" alt="">
-    <div id="pop-tr-countdown">
-      <div id="pop-tr-countdown-label">NEXT SINGER</div>
-      <div id="pop-tr-next-singer-name"></div>
-      <div id="pop-tr-ready-label">GET READY IN</div>
-      <div id="pop-tr-countdown-num"></div>
-    </div>
-    <div id="pop-tr2-qr-box-a" class="idle-qr-box" style="display:none">
-      <img id="pop-tr2-qr-img" class="idle-qr-img" src="" alt="QR Code">
-    </div>
-    <div id="pop-tr2-qr-box-b" class="idle-qr-box" style="display:none">
-      <img id="pop-tr2-qr-img-b" class="idle-qr-img" src="" alt="QR Code">
+    <div class="safe-area">
+      <div id="pop-tr-countdown">
+        <div id="pop-tr-countdown-label">NEXT SINGER</div>
+        <div id="pop-tr-next-singer-name"></div>
+        <div id="pop-tr-ready-label">GET READY IN</div>
+        <div id="pop-tr-countdown-num"></div>
+      </div>
+      <div id="pop-tr2-qr-box-a" class="idle-qr-box" style="display:none">
+        <img id="pop-tr2-qr-img" class="idle-qr-img" src="" alt="QR Code">
+      </div>
+      <div id="pop-tr2-qr-box-b" class="idle-qr-box" style="display:none">
+        <img id="pop-tr2-qr-img-b" class="idle-qr-img" src="" alt="QR Code">
+      </div>
     </div>
   </div>
   <div id="pop-tr-ticker-wrap">
@@ -225,14 +258,35 @@
   </div>
 </div>
 
+</div><!-- /#tv-stage -->
+</div><!-- /#tv-viewport -->
+
 <script src="/js/cdg-player.js"></script>
 
 <script>
+const STAGE_W = 1920, STAGE_H = 1080;
+const tvViewport = document.getElementById('tv-viewport');
+const tvStage    = document.getElementById('tv-stage');
 const canvas     = document.getElementById('cdg-canvas');
 const videoEl    = document.getElementById('video-el');
 const infoBar    = document.getElementById('info-bar');
 const idleScreen = document.getElementById('idle-screen');
 const noSignal   = document.getElementById('no-signal');
+
+// Scale+center the fixed 1920x1080 stage to fit #tv-viewport, whatever shape
+// it is -- letterboxed/pillarboxed as needed, never stretched or cropped.
+// Watching the viewport ELEMENT (not window.resize) is what makes this
+// identical for both an embedded preview panel and a full-screen window.
+function fitStage() {
+  const vw = tvViewport.clientWidth, vh = tvViewport.clientHeight;
+  if (!vw || !vh) return;
+  const scale   = Math.min(vw / STAGE_W, vh / STAGE_H);
+  const offsetX = (vw - STAGE_W * scale) / 2;
+  const offsetY = (vh - STAGE_H * scale) / 2;
+  tvStage.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scale})`;
+}
+new ResizeObserver(fitStage).observe(tvViewport);
+fitStage();
 
 let cdgPlayer = null;
 let _position = 0, _elapsed = 0, _playing = false;
@@ -271,15 +325,15 @@ document.addEventListener('visibilitychange', () => {
 document.addEventListener('click', () => _requestWakeLock(), { once: true });
 _requestWakeLock();
 
-// CDG canvas sizing
+// CDG canvas sizing — fitted against the fixed stage size, not the window.
+// The stage's own transform (see fitStage above) handles all responsiveness
+// uniformly, so this only ever needs to run once.
 function resizeCanvas() {
-  const W = window.innerWidth, H = window.innerHeight;
-  const scale = Math.min(W / 300, H / 216);
+  const scale = Math.min(STAGE_W / 300, STAGE_H / 216);
   canvas.style.width  = (300 * scale) + 'px';
   canvas.style.height = (216 * scale) + 'px';
 }
 resizeCanvas();
-window.addEventListener('resize', resizeCanvas);
 
 function getPos() {
   if (!_playing) return _position;
@@ -305,9 +359,11 @@ function _qrBoxStyleAt(x, y) {
   return `left:${x}%;top:${y}%;transform:translate(-50%,-50%);`;
 }
 function _qrSizeStyle(sizeLevel) {
+  // Fixed stage-px, not vw -- vw is measured against the real window,
+  // bypassing the stage's own scale transform entirely, so it would size
+  // inconsistently with everything else once the stage is scaled down/up.
   const scale = QR_SIZE_SCALE[sizeLevel] || 1;
-  const h1 = Math.round(70 * scale), h2 = (13 * scale).toFixed(1), h3 = Math.round(110 * scale);
-  return `height:clamp(${h1}px,${h2}vw,${h3}px);`;
+  return `height:${Math.round(90 * scale)}px;`;
 }
 function _hexToRgba(hex, opacityPct) {
   const h = (hex || '#7c3aed').replace('#', '');
@@ -350,8 +406,8 @@ function _setupScrollTicker(el, text, singleAnimSec) {
   const gap = '     ';
   el.textContent = text + gap;
   const singleW    = el.scrollWidth;
-  const containerW = el.parentElement ? el.parentElement.offsetWidth : window.innerWidth;
-  const effectiveW = containerW > 0 ? containerW : window.innerWidth;
+  const containerW = el.parentElement ? el.parentElement.offsetWidth : STAGE_W;
+  const effectiveW = containerW > 0 ? containerW : STAGE_W;
   const halfReps   = singleW > 0
     ? Math.min(20, Math.max(1, Math.ceil(effectiveW / singleW) + 1))
     : 4;
