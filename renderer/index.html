@@ -13,8 +13,7 @@
     #player-area  { flex: 1; position: relative; display: flex; align-items: center; justify-content: center; overflow: hidden; background: #000; }
     /* KaraokeDisplay builds its own #kd-viewport/#kd-stage/screens inside this
        mount point -- it needs inset:0 so that chain reaches #player-area's
-       actual size. Kept as a sibling of #sync-hud (not passed #player-area
-       itself) so mounting doesn't wipe that debug overlay out. */
+       actual size. */
     #kd-mount { position: absolute; inset: 0; }
     /* Player fullscreen mode */
     #app.player-fs #queue-panel  { width: 0 !important; min-width: 0; overflow: hidden; border: none; }
@@ -75,7 +74,6 @@
   <!-- ══ RIGHT: Player ════════════════════════════════════════════════ -->
   <div id="player-panel" style="width:45%">
     <div id="player-area">
-      <div id="sync-hud" style="position:absolute;top:4px;left:4px;z-index:99;background:rgba(0,0,0,.75);color:#0f0;font:11px monospace;padding:4px 6px;border-radius:4px;pointer-events:none"></div>
       <div id="kd-mount"></div>
     </div>
 
@@ -422,6 +420,11 @@
                   onchange="autoSave('show_next_up', this.checked.toString())">
                 <label for="set-show-next-up" style="font-size:.85rem;color:#d1d5db;cursor:pointer">Up Next list</label>
               </div>
+              <div style="display:flex;align-items:center;gap:8px">
+                <input type="checkbox" id="set-bs-show-countdown" style="width:16px;height:16px;accent-color:#7c3aed;cursor:pointer"
+                  onchange="autoSave('betweensongs_show_countdown', this.checked.toString())">
+                <label for="set-bs-show-countdown" style="font-size:.85rem;color:#d1d5db;cursor:pointer">Countdown timer</label>
+              </div>
             </div>
           </div>
 
@@ -538,9 +541,9 @@
             <input type="color" id="set-banner-bg-color" value="#7c3aed"
               style="width:36px;height:28px;padding:2px;background:none;border:1.5px solid #374151;border-radius:6px;cursor:pointer;flex-shrink:0"
               onchange="_updateBannerBg()">
-            <input type="range" id="set-banner-bg-opacity" min="0" max="100" step="1" value="92" style="flex:1"
+            <input type="range" id="set-banner-bg-opacity" min="0" max="100" step="1" value="0" style="flex:1"
               oninput="document.getElementById('banner-bg-opacity-val').textContent=this.value+'%'; _updateBannerBg()">
-            <span id="banner-bg-opacity-val" style="font-size:.8rem;color:#a78bfa;min-width:38px;text-align:right">92%</span>
+            <span id="banner-bg-opacity-val" style="font-size:.8rem;color:#a78bfa;min-width:38px;text-align:right">0%</span>
           </div>
           <div style="display:flex;align-items:center;gap:10px">
             <label style="font-size:.85rem;color:#d1d5db;white-space:nowrap;width:70px">Speed</label>
@@ -581,8 +584,8 @@
           </div>
           <div style="display:flex;align-items:center;gap:10px">
             <label style="font-size:.85rem;color:#d1d5db;white-space:nowrap;width:70px">Size</label>
-            <input type="range" id="set-idle-qr-size" min="1" max="5" step="1" value="3" style="flex:1;accent-color:#7c3aed"
-              oninput="document.getElementById('idle-qr-size-val').textContent=['XS','S','M','L','XL'][this.value-1];autoSave('idle_qr_size',this.value,300);_broadcastIdleConfig();_refreshAdScreenIfShowing()">
+            <input type="range" id="set-idle-qr-size" min="1" max="6" step="1" value="3" style="flex:1;accent-color:#7c3aed"
+              oninput="document.getElementById('idle-qr-size-val').textContent=['XS','S','M','L','XL','XXL'][this.value-1];autoSave('idle_qr_size',this.value,300);_broadcastIdleConfig();_refreshAdScreenIfShowing()">
             <span id="idle-qr-size-val" style="font-size:.8rem;color:#a78bfa;min-width:22px;text-align:center">M</span>
           </div>
         </div>
@@ -596,6 +599,30 @@
               oninput="document.getElementById('next-up-size-val').textContent=['XS','S','M','L','XL'][this.value-1];autoSave('next_up_size',this.value,300)">
             <span id="next-up-size-val" style="font-size:.8rem;color:#a78bfa;min-width:22px;text-align:center">M</span>
           </div>
+        </div>
+
+        <div class="card" style="display:flex;flex-direction:column;gap:12px">
+          <h4 style="font-size:.95rem;font-weight:600"><i class="fa-solid fa-stopwatch" style="color:#a78bfa;margin-right:6px"></i>Countdown Timer Appearance</h4>
+          <p style="font-size:.8rem;color:#6b7280;line-height:1.5;margin-top:-6px">The "get ready" number on the Between Songs screen -- a plain transparent number, sized independently from the Up Next list above.</p>
+          <div style="display:flex;align-items:center;gap:10px">
+            <label style="font-size:.85rem;color:#d1d5db;white-space:nowrap;width:70px">Size</label>
+            <input type="range" id="set-countdown-size" min="1" max="5" step="1" style="flex:1"
+              oninput="document.getElementById('countdown-size-val').textContent=['XS','S','M','L','XL'][this.value-1];autoSave('countdown_size',this.value,300)">
+            <span id="countdown-size-val" style="font-size:.8rem;color:#a78bfa;min-width:22px;text-align:center">M</span>
+          </div>
+        </div>
+
+        <div class="card" style="display:flex;flex-direction:column;gap:12px">
+          <h4 style="font-size:.95rem;font-weight:600"><i class="fa-solid fa-comment" style="color:#a78bfa;margin-right:6px"></i>Empty Queue Message</h4>
+          <p style="font-size:.8rem;color:#6b7280;line-height:1.5;margin-top:-6px">Off by default — no running banner shows anywhere when nobody's queued. Turn this on to show your own message instead.</p>
+          <div style="display:flex;align-items:center;gap:8px">
+            <input type="checkbox" id="set-empty-queue-msg-enabled" style="width:16px;height:16px;accent-color:#7c3aed;cursor:pointer"
+              onchange="autoSave('empty_queue_msg_enabled', this.checked.toString()); _refreshEmptyQueueMessage()">
+            <label for="set-empty-queue-msg-enabled" style="font-size:.85rem;color:#d1d5db;cursor:pointer">Show a message when the queue is empty</label>
+          </div>
+          <input type="text" id="set-empty-queue-msg-text" placeholder="e.g. No singer in the queue — scan the QR code to be next!"
+            style="width:100%;padding:8px 10px;font-size:.85rem"
+            oninput="autoSave('empty_queue_msg_text', this.value, 300); _refreshEmptyQueueMessage()">
         </div>
 
         <div class="card" style="display:flex;flex-direction:column;gap:12px">
@@ -1116,7 +1143,6 @@ let currentSong = null, cdgPlayer = null, isPlaying = false;
 let _transitioning = false; // blocks checkAndPlay during the gap
 let _lastTransitionMsg = null, _transitionPhaseEnd = 0;
 let _venuePath = '';
-let _infoTimer = null; // 8s auto-hide for the "now playing" info, same as player.html/web-player.html
 
 function _applyIdleBg(path) {
   if (!path) { _state.idle.bgImageSrc = null; _apply(); return; }
@@ -1212,6 +1238,10 @@ api.onBroadcast((msg) => {
       } else if (_videoEl && currentSong.file_path) {
         broadcast({ type: 'video_path', path: currentSong.file_path, mime: MIME_MAP[currentSong.file_format] || 'video/mp4', pos: getPos() });
       }
+      // Otherwise a popout that (re)opens mid-song has no QR size/visibility
+      // until the next 3s poll broadcasts one -- same gap as at song start,
+      // see playCdg/playYoutube/playVideo.
+      _updateKaraokeQr();
     }
     broadcast({ type: 'venue_path', path: _venuePath });
     if (_pbBannerMsg) broadcast(_pbBannerMsg);
@@ -1448,7 +1478,6 @@ function showIdle() {
   // Spotify should keep playing (unmuted) when idle; only local audio needs stopping
   if (_bgSource === 'spotify') _bgStart();
   else _bgStop();
-  clearTimeout(_infoTimer);
   _state.screen = 'idle';
   document.getElementById('ctrl-title').textContent = '—';
   document.getElementById('ctrl-meta').textContent  = '';
@@ -1513,7 +1542,6 @@ function showAdScreen() {
   stopCurrent(); currentSong = null;
   if (_bgSource === 'spotify') _bgStart();
   else _bgStop();
-  clearTimeout(_infoTimer);
   _state.screen = 'ad';
   document.getElementById('ctrl-title').textContent = '—';
   document.getElementById('ctrl-meta').textContent  = '';
@@ -1609,16 +1637,6 @@ function setInfo(song) {
   document.getElementById('ctrl-meta').textContent  = song.singer_name ? `Singer: ${song.singer_name}` : '';
 }
 
-// Shown briefly on the karaoke screen itself (same 8s auto-hide as
-// player.html/web-player.html -- unified so the preview and the real screens
-// look identical instead of the preview leaving it up for the whole song).
-function _showKaraokeSongInfo(song) {
-  _state.karaoke.songInfo = { title: song.title, artist: song.artist, singer: song.singer_name };
-  _apply();
-  clearTimeout(_infoTimer);
-  _infoTimer = setTimeout(() => { _state.karaoke.songInfo = null; _apply(); }, 8000);
-}
-
 function stopCurrent() {
   _cancelVidWatch();
   if (_audioSrc) { try { _audioSrc.onended=null; _audioSrc.stop(0); } catch(_){} _audioSrc=null; }
@@ -1682,11 +1700,17 @@ async function playCdg(song) {
   cdgPlayer.loadFromBuffer(cdgBuf);
   cdgPlayer.start(audioCtx, _startAt);
 
-  _showKaraokeSongInfo(song);
   broadcast({ type: 'song_info', title: song.title, artist: song.artist, singer_name: song.singer_name });
   broadcast({ type: 'cdg_path', path: song.file_path, pos: 0 });
 
   isPlaying = true; updateIcon(); startProgress();
+  // Otherwise the karaoke QR only picks up size/visibility on the next 3s
+  // poll (_updateKaraokeQr, in the main setInterval) -- until then it renders
+  // at whatever _state.appearance.qr was left over (often the CSS default
+  // size, not the configured one), which shows up as the QR looking small
+  // for a couple of seconds right after a song starts before "growing" to
+  // its real size.
+  _updateKaraokeQr();
 }
 
 async function playYoutube(song) {
@@ -1710,6 +1734,7 @@ async function playYoutube(song) {
 
   video.src = streamUrl;
   video.volume = vol();
+  video.muted  = false; // shared <video> template defaults to muted -- this is the one screen that should ever be heard
   video.onended = () => advanceQueue();
   video.ontimeupdate = updateProgress;
   api.getSettings().then(cfg => {
@@ -1732,10 +1757,10 @@ async function playYoutube(song) {
   _songDur = video.duration || 0;
   isPlaying = true; updateIcon(); startProgress();
   setInfo(song);
-  _showKaraokeSongInfo(song);
   _ytStreamUrl = streamUrl;
   broadcast({ type: 'song_info', title: song.title, artist: song.artist, singer_name: song.singer_name });
   broadcast({ type: 'video_url', url: streamUrl, pos: 0 });
+  _updateKaraokeQr(); // see playCdg -- avoids a couple seconds at the wrong QR size
 }
 
 const MIME_MAP = {
@@ -1766,6 +1791,7 @@ async function playVideo(song) {
 
   video.src = _videoBlobUrl;
   video.volume = vol();
+  video.muted  = false; // shared <video> template defaults to muted -- this is the one screen that should ever be heard
   video.onended = () => advanceQueue();
   video.ontimeupdate = updateProgress;
   api.getSettings().then(cfg => {
@@ -1785,9 +1811,9 @@ async function playVideo(song) {
   }
   _songDur = video.duration || 0;
   isPlaying = true; updateIcon(); startProgress();
-  _showKaraokeSongInfo(song);
   broadcast({ type: 'song_info', title: song.title, artist: song.artist, singer_name: song.singer_name });
   broadcast({ type: 'video_path', path: song.file_path, mime: MIME_MAP[song.file_format] || 'video/mp4', pos: 0 });
+  _updateKaraokeQr(); // see playCdg -- avoids a couple seconds at the wrong QR size
 }
 
 async function advanceQueue() {
@@ -1872,9 +1898,6 @@ function updateProgress(){
   document.getElementById('time-cur').textContent=fmt(cur);
   document.getElementById('time-dur').textContent=fmt(dur);
   if(dur>0) document.getElementById('progress-slider').value=(cur/dur)*100;
-  const cdgPos=cdgPlayer?cdgPlayer._position():0;
-  document.getElementById('sync-hud').textContent=
-    `audio ${cur.toFixed(2)}s | cdg ${cdgPos.toFixed(2)}s | Δ ${(cdgPos-cur).toFixed(2)}s`;
 }
 function fmt(s){if(!s||isNaN(s))return'0:00';return`${Math.floor(s/60)}:${Math.floor(s%60).toString().padStart(2,'0')}`;}
 function updateIcon(){document.getElementById('play-icon').className=isPlaying?'fa-solid fa-pause':'fa-solid fa-play';}
@@ -2143,11 +2166,14 @@ async function openSettings(){
   document.getElementById('set-bs-show-banner').checked       = settings.betweensongs_show_banner !== 'false';
   document.getElementById('set-bs-show-qr').checked           = settings.betweensongs_show_qr     !== 'false';
   document.getElementById('set-show-next-up').checked         = settings.show_next_up         === 'true';
+  document.getElementById('set-bs-show-countdown').checked    = settings.betweensongs_show_countdown !== 'false';
   document.getElementById('set-idle-show-banner').checked     = settings.idle_show_banner  !== 'false';
   document.getElementById('set-idle-show-qr').checked         = settings.idle_show_qr !== 'false';
   document.getElementById('set-idle-show-next-up').checked    = settings.idle_show_next_up !== 'false';
   document.getElementById('set-thanks-show-banner').checked   = settings.thanks_show_banner !== 'false';
   document.getElementById('set-thanks-show-qr').checked       = settings.thanks_show_qr     !== 'false';
+  document.getElementById('set-empty-queue-msg-enabled').checked = settings.empty_queue_msg_enabled === 'true';
+  document.getElementById('set-empty-queue-msg-text').value      = settings.empty_queue_msg_text || '';
 
   document.getElementById('set-idle-text').value              = settings.idle_text             || '';
   document.getElementById('set-idle-show-text').checked       = settings.idle_show_text !== 'false';
@@ -2158,12 +2184,12 @@ async function openSettings(){
   document.getElementById('idle-text-size-val').textContent   = parseFloat(_idleSize).toFixed(2).replace(/\.?0+$/, '') + 'rem';
 
   document.getElementById('set-show-playback-banner').checked = settings.show_playback_banner === 'true';
-  document.getElementById('set-karaoke-show-qr').checked      = settings.karaoke_show_qr === 'true';
+  document.getElementById('set-karaoke-show-qr').checked      = settings.karaoke_show_qr !== 'false';
   document.getElementById('set-ad-show-qr').checked           = settings.ad_show_qr !== 'false';
   document.getElementById('set-ad-show-next-up').checked      = settings.ad_show_next_up !== 'false';
   document.getElementById('set-banner-color').value           = settings.banner_color || '#ffffff';
   document.getElementById('set-banner-bg-color').value        = settings.banner_bg_color || '#7c3aed';
-  const _bannerBgOpacity = settings.banner_bg_opacity ?? '92';
+  const _bannerBgOpacity = settings.banner_bg_opacity ?? '0';
   document.getElementById('set-banner-bg-opacity').value       = _bannerBgOpacity;
   document.getElementById('banner-bg-opacity-val').textContent = _bannerBgOpacity + '%';
   _applyBannerBg(settings.banner_bg_color || '#7c3aed', _bannerBgOpacity);
@@ -2171,7 +2197,7 @@ async function openSettings(){
   document.getElementById('set-idle-qr-both').checked         = settings.idle_qr_both === 'true';
   const _qrSize = settings.idle_qr_size || '3';
   document.getElementById('set-idle-qr-size').value           = _qrSize;
-  document.getElementById('idle-qr-size-val').textContent     = ['XS','S','M','L','XL'][_qrSize-1] || 'M';
+  document.getElementById('idle-qr-size-val').textContent     = ['XS','S','M','L','XL','XXL'][_qrSize-1] || 'M';
   _broadcastIdleConfig();
   document.getElementById('set-yt-cookies-file').value          = settings.youtube_cookies_file || '';
   document.getElementById('set-yt-cookies-browser').value      = settings.youtube_cookies_browser || '';
@@ -2187,6 +2213,9 @@ async function openSettings(){
   const nuSize = settings.next_up_size || '3';
   document.getElementById('set-next-up-size').value         = nuSize;
   document.getElementById('next-up-size-val').textContent   = ['XS','S','M','L','XL'][parseInt(nuSize)-1] || 'M';
+  const cdSize = settings.countdown_size || '3';
+  document.getElementById('set-countdown-size').value       = cdSize;
+  document.getElementById('countdown-size-val').textContent = ['XS','S','M','L','XL'][parseInt(cdSize)-1] || 'M';
   const spd = settings.banner_speed || '4';
   document.getElementById('set-banner-speed').value       = spd;
   document.getElementById('banner-speed-val').textContent = spd;
@@ -2796,11 +2825,20 @@ async function _updatePlaybackBanner() {
   const bgMs          = (parseInt(cfg.bg_time     || '10') || 0) * 1000;
   const transitionSec = (thanksMs + bgMs) / 1000;
 
-  // Same fallback as every other screen -- shows a generic message instead of
-  // hiding the banner entirely when there's nothing queued after this song.
+  // Same fallback as every other screen -- '' means the Empty Queue Message
+  // setting is off, so there's genuinely nothing to show (not a blank ticker).
   const nextEntry    = pending[0] || null;
   const otherPending = pending.slice(1);
-  const bannerText   = _bannerTextOrFallback(nextEntry, otherPending, remainingSec + transitionSec, transitionSec);
+  const bannerText   = _bannerTextOrFallback(nextEntry, otherPending, remainingSec + transitionSec, transitionSec, cfg);
+  if (!bannerText) {
+    if (_state.playbackBanner.visible) {
+      _state.playbackBanner = { visible: false };
+      _apply();
+      broadcast({ type: 'playback_banner', visible: false });
+      _pbBannerMsg = null;
+    }
+    return;
+  }
 
   // Same appearance (therefore the same size/color/background) as every
   // other screen's banner, resolved once here and shared via _state.appearance.
@@ -2835,12 +2873,18 @@ function _updateKaraokeQr() {
   });
 }
 
-// Used on any screen when nothing is actually queued (_buildBanner would just
-// return an empty string, which would show as a blank scrolling strip).
-const BANNER_FALLBACK_TEXT = 'No singer in the queue — scan the QR code to be next!';
+// The "Empty Queue Message" setting -- off by default, so with nothing
+// queued the running banner just doesn't show anywhere until someone opts in
+// and types something. Returns '' when there's nothing to show; every call
+// site must treat '' as "hide the banner", not as literal (blank) text --
+// _buildBanner never returns '' itself (it always has at least "▶ …" for the
+// next entry), so '' unambiguously means "nothing to say here".
+function _emptyQueueText(cfg) {
+  return (cfg.empty_queue_msg_enabled === 'true') ? (cfg.empty_queue_msg_text || '') : '';
+}
 
-function _bannerTextOrFallback(nextEntry, pending, bgSec, transitionSec) {
-  if (!nextEntry && !pending.length) return BANNER_FALLBACK_TEXT;
+function _bannerTextOrFallback(nextEntry, pending, bgSec, transitionSec, cfg) {
+  if (!nextEntry && !pending.length) return _emptyQueueText(cfg);
   return _buildBanner(nextEntry, pending, bgSec, transitionSec);
 }
 
@@ -2851,16 +2895,19 @@ function _hexToRgba(hex, opacityPct) {
   const r = parseInt(h.substring(0, 2), 16) || 0;
   const g = parseInt(h.substring(2, 4), 16) || 0;
   const b = parseInt(h.substring(4, 6), 16) || 0;
-  const a = Math.max(0, Math.min(100, parseInt(opacityPct, 10) ?? 92)) / 100;
+  const parsedOpacity = parseInt(opacityPct, 10);
+  const a = Math.max(0, Math.min(100, Number.isNaN(parsedOpacity) ? 0 : parsedOpacity)) / 100;
   return `rgba(${r},${g},${b},${a})`;
 }
 
+// Transparent by default -- no background bar behind the running banner text
+// unless someone explicitly picks one in Settings (banner_bg_opacity > 0).
 function _bannerAppearance(cfg) {
   const BANNER_SCALE = [0, 0.55, 0.75, 1.00, 1.35, 1.75];
   return {
     bannerScale: BANNER_SCALE[parseInt(cfg.banner_size || '3')] ?? 1.00,
     color: cfg.banner_color || '#ffffff',
-    bgColor: _hexToRgba(cfg.banner_bg_color || '#7c3aed', cfg.banner_bg_opacity ?? '92'),
+    bgColor: _hexToRgba(cfg.banner_bg_color || '#7c3aed', cfg.banner_bg_opacity ?? '0'),
   };
 }
 
@@ -2875,7 +2922,7 @@ function _applyBannerBg(hexColor, opacityPct) {
 
 function _updateBannerBg() {
   const color   = document.getElementById('set-banner-bg-color')?.value || '#7c3aed';
-  const opacity = document.getElementById('set-banner-bg-opacity')?.value ?? '92';
+  const opacity = document.getElementById('set-banner-bg-opacity')?.value ?? '0';
   autoSave('banner_bg_color', color, 300);
   autoSave('banner_bg_opacity', opacity, 300);
   _applyBannerBg(color, opacity);
@@ -2888,33 +2935,36 @@ function _bannerAnimSec(cfg, text) {
   return Math.max(4, text.length * speedMult * 2);
 }
 
+// "Next up: <Name> › <Name> Xmin › <Name> Ymin › etc." -- just the name for
+// whoever's up next (no time -- that's what the countdown widget is for),
+// then everyone after them with their wait in whole minutes. No
+// artist/title. Callers guarantee nextEntry is set before calling this (see
+// _bannerTextOrFallback's guard clause), so no null check here.
+// Capped at 5 singers total (nextEntry + 4 pending) so the ticker doesn't
+// grow unbounded with a long queue; a trailing "-" marks that more follow.
 function _buildBanner(nextEntry, pending, bgSec, transitionSec) {
-  const fmtWait = s => {
-    if (s < 60) return `≈ ${Math.round(s)}s`;
-    return `≈ ${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')} min`;
-  };
-  const parts = [];
-  if (nextEntry) {
-    parts.push(`▶  ${nextEntry.singer_name || '?'}  ·  ${nextEntry.artist} — ${nextEntry.title}  (${fmtWait(bgSec)})`);
-  }
+  const fmtMin = s => `${Math.max(1, Math.round(s / 60))}min`;
+  const parts = [`Next up: ${nextEntry.singer_name || '?'}`];
   let waitSec = bgSec + (nextEntry?.duration || 180);
-  for (const s of pending) {
+  const shown = pending.slice(0, 4);
+  for (const s of shown) {
     waitSec += transitionSec;
-    parts.push(`◆  ${s.singer_name || '?'}  ·  ${s.artist} — ${s.title}  (${fmtWait(waitSec)})`);
+    parts.push(`${s.singer_name || '?'} ${fmtMin(waitSec)}`);
     waitSec += (s.duration || 180);
   }
-  return parts.join('          ');
+  if (pending.length > shown.length) parts.push('-');
+  return parts.join('  ›  ');
 }
 
 function _buildNextUp(nextEntry, pending, bgSec, transitionSec) {
   const entries = [];
   if (nextEntry) {
-    entries.push({ singer: nextEntry.singer_name || '?', title: nextEntry.title || '', waitSec: bgSec, isNext: true });
+    entries.push({ singer: nextEntry.singer_name || '?', title: nextEntry.title || '', artist: nextEntry.artist || '', waitSec: bgSec, isNext: true });
   }
   let waitSec = bgSec + (nextEntry?.duration || 180);
   for (const s of pending.slice(0, 4)) {
     waitSec += transitionSec;
-    entries.push({ singer: s.singer_name || '?', title: s.title || '', waitSec, isNext: false });
+    entries.push({ singer: s.singer_name || '?', title: s.title || '', artist: s.artist || '', waitSec, isNext: false });
     waitSec += (s.duration || 180);
   }
   return entries;
@@ -2958,9 +3008,11 @@ async function doTransition(prevSinger, nextEntry) {
   // ── Phase 1: Thank you ─────────────────────────────────────────────────
   if (cfg.show_thanks === 'true' && prevSinger && thanksMs > 0) {
     const thanksVariant = Math.floor(Math.random() * 10);
-    const showBanner1 = cfg.thanks_show_banner !== 'false';
+    const bannerText1 = _bannerTextOrFallback(nextEntry, pending, transitionSec, transitionSec, cfg);
+    // '' (Empty Queue Message off, nothing queued after this song) means no
+    // banner, regardless of the per-screen "Running banner" toggle.
+    const showBanner1 = cfg.thanks_show_banner !== 'false' && bannerText1 !== '';
     const showQr1     = cfg.thanks_show_qr !== 'false' && haveQr;
-    const bannerText1 = _bannerTextOrFallback(nextEntry, pending, transitionSec, transitionSec);
     const animSec1    = _bannerAnimSec(cfg, bannerText1);
 
     _state.screen = 'thankyou';
@@ -2987,21 +3039,28 @@ async function doTransition(prevSinger, nextEntry) {
 
     const showBanner2 = cfg.betweensongs_show_banner !== 'false';
     const showQr2     = cfg.betweensongs_show_qr !== 'false' && haveQr;
-    const bannerText2 = _bannerTextOrFallback(nextEntry, pending, bgMs / 1000, transitionSec);
+    const bannerText2 = _bannerTextOrFallback(nextEntry, pending, bgMs / 1000, transitionSec, cfg);
     const animSec2    = _bannerAnimSec(cfg, bannerText2);
     const showNextUp  = cfg.show_next_up === 'true';
     const nextUpList  = showNextUp ? _buildNextUp(nextEntry, pending, bgMs / 1000, transitionSec) : [];
-    const NU_SCALE    = [0, 0.70, 0.85, 1.00, 1.25, 1.55];
+    const NU_SCALE    = [0, 0.85, 1.10, 1.40, 2.00, 2.80];
     const nextUpScale = NU_SCALE[parseInt(cfg.next_up_size || '3')] ?? 1.00;
+    const showCountdown  = cfg.betweensongs_show_countdown !== 'false';
+    // Own scale table, independent of NU_SCALE -- this is a bare transparent
+    // number rather than a boxed widget, so it can run much bigger than the
+    // Up Next list before it feels cluttered.
+    const CD_SCALE       = [0, 1.00, 1.60, 2.40, 3.40, 4.80];
+    const countdownScale = CD_SCALE[parseInt(cfg.countdown_size || '3')] ?? 2.40;
     const nextSinger  = nextEntry?.singer_name || '';
     const venuePath   = cfg.venue_image_path || '';
 
     // Start immediately so async venue-image loading doesn't eat into display time
     _state.screen = 'betweensongs';
     _state.appearance.nextUp = { scale: nextUpScale };
+    _state.appearance.countdown = { scale: countdownScale };
     _state.betweensongs = {
       showBanner: showBanner2, bannerText: bannerText2, animSec: animSec2,
-      venueSrc: null, nextSinger, countdownSec: Math.ceil(bgMs / 1000),
+      venueSrc: null, nextSinger, countdownSec: Math.ceil(bgMs / 1000), showCountdown,
       showNextUp, nextUpList,
       showQr: showQr2, qrDataUrl: _relayQrDataUrl,
     };
@@ -3014,11 +3073,16 @@ async function doTransition(prevSinger, nextEntry) {
     let remaining = Math.ceil(bgMs / 1000);
     const cntTimer = setInterval(() => {
       remaining = Math.max(0, remaining - 1);
+      // Keep _state in sync too, not just the DOM -- otherwise the next
+      // unrelated _apply() (e.g. once the venue image below finishes
+      // loading) re-renders with the original countdownSec and the number
+      // visibly jumps back to its starting value mid-countdown.
+      _state.betweensongs.countdownSec = remaining;
       KaraokeDisplay.tickCountdown(remaining);
     }, 1000);
 
     _lastTransitionMsg = {
-      type: 'tr_phase2', venuePath, bgMs, nextSinger, nextUpList, nextUpScale,
+      type: 'tr_phase2', venuePath, bgMs, nextSinger, nextUpList, nextUpScale, showCountdown, countdownScale,
       showBanner: showBanner2, bannerText: bannerText2, animSec: animSec2, bannerScale, bannerColor, bannerBgColor,
       showQr: showQr2, qrDataUrl: _relayQrDataUrl, qrX: _qrPos.x, qrY: _qrPos.y, qrBoth: qrBothCfg, qrSize: qrSizeLevel,
     };
@@ -3486,6 +3550,36 @@ function _idleBannerCfg() {
   };
 }
 
+// _applyIdleConfig/_broadcastIdleConfig read every other field straight off
+// the settings DOM rather than awaiting api.getSettings(), so this mirrors
+// that instead of taking a cfg param like _bannerTextOrFallback does.
+function _emptyQueueTextFromDom() {
+  const enabled = document.getElementById('set-empty-queue-msg-enabled')?.checked ?? false;
+  const text    = document.getElementById('set-empty-queue-msg-text')?.value || '';
+  return enabled ? text : '';
+}
+
+// Called when the Empty Queue Message setting changes. _broadcastIdleConfig
+// covers the idle screen and reads straight off the DOM, so it can run
+// immediately. The live playback banner (_updatePlaybackBanner, polled every
+// 3s) is different on both counts: it (a) caches on _pbBannerKey and only
+// rebuilds when the queue composition changes -- a setting change alone
+// never touches that key, so without resetting it here the toggle would
+// silently do nothing until a real queue change happened along -- and
+// (b) reads the setting back via api.getSettings() (async, persisted),
+// which for the text field lags the 300ms-debounced autoSave write. Debounce
+// this call past that write instead of racing it and picking up the stale
+// value.
+let _emptyQueueRefreshTimer = null;
+function _refreshEmptyQueueMessage() {
+  _broadcastIdleConfig();
+  clearTimeout(_emptyQueueRefreshTimer);
+  _emptyQueueRefreshTimer = setTimeout(() => {
+    _pbBannerKey = '';
+    _updatePlaybackBanner();
+  }, 400);
+}
+
 function _applyIdleConfig() {
   const showBanner = document.getElementById('set-idle-show-banner')?.checked ?? true;
   const showQr     = (document.getElementById('set-idle-show-qr')?.checked ?? true) && !!_relayQrDataUrl;
@@ -3505,10 +3599,11 @@ function _applyIdleConfig() {
   // advanceQueue/checkAndPlay), so there's never a real "up next" to list —
   // the setting exists for consistency with the other screens, but this is
   // always empty in practice.
+  const emptyQueueText = _emptyQueueTextFromDom();
   _state.idle = {
     ..._state.idle, // keep bgImageSrc, set independently by _applyIdleBg
-    showBanner, showQr, showText, text, textColor, textSize,
-    bannerText: BANNER_FALLBACK_TEXT, animSec: _bannerAnimSec(bannerCfg, BANNER_FALLBACK_TEXT),
+    showBanner: showBanner && emptyQueueText !== '', showQr, showText, text, textColor, textSize,
+    bannerText: emptyQueueText, animSec: _bannerAnimSec(bannerCfg, emptyQueueText),
     qrDataUrl: _relayQrDataUrl,
   };
   _apply();
@@ -3527,11 +3622,12 @@ async function _broadcastIdleConfig() {
 
   const bannerCfg = _idleBannerCfg();
   const { bannerScale, color: bannerColor, bgColor: bannerBgColor } = _bannerAppearance(bannerCfg);
-  const animSec = _bannerAnimSec(bannerCfg, BANNER_FALLBACK_TEXT);
+  const emptyQueueText = _emptyQueueTextFromDom();
+  const animSec = _bannerAnimSec(bannerCfg, emptyQueueText);
 
   api.broadcast({
     type: 'idle_config',
-    showBanner, bannerText: BANNER_FALLBACK_TEXT, animSec, bannerScale, bannerColor, bannerBgColor,
+    showBanner: showBanner && emptyQueueText !== '', bannerText: emptyQueueText, animSec, bannerScale, bannerColor, bannerBgColor,
     showText, text, textColor, textSize,
     showQr: showQr && !!qrUrl, qrDataUrl: qrUrl, url: _relayPublicUrl, qrX: _qrPos.x, qrY: _qrPos.y, qrBoth, qrSize,
   });
@@ -3689,6 +3785,16 @@ window.api.relayStatus().then(status => {
         _loadQrPosition(s);
         document.getElementById('set-idle-qr-both').checked = s.idle_qr_both === 'true';
         document.getElementById('set-idle-qr-size').value   = s.idle_qr_size || '3';
+        // Karaoke screen reads its own QR toggle straight from the DOM (see
+        // _updateKaraokeQr), so it needs the same boot-time hydration as the
+        // idle fields above -- otherwise it sits at the raw HTML default
+        // (unchecked) until Settings is opened once.
+        document.getElementById('set-karaoke-show-qr').checked = s.karaoke_show_qr !== 'false';
+        // Same reasoning -- _broadcastIdleConfig below reads the empty-queue
+        // message straight from the DOM too, so it needs hydrating before
+        // that first call rather than waiting for Settings to be opened.
+        document.getElementById('set-empty-queue-msg-enabled').checked = s.empty_queue_msg_enabled === 'true';
+        document.getElementById('set-empty-queue-msg-text').value      = s.empty_queue_msg_text || '';
         _broadcastIdleConfig();
       });
     });

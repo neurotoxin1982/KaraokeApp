@@ -23,7 +23,6 @@ const videoEl = KaraokeDisplay.els.video;
 let cdgPlayer = null;
 let _position = 0, _elapsed = 0, _playing = false;
 let _cntTimer = null;
-let _infoTimer = null;
 
 // Blob URLs for media read via Electron's IPC (api.readFile) -- tracked so
 // the previous one gets revoked, and so unchanged paths skip a redundant re-read.
@@ -53,6 +52,7 @@ function _setAppearanceFromMsg(msg) {
   if (msg.bannerScale != null) _state.appearance.banner = { scale: msg.bannerScale, color: msg.bannerColor, bgColor: msg.bannerBgColor };
   if (msg.qrX != null) _state.appearance.qr = { x: msg.qrX, y: msg.qrY, size: msg.qrSize, both: msg.qrBoth };
   if (msg.nextUpScale != null) _state.appearance.nextUp = { scale: msg.nextUpScale };
+  if (msg.countdownScale != null) _state.appearance.countdown = { scale: msg.countdownScale };
 }
 
 // ── IPC broadcast (Electron) ──────────────────────────────────────────────────
@@ -72,10 +72,10 @@ api.onBroadcast((msg) => {
     }
 
     case 'song_info': {
+      // No on-screen title/artist card at song start -- this message still
+      // exists purely to switch the screen to 'karaoke' before the media
+      // message (cdg_path/video_path/video_url) arrives right behind it.
       _state.screen = 'karaoke';
-      _state.karaoke.songInfo = { title: msg.title, artist: msg.artist, singer: msg.singer_name };
-      clearTimeout(_infoTimer);
-      _infoTimer = setTimeout(() => { _state.karaoke.songInfo = null; _apply(); }, 8000);
       _apply();
       break;
     }
@@ -175,7 +175,7 @@ api.onBroadcast((msg) => {
         showBanner: !!msg.showBanner, bannerText: msg.bannerText, animSec: msg.animSec,
         venueSrc: _venueBlobUrl && _venuePath === msg.venuePath ? _venueBlobUrl : null,
         nextSinger: msg.nextSinger || '',
-        countdownSec: remaining,
+        countdownSec: remaining, showCountdown: msg.showCountdown !== false,
         showNextUp: !!(msg.nextUpList && msg.nextUpList.length), nextUpList: msg.nextUpList || [],
         showQr: !!(msg.showQr && msg.qrDataUrl), qrDataUrl: msg.qrDataUrl,
       };
@@ -193,6 +193,11 @@ api.onBroadcast((msg) => {
       if (remaining != null) {
         _cntTimer = setInterval(() => {
           remaining = Math.max(0, remaining - 1);
+          // Keep _state in sync too, not just the DOM -- otherwise the next
+          // unrelated _apply() (e.g. the venue-image load above finishing
+          // late) re-renders with the original countdownSec and the number
+          // visibly jumps back to its starting value mid-countdown.
+          _state.betweensongs.countdownSec = remaining;
           KaraokeDisplay.tickCountdown(remaining);
         }, 1000);
       }

@@ -25,8 +25,7 @@
 (function (global) {
   'use strict';
 
-  const STAGE_W = 1920, STAGE_H = 1080;
-  const QR_SIZE_SCALE   = [0, 0.65, 0.85, 1, 1.3, 1.65]; // index 1-5 -> XS..XL
+  const STAGE_W = 1920, STAGE_H = 1080;  const QR_SIZE_SCALE   = [0, 0.65, 0.85, 1, 1.3, 1.65, 3.5]; // index 1-6 -> XS..XXL
   const BANNER_SCALE    = [0, 0.55, 0.75, 1.00, 1.35, 1.75];
   const QR_POS_DEFAULT  = { x: 50, y: 85 };
 
@@ -42,15 +41,16 @@
 
         <div id="kd-screen-karaoke" class="kd-screen">
           <div id="kd-canvas-wrap"><canvas id="kd-cdg-canvas"></canvas></div>
-          <video id="kd-video" class="kd-fill" playsinline></video>
+          <!-- muted by default -- sound should only ever come from the
+               embedded (manager) screen; the popout and wireless hosts never
+               unmute this, and the manager explicitly unmutes its own copy
+               when it sets volume (see index.html's playYoutube/playVideo).
+               This is the fail-safe default so a future host reusing this
+               template doesn't accidentally play duplicate/echoing audio. -->
+          <video id="kd-video" class="kd-fill" playsinline muted></video>
           <div class="kd-safe-area">
             <div id="kd-karaoke-qr-a" class="kd-qr-box"><img class="kd-qr-img" alt="QR"></div>
             <div id="kd-karaoke-qr-b" class="kd-qr-box"><img class="kd-qr-img" alt="QR"></div>
-          </div>
-          <div id="kd-info-bar">
-            <div id="kd-info-title"></div>
-            <div id="kd-info-artist"></div>
-            <div id="kd-info-singer"></div>
           </div>
           <!-- This IS the "playback banner" -- one slot, driven by state.playbackBanner
                (see applyState). Kept as the karaoke screen's own ticker rather than a
@@ -92,19 +92,19 @@
         <div id="kd-screen-betweensongs" class="kd-screen kd-column">
           <div id="kd-between-media-wrap">
             <img id="kd-between-venue" class="kd-fill" alt="">
-            <div class="kd-safe-area">
-              <div id="kd-between-countdown">
-                <div class="kd-countdown-label">NEXT SINGER</div>
-                <div id="kd-between-next-singer"></div>
-                <div class="kd-countdown-label">GET READY IN</div>
-                <div id="kd-between-countdown-num"></div>
-              </div>
-              <div id="kd-between-next-up" class="kd-next-up"></div>
-              <div id="kd-between-qr-a" class="kd-qr-box"><img class="kd-qr-img" alt="QR"></div>
-              <div id="kd-between-qr-b" class="kd-qr-box"><img class="kd-qr-img" alt="QR"></div>
-            </div>
           </div>
           <div id="kd-between-ticker-wrap" class="kd-ticker-wrap" style="position:static"><div id="kd-between-ticker" class="kd-ticker"></div></div>
+          <!-- Direct child of the screen (not of the flex-shrunk media-wrap
+               above) so inset:5% resolves against the same full 1920x1080
+               stage as every other screen's .kd-safe-area -- otherwise the QR
+               here would sit at a different absolute position than on the
+               other screens despite using the same x/y percentages. -->
+          <div class="kd-safe-area">
+            <div id="kd-between-countdown"><div id="kd-between-countdown-num"></div></div>
+            <div id="kd-between-next-up" class="kd-next-up"></div>
+            <div id="kd-between-qr-a" class="kd-qr-box"><img class="kd-qr-img" alt="QR"></div>
+            <div id="kd-between-qr-b" class="kd-qr-box"><img class="kd-qr-img" alt="QR"></div>
+          </div>
         </div>
 
       </div>
@@ -129,8 +129,14 @@
     #kd-ad-picture.kd-shown, #kd-ad-video.kd-shown, #kd-between-venue.kd-shown { object-fit: cover; }
 
     /* 5% overscan margin -- inset:5% resolves top/bottom against height and
-       left/right against width automatically, so this is a true 5% per axis. */
-    .kd-safe-area { position: absolute; inset: 5%; z-index: 6; }
+       left/right against width automatically, so this is a true 5% per axis.
+       z-index (20) is higher than every .kd-ticker-wrap (8): .kd-safe-area is
+       its own stacking context (position+z-index), so a sibling ticker-wrap
+       with a higher z-index would cover everything inside here (QR included)
+       regardless of the QR box's own z-index:10, which only applies *within*
+       this context. Must stay on top so the banner always runs behind the QR
+       code on every screen. */
+    .kd-safe-area { position: absolute; inset: 5%; z-index: 20; }
 
     .kd-qr-box { position: absolute; display: none; flex-direction: column; align-items: center; padding: 6px; gap: 6px; z-index: 10; }
     .kd-qr-box.kd-shown { display: flex; }
@@ -148,16 +154,6 @@
     #kd-canvas-wrap.kd-shown { display: flex; }
     #kd-cdg-canvas { image-rendering: pixelated; image-rendering: crisp-edges; display: block; }
 
-    #kd-info-bar {
-      display: none; position: absolute; bottom: 0; left: 0; right: 0; z-index: 7;
-      background: linear-gradient(transparent, rgba(0,0,0,.85)); padding: 24px 96px 20px;
-      transition: bottom .15s ease-out;
-    }
-    #kd-info-bar.kd-shown { display: block; }
-    #kd-info-title  { font-size: 2rem; font-weight: 700; color: #fff; line-height: 1.2; }
-    #kd-info-artist { font-size: 1.2rem; color: #a78bfa; margin-top: 4px; }
-    #kd-info-singer { font-size: 1rem; color: #9ca3af; margin-top: 4px; }
-
     #kd-screen-idle .kd-logo { font-size: 5rem; }
     #kd-screen-idle p { font-size: 1.1rem; color: #4b5563; text-align: center; margin-top: 8px; }
     #kd-idle-default { display: flex; flex-direction: column; align-items: center; justify-content: center; position: absolute; inset: 0; }
@@ -171,22 +167,26 @@
 
     .kd-next-up {
       display: none; position: absolute; left: 0; top: 0; z-index: 5;
-      background: rgba(0,0,0,.72); border-radius: 14px; padding: 14px 16px;
-      backdrop-filter: blur(4px); min-width: 200px; max-width: 300px;
+      background: rgba(0,0,0,.72); border-radius: 14px;
+      backdrop-filter: blur(4px);
     }
     .kd-next-up.kd-shown { display: block; }
 
     #kd-between-media-wrap { flex: 1; display: flex; align-items: stretch; justify-content: center; overflow: hidden; min-height: 0; position: relative; }
+    /* No background/box on purpose -- this is a transparent number overlaid
+       on the venue image, not a card like the QR/Up Next boxes. The heavy
+       text-shadow is what keeps it legible over a bright or busy background
+       instead of a background fill. */
     #kd-between-countdown {
       position: absolute; top: 0; right: 0; z-index: 6;
-      background: rgba(0,0,0,.72); border-radius: 14px; padding: 10px 18px; text-align: center; backdrop-filter: blur(4px);
+      text-align: center;
       display: none;
     }
     #kd-between-countdown.kd-shown { display: block; }
-    .kd-countdown-label { font-size: .55rem; color: #6b7280; letter-spacing: .08em; margin-bottom: 3px; text-transform: uppercase; }
-    #kd-between-next-singer { font-size: 1.3rem; font-weight: 700; color: #fff; margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
-    #kd-between-countdown-num { font-size: 2.2rem; font-weight: 700; color: #fff; font-variant-numeric: tabular-nums; line-height: 1; }
-    #kd-karaoke-ticker-wrap { z-index: 19; }
+    #kd-between-countdown-num {
+      font-weight: 800; color: #fff; font-variant-numeric: tabular-nums; line-height: 1;
+      text-shadow: 0 2px 16px rgba(0,0,0,.9), 0 4px 40px rgba(0,0,0,.6);
+    }
 
     @keyframes kd-th-bounce   { 0%,100%{transform:translateY(0) scale(1)} 50%{transform:translateY(-15px) scale(1.12)} }
     @keyframes kd-th-pulse    { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(.88);opacity:.75} }
@@ -263,7 +263,8 @@
     const r = parseInt(h.substring(0, 2), 16) || 0;
     const g = parseInt(h.substring(2, 4), 16) || 0;
     const b = parseInt(h.substring(4, 6), 16) || 0;
-    const a = Math.max(0, Math.min(100, parseInt(opacityPct, 10) ?? 92)) / 100;
+    const parsedOpacity = parseInt(opacityPct, 10);
+    const a = Math.max(0, Math.min(100, Number.isNaN(parsedOpacity) ? 0 : parsedOpacity)) / 100;
     return `rgba(${r},${g},${b},${a})`;
   }
 
@@ -330,19 +331,26 @@
     const fmtW = sec => sec < 60 ? `&asymp; ${Math.round(sec)}s` : `&asymp; ${Math.floor(sec/60)}:${String(Math.floor(sec%60)).padStart(2,'0')}`;
     const r  = base => (base * s).toFixed(2) + 'rem';
     const px = base => Math.round(base * s) + 'px';
-    el.style.minWidth = px(200);
-    el.style.padding  = `${px(14)} ${px(16)}`;
+    el.style.minWidth = px(260);
+    el.style.maxWidth = px(440);
+    el.style.padding  = `${px(18)} ${px(22)}`;
     el.innerHTML =
-      `<div style="font-size:${r(0.55)};color:#a78bfa;letter-spacing:.12em;font-weight:700;margin-bottom:${px(10)};text-transform:uppercase">Up Next</div>` +
-      list.map((e, i) =>
-        `<div style="margin-bottom:${i < list.length - 1 ? px(9) : '0'}">` +
-          `<div style="display:flex;align-items:baseline;gap:${px(5)}">` +
-            `<span style="font-size:${r(0.65)};font-weight:700;color:${e.isNext ? '#a78bfa' : '#6b7280'}">${e.isNext ? '&#9654;' : (i + 1)}</span>` +
-            `<span style="font-size:${e.isNext ? r(0.88) : r(0.78)};font-weight:700;color:#fff;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(e.singer)}</span>` +
-            `<span style="font-size:${r(0.6)};color:#9ca3af;white-space:nowrap">${fmtW(e.waitSec)}</span>` +
-          `</div>` +
-        `</div>`
-      ).join('');
+      `<div style="font-size:${r(0.8)};color:#a78bfa;letter-spacing:.12em;font-weight:700;margin-bottom:${px(14)};text-transform:uppercase">Up Next</div>` +
+      list.map((e, i) => {
+        const song = [e.artist, e.title].filter(Boolean).join(' — ');
+        return (
+          `<div style="margin-bottom:${i < list.length - 1 ? px(13) : '0'}">` +
+            `<div style="display:flex;align-items:flex-start;gap:${px(8)}">` +
+              `<span style="font-size:${r(0.95)};font-weight:700;color:${e.isNext ? '#a78bfa' : '#6b7280'}">${e.isNext ? '&#9654;' : (i + 1)}</span>` +
+              `<div style="flex:1;min-width:0">` +
+                `<div style="font-size:${e.isNext ? r(1.4) : r(1.2)};font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(e.singer)}</div>` +
+                (song ? `<div style="font-size:${e.isNext ? r(0.85) : r(0.75)};color:#9ca3af;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:${px(2)}">${esc(song)}</div>` : '') +
+              `</div>` +
+              `<span style="font-size:${r(0.9)};color:#9ca3af;white-space:nowrap">${fmtW(e.waitSec)}</span>` +
+            `</div>` +
+          `</div>`
+        );
+      }).join('');
     el.classList.add('kd-shown');
   }
 
@@ -401,27 +409,10 @@
 
     _showQrIn(_qrPair('kd-karaoke-qr'), cfg.showQr ? { ...appearance?.qr, dataUrl: cfg.qrDataUrl } : null);
 
-    const info = els.stage.querySelector('#kd-info-bar');
-    if (cfg.songInfo) {
-      els.stage.querySelector('#kd-info-title').textContent  = cfg.songInfo.title  || '';
-      els.stage.querySelector('#kd-info-artist').textContent = cfg.songInfo.artist || '';
-      els.stage.querySelector('#kd-info-singer').textContent = cfg.songInfo.singer ? '♪ ' + cfg.songInfo.singer : '';
-      info.classList.add('kd-shown');
-    } else {
-      info.classList.remove('kd-shown');
-    }
-
     const wrap = els.stage.querySelector('#kd-karaoke-ticker-wrap');
     const ticker = els.stage.querySelector('#kd-karaoke-ticker');
     wrap.classList.toggle('kd-shown', !!playbackBanner?.visible);
     if (playbackBanner?.visible) _renderTicker(wrap, ticker, playbackBanner.text, playbackBanner.animSec, appearance?.banner);
-
-    // Both are bottom-anchored, so once the banner's final visibility above
-    // is settled, nudge the info bar to sit just above it instead of the two
-    // stacking on top of each other.
-    if (info.classList.contains('kd-shown')) {
-      info.style.bottom = wrap.classList.contains('kd-shown') ? (wrap.offsetHeight + 8) + 'px' : '0';
-    }
   }
 
   function _renderIdle(cfg, appearance) {
@@ -501,10 +492,17 @@
     wrap.classList.toggle('kd-shown', !!cfg.showBanner);
     if (cfg.showBanner) _renderTicker(wrap, ticker, cfg.bannerText, cfg.animSec, appearance?.banner);
 
+    // Own on/off + size setting (appearance.countdown.scale), independent of
+    // the Up Next list's scale -- a bare transparent number, not a card, so
+    // it doesn't need to share sizing with a boxed widget next to it.
     const cd = els.stage.querySelector('#kd-between-countdown');
-    cd.classList.toggle('kd-shown', cfg.countdownSec != null);
-    els.stage.querySelector('#kd-between-next-singer').textContent = cfg.nextSinger || '';
-    if (cfg.countdownSec != null) _setCountdownText(cfg.countdownSec);
+    const showCd = cfg.showCountdown !== false && cfg.countdownSec != null;
+    cd.classList.toggle('kd-shown', showCd);
+    if (showCd) {
+      const cdScale = appearance?.countdown?.scale || 1;
+      els.stage.querySelector('#kd-between-countdown-num').style.fontSize = (3.2 * cdScale).toFixed(2) + 'rem';
+      _setCountdownText(cfg.countdownSec);
+    }
 
     const nextUpEl = els.stage.querySelector('#kd-between-next-up');
     if (cfg.showNextUp && cfg.nextUpList?.length) _renderNextUp(cfg.nextUpList, nextUpEl, appearance?.nextUp?.scale);

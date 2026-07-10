@@ -14,6 +14,7 @@ const state = {
   song_info:        null,
   media:            null,
   position:         null,
+  karaoke_qr:       null,
   transition:       null,
   transitionPhaseEnd: 0,
   venue_path:       null,
@@ -175,6 +176,11 @@ function _sendState(ws) {
     if (state.position) mediaMsg.pos = state.position.pos;
     _send(ws, mediaMsg);
     if (state.position) _send(ws, state.position);
+    // Otherwise a client joining/reconnecting mid-song has no QR size/
+    // visibility until the manager's next 3s poll broadcasts one -- it
+    // renders at the CSS default size in the meantime, which looks like the
+    // QR starting small and then growing a couple seconds later.
+    if (state.karaoke_qr) _send(ws, state.karaoke_qr);
   } else if (state.adActive) {
     // Neither a transition nor a song is active, and the Ad Screen was the
     // last thing shown -- replay it so a client joining mid-ad sees it
@@ -195,6 +201,7 @@ function broadcast(msg) {
     case 'cdg_path': case 'video_path': case 'video_url':
       state.media = msg; state.transition = null; state.adActive = false; break;
     case 'position':                                    state.position   = msg; break;
+    case 'karaoke_qr':                                  state.karaoke_qr = msg; break;
     case 'tr_phase1':  state.transition = msg; state.adActive = false; break;
     case 'tr_phase2':  state.transition = msg; state.transitionPhaseEnd = Date.now() + (msg.bgMs || 0); state.adActive = false; break;
     case 'transition_end': state.transition = null; state.transitionPhaseEnd = 0; break;
@@ -203,7 +210,7 @@ function broadcast(msg) {
     case 'ad_config':                                   state.ad_config  = msg; break;
     case 'show_ad':    state.adActive = true; break;
     case 'stop':
-      state.song_info = null; state.media = null;
+      state.song_info = null; state.media = null; state.karaoke_qr = null;
       state.position  = null; state.transition = null; state.adActive = false; break;
   }
   if (!wss || clients.size === 0) return;
